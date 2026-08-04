@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTerminalTheme, type ThemeMode } from "./themeStore";
 
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
 type CrowdMood = "SHORT_CROWD" | "TRAPPED" | "CHASE_LONG" | "MIXED" | "UNKNOWN";
@@ -60,7 +61,6 @@ type RadarResponse = {
 };
 
 type Filter = "all" | "squeeze" | "candidate" | "concentrated" | "risk";
-
 const participationCopy: Record<Participation, { label: string; className: string }> = {
   SQUEEZE: { label: "逼空重点", className: "grade-squeeze" },
   A: { label: "A · 可参与候选", className: "grade-a" },
@@ -128,6 +128,7 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [selectedSymbol, setSelectedSymbol] = useState("");
+  const { themeMode, resolvedTheme, setThemeMode } = useTerminalTheme();
 
   async function loadRadar() {
     setLoading(true);
@@ -197,31 +198,16 @@ export default function Home() {
   const avoidCount = data?.coins.filter((coin) => coin.participation === "AVOID").length ?? 0;
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="返回妖币雷达顶部">
-          <span className="brand-mark">街</span>
-          <span>
-            <strong>街灯雷达</strong>
-            <small>SQUEEZE & CHIP INTELLIGENCE</small>
-          </span>
-        </a>
-        <nav className="topbar-nav" aria-label="主导航">
-          <a className="active" href="#radar">妖币雷达</a>
-          <a href="#method">判断方法</a>
-          <a href="/trade">交易工作台</a>
-        </nav>
-        <div className="topbar-actions">
-          <div className="topbar-status">
-            <span className={`live-dot ${data?.mode === "live" ? "is-live" : ""}`} />
-            <span>{data?.mode === "live" ? "全源实时" : data?.mode === "hybrid" ? "部分实时" : "演示模式"}</span>
-            <span className="status-divider" />
-            <span>{data ? relativeTime(data.updatedAt) : "连接中"}</span>
-          </div>
-          <button className="refresh-button" onClick={() => void loadRadar()} disabled={loading}>
-            {loading ? "正在刷新" : "刷新"}
-          </button>
-        </div>
+    <main className="app-shell radar-terminal" data-theme={resolvedTheme}>
+      <aside className="radar-sidebar">
+        <a className="radar-brand" href="#top"><span>街</span><div><strong>街灯终端</strong><small>STREETLIGHT</small></div></a>
+        <nav><a className="active" href="#radar"><b>◎</b>妖币雷达</a><a href="/trade"><b>⌁</b>合约交易</a><a href="#method"><b>◇</b>判断方法</a><a href="/trade#trade-knowledge"><b>◫</b>操作知识库</a></nav>
+        <div className="radar-sidebar-foot"><i className={data?.mode === "live" ? "connected" : ""} /><div><strong>{data?.mode === "live" ? "数据源实时" : data?.mode === "hybrid" ? "部分数据实时" : "当前演示模式"}</strong><small>{data ? relativeTime(data.updatedAt) : "连接中"}</small></div></div>
+      </aside>
+      <div className="radar-app-main">
+      <header className="radar-top-header">
+        <div><small>HOME / MARKET INTELLIGENCE</small><h1>妖币雷达</h1></div>
+        <div className="radar-header-controls"><div className="radar-theme-switch" aria-label="主题选择">{(["dark", "light", "system"] as ThemeMode[]).map((item) => <button key={item} className={themeMode === item ? "selected" : ""} onClick={() => setThemeMode(item)}>{item === "dark" ? "深色" : item === "light" ? "浅色" : "跟随系统"}</button>)}</div><span className="radar-live-status"><i className={data?.mode === "live" ? "connected" : ""} />{data?.mode === "live" ? "全源实时" : data?.mode === "hybrid" ? "部分实时" : "演示行情"}</span><button className="refresh-button" onClick={() => void loadRadar()} disabled={loading}>{loading ? "正在刷新" : "刷新"}</button></div>
       </header>
 
       <section className="hero" id="top">
@@ -388,6 +374,7 @@ export default function Home() {
 
       <footer><span>街灯雷达 · 妖币筛选第一版</span>
         <p>热度是发现器，不是买入器。高波动合约可能在短时间内造成重大损失，本页面不构成投资建议。</p></footer>
+      </div>
     </main>
   );
 }

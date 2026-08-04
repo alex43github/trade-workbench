@@ -21,6 +21,8 @@ test("server-renders the completed Streetlight Radar product", async () => {
   assert.match(html, /人群在喊空/);
   assert.match(html, /高波动重点池/);
   assert.match(html, /筹码与链上验真/);
+  assert.match(html, /街灯终端/);
+  assert.match(html, /跟随系统/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site|codex-preview/);
 });
 
@@ -29,13 +31,17 @@ test("server-renders the paper trading strategy lab", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /街灯交易台/);
-  assert.match(html, /MA30多周期回撤/);
+  assert.match(html, /回撤到MA30/);
   assert.match(html, /PAPER ONLY/);
   assert.match(html, /自然语言/);
   assert.match(html, /真实下单未连接/);
   assert.match(html, /资金曲线/);
   assert.match(html, /止盈止损/);
   assert.match(html, /指标 ·/);
+  assert.match(html, /建立新仓计划/);
+  assert.match(html, /操作前纪律评分/);
+  assert.match(html, /操作知识库/);
+  assert.match(html, /自然语言生成/);
 });
 
 test("keeps the Binance account surface disconnected without server secrets", async () => {

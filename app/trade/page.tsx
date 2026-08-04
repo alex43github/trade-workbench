@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import TradingTerminal from "./TradingTerminal";
 
 export const metadata: Metadata = {
-  title: "街灯交易台｜MA30模拟策略实验室",
-  description: "基于Binance K线与TradingView Lightweight Charts的MA30多周期回撤策略配置、自然语言解析和模拟观察台。",
+  title: "街灯交易台｜自适应策略与操作知识库",
+  description: "按持仓状态切换建仓、加仓与退出条件，操作前纪律评分，清仓后持续沉淀复盘记录。",
 };
 
 function normalizeSymbol(value: string | undefined) {

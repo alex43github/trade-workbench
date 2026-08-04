@@ -1,10 +1,13 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import AdaptiveStrategyPanel from "./AdaptiveStrategyPanel";
 import EquityChart, { type EquityPoint } from "./EquityChart";
+import TradeKnowledgePanel from "./TradeKnowledgePanel";
 import TradeChart, { type ChartOverlay, type IndicatorSettings, type MarketBar } from "./TradeChart";
 import { calculateMa } from "./strategyMath";
+import { useTerminalTheme, type ThemeMode } from "../themeStore";
 import styles from "./trade.module.css";
 
 type Strategy = {
@@ -36,7 +39,6 @@ type AccountResponse = {
 };
 type MarketResponse = { mode: "live" | "demo"; symbol: string; interval: string; updatedAt: string; warning?: string; bars: MarketBar[] };
 type EventItem = { id: string; time: string; type: "check" | "candidate" | "system"; message: string };
-type ThemeMode = "dark" | "light" | "system";
 type OverlayVisibility = { positions: boolean; limits: boolean; conditional: boolean; tpsl: boolean };
 
 const emptyAccount: AccountResponse = {
@@ -55,7 +57,6 @@ const defaultIndicators: IndicatorSettings = {
   avwap: { enabled: false, anchorBars: 100, source: "hlc3", color: "#b57cff" },
   volumeProfile: { enabled: false, rangeBars: 120, rows: 28 },
 };
-const defaultNaturalLanguage = "选择多头趋势中的币。当价格在15m、1h、4h、1d回撤到MA30上下±1%，或盘中触及MA30时，每次买入100 USDT；同一轮最多买入3次。入场周期首根收盘跌破MA30卖出当前持仓50%，下一根继续跌破再卖出剩余持仓50%。";
 const intervals = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const quickSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT"];
 
@@ -86,31 +87,14 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const [indicators, setIndicators] = useState<IndicatorSettings>(defaultIndicators);
   const [overlayVisibility, setOverlayVisibility] = useState<OverlayVisibility>({ positions: true, limits: true, conditional: true, tpsl: true });
   const [indicatorOpen, setIndicatorOpen] = useState(false);
-  const [panelTab, setPanelTab] = useState<"form" | "natural">("form");
   const [accountTab, setAccountTab] = useState<"positions" | "orders">("positions");
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "system";
-    const stored = window.localStorage.getItem("streetlight-theme") as ThemeMode | null;
-    return stored && ["dark", "light", "system"].includes(stored) ? stored : "system";
-  });
-  const [systemDark, setSystemDark] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const [naturalText, setNaturalText] = useState(defaultNaturalLanguage);
-  const [normalizedRules, setNormalizedRules] = useState<string[]>([]);
-  const [parseWarnings, setParseWarnings] = useState<string[]>([]);
+  const { themeMode, resolvedTheme, setThemeMode } = useTerminalTheme();
   const [armed, setArmed] = useState(false);
   const [events, setEvents] = useState<EventItem[]>([
     { id: "boot", time: "系统", type: "system", message: "模拟执行隔离已启用；没有真实订单接口。" },
   ]);
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = (event: MediaQueryListEvent) => setSystemDark(event.matches);
-    media.addEventListener("change", apply);
-    window.localStorage.setItem("streetlight-theme", themeMode);
-    return () => media.removeEventListener("change", apply);
-  }, [themeMode]);
-
-  const resolvedTheme: "dark" | "light" = themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
+  const previousPositionsRef = useRef<Map<string, AccountPosition>>(new Map());
+  const positionsInitializedRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -179,6 +163,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
 
   const accountEquity = account.account.totalBalance + account.account.unrealizedPnl;
   const equityChange = equityPoints.length > 1 ? accountEquity - equityPoints[0].value : 0;
+  const selectedPosition = account.positions.find((position) => position.symbol === symbol);
 
   function chooseSymbol(next: string) {
     setLoading(true); setSymbol(next);
@@ -189,12 +174,6 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
     setStrategy((current) => ({ ...current, maLength: length }));
     setIndicators((current) => ({ ...current, ma: { ...current.ma, length } }));
   }
-  function toggleTimeframe(timeframe: string) {
-    setStrategy((current) => ({ ...current, timeframes: current.timeframes.includes(timeframe)
-      ? current.timeframes.filter((item) => item !== timeframe)
-      : [...current.timeframes, timeframe].sort((a, b) => intervals.indexOf(a) - intervals.indexOf(b)) }));
-  }
-  function setTheme(next: ThemeMode) { setThemeMode(next); }
   function toggleOverlay(key: keyof OverlayVisibility) { setOverlayVisibility((current) => ({ ...current, [key]: !current[key] })); }
   function toggleArmed() {
     const next = !armed; setArmed(next);
@@ -206,13 +185,51 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
         : `${symbol}距离MA${strategy.maLength} ${formatPct(marketState.distance)}，本轮无触发。`;
     setEvents((current) => [{ id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), type: (marketState.inBand ? "candidate" : "check") as EventItem["type"], message }, ...current].slice(0, 10));
   }
-  async function parseStrategy() {
-    const response = await fetch("/api/strategy/parse", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: naturalText }) });
-    if (!response.ok) return;
-    const payload = await response.json() as { strategy: Strategy; normalizedRules: string[]; warnings: string[] };
-    setStrategy(payload.strategy); setIndicators((current) => ({ ...current, ma: { ...current.ma, length: payload.strategy.maLength } }));
-    setNormalizedRules(payload.normalizedRules); setParseWarnings(payload.warnings);
+  async function recordClosedPosition(position: AccountPosition) {
+    try {
+      const historyResponse = await fetch(`/api/trade-knowledge?symbol=${encodeURIComponent(position.symbol)}&limit=20`, { cache: "no-store" });
+      const history = historyResponse.ok ? await historyResponse.json() as { records?: Array<{ phase: string; score: number }> } : { records: [] };
+      const pretrade = history.records?.find((record) => record.phase === "pretrade");
+      const provisionalSuccess = position.unrealizedPnl >= 0;
+      const score = Math.max(0, Math.min(100, Math.round((pretrade?.score ?? 40) * 0.65 + (provisionalSuccess ? 25 : 8) + (pretrade ? 10 : 0))));
+      const mistakes = [
+        ...(!pretrade ? ["开仓前没有保存可追溯评分"] : []),
+        ...(!provisionalSuccess ? ["退出前处于亏损状态，需要核对是否按计划止损"] : []),
+      ];
+      const strengths = [
+        ...(pretrade ? ["本次交易存在可追溯的操作前评分"] : []),
+        ...(provisionalSuccess ? ["仓位消失前保持正向未实现盈亏"] : []),
+      ];
+      const response = await fetch("/api/trade-knowledge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        symbol: position.symbol, side: position.side, phase: "closed", status: "closed", score,
+        outcome: provisionalSuccess ? "success_estimated" : "failure_estimated", pnl: position.unrealizedPnl,
+        title: `${position.symbol} 完全退出复盘`, strengths, mistakes,
+        summary: `系统检测到仓位在两次账户刷新之间完全退出。退出前未实现盈亏 ${position.unrealizedPnl.toFixed(2)} USDT，暂定为${provisionalSuccess ? "成功" : "失败"}；最终成交结果仍需以后用币安成交回报复核。`,
+        plan: { detectedClose: true, previousPosition: position }, evidence: { source: "binance_position_transition", estimated: true },
+        sourceRefs: ["操作知识库/退出检测 v1", "系统风险外壳 v1"],
+      }) });
+      if (response.ok) {
+        window.dispatchEvent(new CustomEvent("trade-knowledge-updated"));
+        setEvents((current) => [{ id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), type: "system" as const, message: `${position.symbol} 已检测到完全退出，暂定复盘分 ${score}/100。` }, ...current].slice(0, 10));
+      }
+    } catch {
+      setEvents((current) => [{ id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), type: "system" as const, message: `${position.symbol} 已完全退出，但自动复盘保存失败。` }, ...current].slice(0, 10));
+    }
   }
+
+  useEffect(() => {
+    if (!account.connected) return;
+    const current = new Map(account.positions.map((position) => [`${position.symbol}:${position.positionSide}`, position]));
+    if (!positionsInitializedRef.current) {
+      previousPositionsRef.current = current;
+      positionsInitializedRef.current = true;
+      return;
+    }
+    for (const [key, previous] of previousPositionsRef.current) {
+      if (!current.has(key)) void recordClosedPosition(previous);
+    }
+    previousPositionsRef.current = current;
+  }, [account.connected, account.positions]);
 
   return (
     <main className={styles.terminalShell} data-theme={resolvedTheme}>
@@ -220,7 +237,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
         <a className={styles.brand} href="/"><span>街</span><div><strong>街灯终端</strong><small>STREETLIGHT</small></div></a>
         <nav>
           <a href="/"><b>◎</b>妖币雷达</a><a className={styles.active} href="/trade"><b>⌁</b>合约交易</a>
-          <a href="#strategy"><b>◇</b>策略构建</a><a href="#account"><b>▣</b>持仓与订单</a><span><b>◫</b>街哥知识库</span>
+          <a href="#strategy"><b>◇</b>策略构建</a><a href="#account"><b>▣</b>持仓与订单</a><a href="#trade-knowledge"><b>◫</b>操作知识库</a>
         </nav>
         <div className={styles.sidebarFoot}><i className={account.connected ? styles.connected : ""} /><div><strong>{account.connected ? "币安只读已连接" : "币安账户未连接"}</strong><small>{account.connected ? "15秒刷新 · 不含交易权限" : "真实下单未连接"}</small></div></div>
       </aside>
@@ -230,14 +247,14 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
           <div><small>HOME / FUTURES</small><h1>交易工作台</h1></div>
           <div className={styles.headerControls}>
             <div className={styles.themeSwitch} aria-label="主题选择">
-              {(["dark", "light", "system"] as ThemeMode[]).map((item) => <button key={item} className={themeMode === item ? styles.selected : ""} onClick={() => setTheme(item)}>{item === "dark" ? "深色" : item === "light" ? "浅色" : "跟随系统"}</button>)}
+              {(["dark", "light", "system"] as ThemeMode[]).map((item) => <button key={item} className={themeMode === item ? styles.selected : ""} onClick={() => setThemeMode(item)}>{item === "dark" ? "深色" : item === "light" ? "浅色" : "跟随系统"}</button>)}
             </div>
             <span className={styles.dataStatus}><i className={marketMode === "live" ? styles.connected : ""} />{marketMode === "live" ? "BINANCE 实时" : "演示行情"}</span>
           </div>
         </header>
 
         <section className={styles.commandBar}>
-          <div className={styles.agentState}><span>01</span><div><strong>MA30多周期回撤</strong><small>PAPER ONLY · 规则引擎 v1</small></div><button className={armed ? styles.stopButton : styles.startButton} onClick={toggleArmed}>{armed ? "暂停" : "启动观察"}</button></div>
+          <div className={styles.agentState}><span>{selectedPosition ? "持" : "入"}</span><div><strong>{selectedPosition ? `${symbol.replace("USDT", "")} 持仓管理` : "建立新仓计划"}</strong><small>PRE-TRADE SCORE · PAPER ONLY</small></div><button className={armed ? styles.stopButton : styles.startButton} onClick={toggleArmed}>{armed ? "暂停" : "启动观察"}</button></div>
           <div className={styles.killSwitch}><span>系统止损保护</span><i className={styles.on} /><button disabled>真实交易锁定</button></div>
         </section>
 
@@ -281,25 +298,15 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
             <div className={styles.chartFoot}><span>TradingView Lightweight Charts · Binance Futures 行情</span><span>订单线来自只读账户；MA触及仅是条件检查</span></div>
           </div>
 
-          <aside className={styles.strategyPanel} id="strategy">
-            <div className={styles.panelTop}><div><small>STRATEGY 01</small><h2>MA30多周期回撤</h2></div><span>PAPER ONLY</span></div>
-            <div className={styles.modeTabs}><button className={panelTab === "form" ? styles.selected : ""} onClick={() => setPanelTab("form")}>表单条件</button><button className={panelTab === "natural" ? styles.selected : ""} onClick={() => setPanelTab("natural")}>自然语言</button></div>
-            {panelTab === "form" ? <>
-              <div className={styles.formBlock}><label>执行周期</label><div className={styles.checkboxGrid}>{intervals.slice(2).map((item) => <button key={item} className={strategy.timeframes.includes(item) ? styles.checked : ""} onClick={() => toggleTimeframe(item)}><i />{item}</button>)}</div></div>
-              <div className={styles.formRow}><label>均线周期<input type="number" min="2" max="500" value={strategy.maLength} onChange={(event) => updateMaLength(Number(event.target.value))} /></label><label>入场带宽<input type="number" min="0.1" max="10" step="0.1" value={strategy.entryBandPct} onChange={(event) => setStrategy({ ...strategy, entryBandPct: Number(event.target.value) })} /><em>%</em></label></div>
-              <div className={styles.formRow}><label>每次买入<select value={strategy.sizeMode} onChange={(event) => setStrategy({ ...strategy, sizeMode: event.target.value as Strategy["sizeMode"] })}><option value="fixed_usdt">固定USDT</option><option value="available_pct">可用资金%</option></select></label><label>数值<input type="number" min="1" value={strategy.sizeValue} onChange={(event) => setStrategy({ ...strategy, sizeValue: Number(event.target.value) })} /></label></div>
-              <div className={styles.formRow}><label>最多买入<input type="number" min="1" max="10" value={strategy.maxEntries} onChange={(event) => setStrategy({ ...strategy, maxEntries: Number(event.target.value) })} /><em>次</em></label><label>跌破卖出<input type="number" min="1" max="100" value={strategy.firstExitPct} onChange={(event) => setStrategy({ ...strategy, firstExitPct: Number(event.target.value) })} /><em>%</em></label></div>
-              <div className={styles.ruleCard}><span>退出状态机</span><ol><li>首根收盘跌破MA：卖出当前持仓 {strategy.firstExitPct}%</li><li>下一根继续跌破：再卖出剩余持仓 {strategy.secondExitPct}%</li><li>同一轮最多入场 {strategy.maxEntries} 次，发生卖出后重置</li></ol></div>
-            </> : <div className={styles.naturalPanel}><textarea value={naturalText} onChange={(event) => setNaturalText(event.target.value)} aria-label="自然语言策略" /><button onClick={() => void parseStrategy()}>解析并写入规则</button><small>原文先转为可检查字段，绝不直接下单。</small>{normalizedRules.map((rule) => <p key={rule}>✓ {rule}</p>)}{parseWarnings.map((warning) => <p className={styles.warning} key={warning}>! {warning}</p>)}</div>}
-            <div className={styles.actionRow}><button className={armed ? styles.pause : styles.arm} onClick={toggleArmed}>{armed ? "暂停模拟观察" : "启动模拟观察"}</button><button onClick={runPaperCheck}>检查一次</button></div>
-            <p className={styles.scopeNote}>当前只做页面内模拟观察，不会发送真实订单。</p>
-          </aside>
+          <AdaptiveStrategyPanel symbol={symbol} position={selectedPosition} accountConnected={account.connected} currentPrice={marketState.latest?.close ?? 0} maLength={strategy.maLength} maValue={marketState.ma} />
         </section>
 
         <section className={styles.accountPanel} id="account">
           <div className={styles.accountHeader}><div><small>BINANCE USDⓈ-M</small><h2>持仓与活动委托</h2></div><div className={styles.accountTabs}><button className={accountTab === "positions" ? styles.selected : ""} onClick={() => setAccountTab("positions")}>当前持仓 {account.positions.length}</button><button className={accountTab === "orders" ? styles.selected : ""} onClick={() => setAccountTab("orders")}>限价 / 条件单 {account.limitOrders.length + account.conditionalOrders.length}</button></div><span>{account.connected ? `更新 ${new Date(account.updatedAt).toLocaleTimeString("zh-CN")}` : account.reason}</span></div>
           {accountTab === "positions" ? <PositionTable positions={account.positions} connected={account.connected} /> : <OrderTable orders={[...account.limitOrders, ...account.conditionalOrders]} connected={account.connected} />}
         </section>
+
+        <TradeKnowledgePanel symbol={symbol} />
 
         <footer className={styles.tradeFooter}>只读账户、行情分析、模拟策略互相隔离。连接账户后仍默认禁止交易与提现权限。</footer>
       </div>
