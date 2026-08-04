@@ -296,7 +296,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
         <a className={styles.brand} href="/"><span>街</span><div><strong>街灯终端</strong><small>STREETLIGHT</small></div></a>
         <nav>
           <a href="/"><b>◎</b>妖币雷达</a><a className={styles.active} href="/trade"><b>⌁</b>合约交易</a>
-          <a href="#strategy"><b>◇</b>策略构建</a><a href="#account"><b>▣</b>持仓与订单</a><a href="#trade-knowledge"><b>◫</b>操作知识库</a>
+          <a href="#strategy"><b>◇</b>策略构建</a><a href="#account"><b>▣</b>持仓与订单</a><a href="#trade-knowledge"><b>◫</b>操作知识库</a><a href="/settings"><b>⚙</b>连接设置</a>
         </nav>
         <div className={styles.sidebarFoot}><i className={accountView === "paper" || account.connected ? styles.connected : ""} /><div><strong>{accountView === "paper" ? "模拟盘在线" : account.connected ? "币安只读已连接" : "币安账户未连接"}</strong><small>{accountView === "paper" ? "公开行情 · 绝不发送真单" : account.connected ? "15秒刷新 · 不含交易权限" : "真实下单未连接"}</small></div></div>
       </aside>

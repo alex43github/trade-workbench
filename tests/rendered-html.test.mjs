@@ -57,6 +57,25 @@ test("keeps the Binance account surface disconnected without server secrets", as
   assert.deepEqual(payload.conditionalOrders, []);
 });
 
+test("renders connection diagnostics without browser-side secret inputs", async () => {
+  const pageResponse = await request("/settings");
+  assert.equal(pageResponse.status, 200);
+  const html = await pageResponse.text();
+  assert.match(html, /密钥只进服务端/);
+  assert.match(html, /BINANCE_FUTURES_API_KEY/);
+  assert.match(html, /当前没有真实下单接口/);
+  assert.doesNotMatch(html, /type=["']password["']/i);
+
+  const statusResponse = await request("/api/connections", { headers: { accept: "application/json" } });
+  assert.equal(statusResponse.status, 200);
+  const status = await statusResponse.json();
+  assert.equal(status.binancePrivate.configured, false);
+  assert.equal(status.openai.configured, false);
+  assert.equal(status.safety.secretsExposedToBrowser, false);
+  assert.equal(status.safety.realOrderRouteEnabled, false);
+  assert.doesNotMatch(JSON.stringify(status), /API_SECRET|API_KEY/);
+});
+
 test("turns the MA strategy description into inspectable rules", async () => {
   const response = await request("/api/strategy/parse", {
     method: "POST",
