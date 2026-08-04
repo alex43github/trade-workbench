@@ -33,6 +33,19 @@ test("server-renders the paper trading strategy lab", async () => {
   assert.match(html, /PAPER ONLY/);
   assert.match(html, /自然语言/);
   assert.match(html, /真实下单未连接/);
+  assert.match(html, /资金曲线/);
+  assert.match(html, /止盈止损/);
+  assert.match(html, /指标 ·/);
+});
+
+test("keeps the Binance account surface disconnected without server secrets", async () => {
+  const response = await request("/api/account", { headers: { accept: "application/json" } });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.connected, false);
+  assert.deepEqual(payload.positions, []);
+  assert.deepEqual(payload.limitOrders, []);
+  assert.deepEqual(payload.conditionalOrders, []);
 });
 
 test("turns the MA strategy description into inspectable rules", async () => {
