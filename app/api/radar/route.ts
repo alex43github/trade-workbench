@@ -1,4 +1,7 @@
 type PlainObject = Record<string, unknown>;
+type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
+type CrowdMood = "SHORT_CROWD" | "TRAPPED" | "CHASE_LONG" | "MIXED" | "UNKNOWN";
+type DataState = "live" | "partial" | "pending" | "demo";
 
 type RadarCoin = {
   symbol: string;
@@ -12,25 +15,91 @@ type RadarCoin = {
   heatScore: number;
   heatChange: number;
   mentionCount: number;
+  crowdMood: CrowdMood;
+  shortCallRatio: number;
+  trappedRatio: number;
+  resilienceScore: number;
   oi15m: number;
   oi1h: number;
   oi4h: number;
   fundingRate: number;
   takerRatio: number;
   retailLsr: number;
+  asterOi1h: number | null;
+  asterWhaleDelta: number | null;
+  top10Pct: number | null;
+  top1Pct: number | null;
+  cexPct: number | null;
+  quietWalletPct: number | null;
+  chipStage: string;
+  chainAnomaly: number | null;
+  chainSignal: string;
   score: number;
-  participation: "A" | "B" | "WATCH" | "AVOID";
+  participation: Participation;
+  setupTags: string[];
   verdict: string;
   reasons: string[];
   risks: string[];
+  coverage: {
+    square: DataState;
+    binanceOi: DataState;
+    aster: DataState;
+    chips: DataState;
+    chain: DataState;
+  };
 };
 
-const demoCoins: Omit<RadarCoin, "participation" | "verdict" | "reasons" | "risks">[] = [
-  { symbol: "HYPEUSDT", displayName: "HYPE", price: 42.68, change15m: 0.72, change1h: 2.84, change4h: 6.25, change24h: 11.7, volume24h: 894_000_000, heatScore: 91, heatChange: 48, mentionCount: 186, oi15m: 3.7, oi1h: 8.6, oi4h: 15.2, fundingRate: 0.0187, takerRatio: 1.21, retailLsr: 1.08, score: 82 },
-  { symbol: "PENGUUSDT", displayName: "PENGU", price: 0.03418, change15m: -0.48, change1h: 1.35, change4h: 8.61, change24h: 19.4, volume24h: 322_000_000, heatScore: 86, heatChange: 63, mentionCount: 143, oi15m: 2.2, oi1h: 5.8, oi4h: 12.7, fundingRate: 0.0321, takerRatio: 1.09, retailLsr: 1.22, score: 73 },
-  { symbol: "BMTUSDT", displayName: "BMT", price: 0.1864, change15m: 3.82, change1h: 12.4, change4h: 27.8, change24h: 58.6, volume24h: 76_000_000, heatScore: 95, heatChange: 112, mentionCount: 214, oi15m: 9.6, oi1h: 24.1, oi4h: 46.8, fundingRate: 0.087, takerRatio: 2.07, retailLsr: 1.92, score: 78 },
-  { symbol: "SOLUSDT", displayName: "SOL", price: 198.31, change15m: 0.21, change1h: 0.92, change4h: 2.73, change24h: 5.2, volume24h: 3_820_000_000, heatScore: 72, heatChange: 18, mentionCount: 96, oi15m: 0.8, oi1h: 2.4, oi4h: 5.1, fundingRate: 0.0098, takerRatio: 1.04, retailLsr: 1.14, score: 68 },
-  { symbol: "WIFUSDT", displayName: "WIF", price: 1.284, change15m: -1.12, change1h: -0.68, change4h: 4.16, change24h: 8.9, volume24h: 119_000_000, heatScore: 76, heatChange: 35, mentionCount: 105, oi15m: -1.9, oi1h: -3.4, oi4h: 2.2, fundingRate: 0.0144, takerRatio: 0.82, retailLsr: 1.31, score: 51 },
+type RadarBase = Omit<RadarCoin, "score" | "participation" | "setupTags" | "verdict" | "reasons" | "risks">;
+
+const BINANCE_FUTURES = "https://fapi.binance.com";
+const BINANCE_FUTURES_DATA = "https://fapi.binance.com/futures/data";
+
+const demoCoins: RadarBase[] = [
+  {
+    symbol: "HYPEUSDT", displayName: "HYPE", price: 42.68, change15m: 0.72, change1h: 2.84,
+    change4h: 6.25, change24h: 11.7, volume24h: 894_000_000, heatScore: 91, heatChange: 48,
+    mentionCount: 186, crowdMood: "SHORT_CROWD", shortCallRatio: 64, trappedRatio: 18,
+    resilienceScore: 82, oi15m: 3.7, oi1h: 8.6, oi4h: 15.2, fundingRate: 0.0187,
+    takerRatio: 1.21, retailLsr: 0.78, asterOi1h: 6.4, asterWhaleDelta: 8.1,
+    top10Pct: 58.4, top1Pct: 18.6, cexPct: 12.4, quietWalletPct: 3.2, chipStage: "拉升中",
+    chainAnomaly: 63, chainSignal: "净流出CEX", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
+  },
+  {
+    symbol: "PENGUUSDT", displayName: "PENGU", price: 0.03418, change15m: -0.48, change1h: 1.35,
+    change4h: 8.61, change24h: 19.4, volume24h: 322_000_000, heatScore: 86, heatChange: 63,
+    mentionCount: 143, crowdMood: "TRAPPED", shortCallRatio: 38, trappedRatio: 47,
+    resilienceScore: 69, oi15m: 2.2, oi1h: 5.8, oi4h: 12.7, fundingRate: 0.0321,
+    takerRatio: 1.09, retailLsr: 1.22, asterOi1h: 2.1, asterWhaleDelta: null,
+    top10Pct: 44.8, top1Pct: 9.4, cexPct: 18.2, quietWalletPct: 6.1, chipStage: "横盘整理",
+    chainAnomaly: 41, chainSignal: "中性", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
+  },
+  {
+    symbol: "BMTUSDT", displayName: "BMT", price: 0.1864, change15m: 3.82, change1h: 12.4,
+    change4h: 27.8, change24h: 58.6, volume24h: 76_000_000, heatScore: 95, heatChange: 112,
+    mentionCount: 214, crowdMood: "CHASE_LONG", shortCallRatio: 11, trappedRatio: 8,
+    resilienceScore: 91, oi15m: 9.6, oi1h: 24.1, oi4h: 46.8, fundingRate: 0.087,
+    takerRatio: 2.07, retailLsr: 1.92, asterOi1h: 16.5, asterWhaleDelta: 12.3,
+    top10Pct: 82.6, top1Pct: 61.4, cexPct: 34.7, quietWalletPct: 12.6, chipStage: "派发预警",
+    chainAnomaly: 88, chainSignal: "CEX大额充值", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
+  },
+  {
+    symbol: "SOLUSDT", displayName: "SOL", price: 198.31, change15m: 0.21, change1h: 0.92,
+    change4h: 2.73, change24h: 5.2, volume24h: 3_820_000_000, heatScore: 72, heatChange: 18,
+    mentionCount: 96, crowdMood: "MIXED", shortCallRatio: 36, trappedRatio: 19,
+    resilienceScore: 61, oi15m: 0.8, oi1h: 2.4, oi4h: 5.1, fundingRate: 0.0098,
+    takerRatio: 1.04, retailLsr: 1.14, asterOi1h: 1.3, asterWhaleDelta: 0.8,
+    top10Pct: 31.2, top1Pct: 7.3, cexPct: 22.4, quietWalletPct: 1.1, chipStage: "横盘整理",
+    chainAnomaly: 28, chainSignal: "中性", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
+  },
+  {
+    symbol: "WIFUSDT", displayName: "WIF", price: 1.284, change15m: -1.12, change1h: -0.68,
+    change4h: 4.16, change24h: 8.9, volume24h: 119_000_000, heatScore: 76, heatChange: 35,
+    mentionCount: 105, crowdMood: "SHORT_CROWD", shortCallRatio: 58, trappedRatio: 21,
+    resilienceScore: 43, oi15m: -1.9, oi1h: -3.4, oi4h: 2.2, fundingRate: 0.0144,
+    takerRatio: 0.82, retailLsr: 0.74, asterOi1h: -1.6, asterWhaleDelta: -2.4,
+    top10Pct: 39.5, top1Pct: 11.2, cexPct: 25.1, quietWalletPct: 2.4, chipStage: "派发中",
+    chainAnomaly: 71, chainSignal: "大户转入CEX", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
+  },
 ];
 
 function object(value: unknown): PlainObject {
@@ -40,6 +109,12 @@ function object(value: unknown): PlainObject {
 function number(value: unknown, fallback = 0): number {
   const parsed = typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = number(value, Number.NaN);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function string(value: unknown, fallback = ""): string {
@@ -55,52 +130,154 @@ function firstValue(sources: PlainObject[], keys: string[]) {
   return undefined;
 }
 
-function percentFunding(value: number) {
-  return Math.abs(value) < 0.01 && value !== 0 ? value * 100 : value;
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
-function analyze(base: Omit<RadarCoin, "participation" | "verdict" | "reasons" | "risks">): RadarCoin {
-  const reasons: string[] = [];
-  const risks: string[] = [];
-
-  if (base.heatChange >= 25) reasons.push(`广场热度加速 ${base.heatChange.toFixed(0)}%，关注增量明显`);
-  if (base.volume24h >= 20_000_000) reasons.push(`24h成交额 ${formatCompact(base.volume24h)}，基础流动性达标`);
-  if (base.change1h >= 0 && base.change1h <= 10) reasons.push("1h动量为正且尚未进入极端拉升");
-  if (base.oi15m > 0 && base.oi1h > 0) reasons.push("15m与1h持仓量同步增加，有新增资金参与");
-  if (base.takerRatio > 0.9 && base.takerRatio < 1.8) reasons.push(`主动买卖比 ${base.takerRatio.toFixed(2)}，买盘健康但未极端`);
-
-  if (base.volume24h < 20_000_000) risks.push("24h成交额低于2000万USDT，流动性不足");
-  if (base.change4h > 25) risks.push(`4h涨幅 ${base.change4h.toFixed(1)}%，触发过热否决`);
-  if (base.change24h > 50) risks.push(`24h涨幅 ${base.change24h.toFixed(1)}%，追涨风险过高`);
-  if (base.fundingRate >= 0.05) risks.push(`资金费率 ${base.fundingRate.toFixed(4)}%，多头成本极端`);
-  if (base.retailLsr >= 1.7) risks.push(`散户多空比 ${base.retailLsr.toFixed(2)}，方向过度拥挤`);
-  if (base.takerRatio >= 1.8) risks.push(`主动买卖比 ${base.takerRatio.toFixed(2)}，短线买盘可能透支`);
-  if (base.takerRatio < 0.85) risks.push("主动买盘衰退，暂不确认热度有效");
-  if (base.oi15m <= 0 || base.oi1h <= 0) risks.push("短周期持仓量未同步增长，热度缺少资金确认");
-
-  const hardVeto = risks.some((risk) => /否决|极端|不足|过度拥挤/.test(risk));
-  const qualityCount = reasons.length;
-  let participation: RadarCoin["participation"] = "WATCH";
-  if (hardVeto) participation = "AVOID";
-  else if (qualityCount >= 5 && base.score >= 65) participation = "A";
-  else if (qualityCount >= 3 && base.score >= 55) participation = "B";
-
-  const verdict =
-    participation === "A"
-      ? "热度、流动性与新增持仓形成共振，适合列入回撤参与候选，不适合直接追高。"
-      : participation === "B"
-        ? "线索具备，但确认条件还不完整；等待短周期量价或持仓量改善。"
-        : participation === "AVOID"
-          ? "热门不等于安全。当前已触发硬性风险条件，热度越高越应防范反向波动。"
-          : "广场出现讨论增量，但市场数据暂未确认，保留观察即可。";
-
-  return { ...base, participation, verdict, reasons: reasons.length ? reasons : ["已进入广场热度观察池"], risks };
+function percentFunding(value: number) {
+  return Math.abs(value) < 0.01 && value !== 0 ? value * 100 : value;
 }
 
 function formatCompact(value: number) {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B USDT`;
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(0)}M USDT`;
   return `${value.toFixed(0)} USDT`;
+}
+
+function analyze(base: RadarBase): RadarCoin {
+  const reasons: string[] = [];
+  const risks: string[] = [];
+  const setupTags: string[] = [];
+  let score = 0;
+
+  if (base.coverage.square !== "pending") {
+    score += clamp(base.heatScore / 100, 0, 1) * 13;
+    score += clamp(base.heatChange / 80, 0, 1) * 5;
+    if (base.heatChange >= 25) reasons.push(`广场热度加速 ${base.heatChange.toFixed(0)}%，讨论正在放大`);
+    if (base.crowdMood === "SHORT_CROWD") setupTags.push("喊空集中");
+    if (base.crowdMood === "TRAPPED") setupTags.push("套牢/扛单");
+  } else {
+    risks.push("币安广场语义尚未接入，本轮不计算喊空和套牢信号");
+  }
+
+  const squeezeContext =
+    base.crowdMood === "SHORT_CROWD" && base.shortCallRatio >= 55 &&
+    base.resilienceScore >= 60 && base.oi1h > 0 && base.change1h >= -0.5;
+  if (squeezeContext) {
+    score += 16;
+    setupTags.push("反向情绪");
+    reasons.push(`喊空占比 ${base.shortCallRatio.toFixed(0)}%，但价格抗压且1h OI仍增加`);
+  }
+  if (base.crowdMood === "TRAPPED" && base.resilienceScore >= 65) {
+    score += 8;
+    reasons.push("广场套牢/扛单语义偏多，但价格尚未出现有效破位");
+  }
+
+  if (base.volume24h >= 20_000_000) {
+    score += 8;
+    reasons.push(`24h成交额 ${formatCompact(base.volume24h)}，基础流动性达标`);
+  } else {
+    risks.push("24h成交额低于2000万USDT，触发流动性否决");
+  }
+
+  if (base.change1h >= 0 && base.change1h <= 10) {
+    score += 7;
+    reasons.push("1h动量为正且尚未进入极端拉升");
+  }
+  if (base.resilienceScore >= 65) {
+    score += 6;
+    setupTags.push("价格抗压");
+  }
+
+  if (base.coverage.binanceOi !== "pending") {
+    if (base.oi15m > 0 && base.oi1h > 0) {
+      score += 16;
+      setupTags.push("OI共振");
+      reasons.push("15m与1h OI同步增加，存在新增对手盘");
+    } else if (base.oi1h > 0) {
+      score += 7;
+    } else {
+      risks.push("短周期OI没有同步增加，热度缺少新增持仓确认");
+    }
+    if (base.takerRatio >= 0.9 && base.takerRatio <= 1.55) {
+      score += 5;
+      reasons.push(`主动买卖比 ${base.takerRatio.toFixed(2)}，承接存在但未极端`);
+    }
+  } else {
+    risks.push("Binance Futures OI尚未接入，无法确认新增持仓");
+  }
+
+  if (base.coverage.aster !== "pending" && base.asterOi1h !== null) {
+    if (base.asterOi1h > 2) {
+      score += 5;
+      setupTags.push("Aster增仓");
+      reasons.push(`Aster 1h OI增加 ${base.asterOi1h.toFixed(1)}%，跨市场持仓同步`);
+    }
+  } else {
+    risks.push("Aster全市场OI和大户持仓仍待接入，不计入当前评分");
+  }
+
+  if (base.coverage.chips !== "pending" && base.top10Pct !== null) {
+    if (base.top10Pct >= 35 && base.top10Pct <= 70) {
+      score += 11;
+      setupTags.push("筹码集中");
+      reasons.push(`Top10持仓 ${base.top10Pct.toFixed(1)}%，具备控盘特征但未达到极端阈值`);
+    }
+    if (/吸筹|拉升/.test(base.chipStage)) score += 4;
+    if ((base.quietWalletPct ?? 0) >= 8) risks.push(`Quiet钱包占比 ${base.quietWalletPct?.toFixed(1)}%，存在潜在集中抛压`);
+  } else {
+    risks.push("筹码快照待接入，尚未排除交易所、LP和锁仓地址");
+  }
+
+  if (base.coverage.chain !== "pending" && base.chainAnomaly !== null) {
+    if (/净流出CEX|聪明钱流入/.test(base.chainSignal)) {
+      score += 7;
+      setupTags.push("链上流入");
+      reasons.push(`链上信号：${base.chainSignal}`);
+    }
+    if (/转入CEX|充值|派发/.test(base.chainSignal) && base.chainAnomaly >= 65) {
+      risks.push(`链上出现${base.chainSignal}，异常度 ${base.chainAnomaly}/100`);
+    }
+  } else {
+    risks.push("链上资金流与异常转账待接入，不计入当前评分");
+  }
+
+  if (base.change4h > 30) risks.push(`4h涨幅 ${base.change4h.toFixed(1)}%，触发过热否决`);
+  if (base.change24h > 60) risks.push(`24h涨幅 ${base.change24h.toFixed(1)}%，追涨风险过高`);
+  if (Math.abs(base.fundingRate) >= 0.08) risks.push(`资金费率 ${base.fundingRate.toFixed(3)}%，方向成本极端`);
+  if (base.retailLsr >= 1.8) risks.push(`散户多空比 ${base.retailLsr.toFixed(2)}，追多过度拥挤`);
+  if (base.takerRatio >= 1.9) risks.push(`主动买卖比 ${base.takerRatio.toFixed(2)}，短线买盘可能透支`);
+  if ((base.top1Pct ?? 0) > 60 || (base.top10Pct ?? 0) > 85) risks.push("筹码过度集中，单一地址或集群具备砸盘能力");
+  if (/派发预警|派发中/.test(base.chipStage)) risks.push(`筹码阶段为“${base.chipStage}”`);
+
+  const hardVeto = risks.some((risk) => /触发|极端|过度集中|派发中|CEX大额充值/.test(risk));
+  score = Math.round(clamp(score, 0, 100));
+  let participation: Participation = "WATCH";
+  if (hardVeto) participation = "AVOID";
+  else if (squeezeContext && score >= 65) participation = "SQUEEZE";
+  else if (score >= 72 && base.coverage.square !== "pending") participation = "A";
+  else if (score >= 50) participation = "B";
+
+  const verdict =
+    participation === "SQUEEZE"
+      ? "广场喊空与市场抗跌形成背离，OI继续增长，进入逼空重点池；仍需等待回撤结构和卖盘吸收确认。"
+      : participation === "A"
+        ? "热度、流动性和资金证据形成共振，可列入回撤参与候选，不适合直接追高。"
+        : participation === "B"
+          ? "已有部分有效线索，但数据源或确认条件尚未补齐，等待证据升级。"
+          : participation === "AVOID"
+            ? "当前命中硬风险条件。热度越高越应谨慎，不因反向情绪强行参与。"
+            : "存在波动或讨论线索，但目前不足以形成可执行计划，保留观察。";
+
+  return {
+    ...base,
+    score,
+    participation,
+    setupTags: setupTags.length ? [...new Set(setupTags)].slice(0, 5) : ["证据待补齐"],
+    verdict,
+    reasons: reasons.length ? reasons.slice(0, 7) : ["已进入高波动初筛池，等待更多证据"],
+    risks: risks.slice(0, 7),
+  };
 }
 
 function extractRows(payload: unknown): unknown[] {
@@ -116,21 +293,38 @@ function extractRows(payload: unknown): unknown[] {
   return [];
 }
 
-function normalizeRow(item: unknown): Omit<RadarCoin, "participation" | "verdict" | "reasons" | "risks"> | null {
+function normalizeCrowd(value: unknown, shortRatio: number, trappedRatio: number): CrowdMood {
+  const normalized = string(value).toLowerCase();
+  if (/short|bear|喊空|做空/.test(normalized) || shortRatio >= 55) return "SHORT_CROWD";
+  if (/trap|套牢|扛单|哭/.test(normalized) || trappedRatio >= 40) return "TRAPPED";
+  if (/long|bull|追多/.test(normalized)) return "CHASE_LONG";
+  if (normalized) return "MIXED";
+  return "UNKNOWN";
+}
+
+function normalizeRow(item: unknown): RadarBase | null {
   const row = object(item);
   const market = object(row.market ?? row.snapshot ?? row.market_snapshot);
   const signal = object(row.signal ?? row.analysis ?? row.signals);
   const heat = object(row.heat ?? row.social ?? row.heat_data);
+  const chip = object(row.chip ?? row.chips ?? row.holders ?? row.chip_analysis);
+  const chain = object(row.chain ?? row.onchain ?? row.on_chain);
+  const aster = object(row.aster ?? row.aster_data);
   const sources = [row, market, signal, heat];
   const rawSymbol = string(firstValue(sources, ["symbol", "token", "coin", "asset"])).toUpperCase();
   if (!rawSymbol) return null;
   const displayName = rawSymbol.replace(/[-_/]?USDT$/i, "");
   const symbol = rawSymbol.endsWith("USDT") ? rawSymbol.replace(/[-_/]/g, "") : `${rawSymbol.replace(/[-_/]/g, "")}USDT`;
   const fundingRate = percentFunding(number(firstValue(sources, ["funding_rate", "fundingRate", "funding"])));
+  const shortCallRatio = number(firstValue([heat, row], ["short_call_ratio", "shortCallRatio", "bearish_ratio", "short_ratio"]));
+  const trappedRatio = number(firstValue([heat, row], ["trapped_ratio", "trappedRatio", "loss_complaint_ratio", "holding_bag_ratio"]));
+  const oi1hRaw = firstValue(sources, ["oi_change_1h", "oi1h", "open_interest_change_1h"]);
+  const top10Pct = nullableNumber(firstValue([chip, row], ["top10_pct", "top10Pct", "top_10_percentage", "operator_pct"]));
+  const chainAnomaly = nullableNumber(firstValue([chain, row], ["anomaly_score", "chainAnomaly", "risk_score"]));
+  const asterOi1h = nullableNumber(firstValue([aster, row], ["oi_change_1h", "oi1h", "open_interest_change_1h"]));
 
   return {
-    symbol,
-    displayName,
+    symbol, displayName,
     price: number(firstValue(sources, ["price", "last_price", "lastPrice", "mark_price"])),
     change15m: number(firstValue(sources, ["change_15m", "change15m", "price_change_15m", "pct_15m"])),
     change1h: number(firstValue(sources, ["change_1h", "change1h", "price_change_1h", "pct_1h"])),
@@ -140,14 +334,129 @@ function normalizeRow(item: unknown): Omit<RadarCoin, "participation" | "verdict
     heatScore: number(firstValue(sources, ["heat_score", "heatScore", "heat", "social_score", "score"])),
     heatChange: number(firstValue(sources, ["heat_change", "heatChange", "heat_acceleration", "growth_rate"])),
     mentionCount: number(firstValue(sources, ["mention_count", "mentions", "post_count", "posts_count"])),
+    crowdMood: normalizeCrowd(firstValue([heat, row], ["crowd_mood", "crowdMood", "sentiment_label"]), shortCallRatio, trappedRatio),
+    shortCallRatio, trappedRatio,
+    resilienceScore: number(firstValue(sources, ["resilience_score", "resilienceScore", "absorption_score"]), 50),
     oi15m: number(firstValue(sources, ["oi_change_15m", "oi15m", "open_interest_change_15m"])),
-    oi1h: number(firstValue(sources, ["oi_change_1h", "oi1h", "open_interest_change_1h"])),
+    oi1h: number(oi1hRaw),
     oi4h: number(firstValue(sources, ["oi_change_4h", "oi4h", "open_interest_change_4h"])),
     fundingRate,
     takerRatio: number(firstValue(sources, ["taker_ratio", "takerRatio", "buy_sell_ratio"]), 1),
     retailLsr: number(firstValue(sources, ["global_lsr", "retail_lsr", "long_short_ratio", "lsr"]), 1),
-    score: Math.round(number(firstValue([signal, row], ["score", "signal_score", "total_score"]), 50)),
+    asterOi1h,
+    asterWhaleDelta: nullableNumber(firstValue([aster, row], ["whale_delta", "whaleDelta", "large_position_change"])),
+    top10Pct,
+    top1Pct: nullableNumber(firstValue([chip, row], ["top1_pct", "top1Pct", "top_holder_pct"])),
+    cexPct: nullableNumber(firstValue([chip, row], ["cex_pct", "cexPct", "cex_pool_pct"])),
+    quietWalletPct: nullableNumber(firstValue([chip, row], ["quiet_wallet_pct", "quietWalletPct", "quiet_pct"])),
+    chipStage: string(firstValue([chip, row], ["stage", "chip_stage", "chipStage", "lifecycle"]), top10Pct === null ? "待接入" : "横盘整理"),
+    chainAnomaly,
+    chainSignal: string(firstValue([chain, row], ["signal", "chain_signal", "chainSignal", "flow_label"]), chainAnomaly === null ? "待接入" : "中性"),
+    coverage: {
+      square: "live",
+      binanceOi: oi1hRaw === undefined ? "pending" : "live",
+      aster: asterOi1h === null ? "pending" : "live",
+      chips: top10Pct === null ? "pending" : "live",
+      chain: chainAnomaly === null ? "pending" : "live",
+    },
   };
+}
+
+async function fetchJson(url: string, timeout = 6_000): Promise<unknown> {
+  const response = await fetch(url, {
+    headers: { accept: "application/json", "user-agent": "streetlight-radar/0.2" },
+    signal: AbortSignal.timeout(timeout),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`upstream_${response.status}`);
+  return response.json();
+}
+
+function percentChange(values: number[], periodsBack: number) {
+  if (values.length <= periodsBack) return 0;
+  const current = values.at(-1) ?? 0;
+  const previous = values.at(-(periodsBack + 1)) ?? 0;
+  return previous ? ((current - previous) / previous) * 100 : 0;
+}
+
+async function fetchLiveMarketCoin(ticker: PlainObject, fundingMap: Map<string, number>): Promise<RadarBase> {
+  const symbol = string(ticker.symbol).toUpperCase();
+  const [klinesPayload, oiPayload, takerPayload, lsrPayload] = await Promise.allSettled([
+    fetchJson(`${BINANCE_FUTURES}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=5m&limit=49`),
+    fetchJson(`${BINANCE_FUTURES_DATA}/openInterestHist?symbol=${encodeURIComponent(symbol)}&period=5m&limit=49`),
+    fetchJson(`${BINANCE_FUTURES_DATA}/takerlongshortRatio?symbol=${encodeURIComponent(symbol)}&period=5m&limit=13`),
+    fetchJson(`${BINANCE_FUTURES_DATA}/globalLongShortAccountRatio?symbol=${encodeURIComponent(symbol)}&period=5m&limit=2`),
+  ]);
+
+  const klines = klinesPayload.status === "fulfilled" && Array.isArray(klinesPayload.value) ? klinesPayload.value : [];
+  const closeValues = klines.map((row) => Array.isArray(row) ? number(row[4]) : 0).filter((value) => value > 0);
+  const oiRows = oiPayload.status === "fulfilled" && Array.isArray(oiPayload.value) ? oiPayload.value : [];
+  const oiValues = oiRows.map((row) => number(object(row).sumOpenInterestValue)).filter((value) => value > 0);
+  const takerRows = takerPayload.status === "fulfilled" && Array.isArray(takerPayload.value) ? takerPayload.value : [];
+  const lsrRows = lsrPayload.status === "fulfilled" && Array.isArray(lsrPayload.value) ? lsrPayload.value : [];
+  const change15m = percentChange(closeValues, 3);
+  const change1h = percentChange(closeValues, 12);
+  const change4h = percentChange(closeValues, 48);
+  const oi1h = percentChange(oiValues, 12);
+  const oi15m = percentChange(oiValues, 3);
+  const oi4h = percentChange(oiValues, 48);
+  const takerRatio = number(object(takerRows.at(-1)).buySellRatio, 1);
+  const retailLsr = number(object(lsrRows.at(-1)).longShortRatio, 1);
+  const resilienceScore = Math.round(clamp(50 + change1h * 5 + oi1h * 1.5 - Math.max(0, 1 - takerRatio) * 20, 0, 100));
+
+  return {
+    symbol,
+    displayName: symbol.replace(/USDT$/, ""),
+    price: number(ticker.lastPrice),
+    change15m, change1h, change4h,
+    change24h: number(ticker.priceChangePercent),
+    volume24h: number(ticker.quoteVolume),
+    heatScore: 0, heatChange: 0, mentionCount: 0,
+    crowdMood: "UNKNOWN", shortCallRatio: 0, trappedRatio: 0, resilienceScore,
+    oi15m, oi1h, oi4h,
+    fundingRate: percentFunding(fundingMap.get(symbol) ?? 0),
+    takerRatio, retailLsr,
+    asterOi1h: null, asterWhaleDelta: null,
+    top10Pct: null, top1Pct: null, cexPct: null, quietWalletPct: null, chipStage: "待接入",
+    chainAnomaly: null, chainSignal: "待接入",
+    coverage: {
+      square: "pending",
+      binanceOi: oiValues.length > 12 ? "live" : "partial",
+      aster: "pending", chips: "pending", chain: "pending",
+    },
+  };
+}
+
+async function buildLiveMarketFallback(): Promise<RadarCoin[]> {
+  const [exchangePayload, tickersPayload, premiumPayload] = await Promise.all([
+    fetchJson(`${BINANCE_FUTURES}/fapi/v1/exchangeInfo`),
+    fetchJson(`${BINANCE_FUTURES}/fapi/v1/ticker/24hr`),
+    fetchJson(`${BINANCE_FUTURES}/fapi/v1/premiumIndex`),
+  ]);
+  const exchangeRows = extractRows(object(exchangePayload).symbols);
+  const tradable = new Set(
+    exchangeRows
+      .map(object)
+      .filter((row) => row.status === "TRADING" && row.contractType === "PERPETUAL" && row.quoteAsset === "USDT")
+      .map((row) => string(row.symbol)),
+  );
+  const fundingMap = new Map(
+    (Array.isArray(premiumPayload) ? premiumPayload : []).map((row) => {
+      const entry = object(row);
+      return [string(entry.symbol), number(entry.lastFundingRate)] as [string, number];
+    }),
+  );
+  const candidates = (Array.isArray(tickersPayload) ? tickersPayload : [])
+    .map(object)
+    .filter((ticker) => tradable.has(string(ticker.symbol)) && number(ticker.quoteVolume) >= 20_000_000)
+    .sort((a, b) => {
+      const aRank = Math.abs(number(a.priceChangePercent)) * Math.log10(Math.max(10, number(a.quoteVolume)));
+      const bRank = Math.abs(number(b.priceChangePercent)) * Math.log10(Math.max(10, number(b.quoteVolume)));
+      return bRank - aRank;
+    })
+    .slice(0, 8);
+  const bases = await Promise.all(candidates.map((ticker) => fetchLiveMarketCoin(ticker, fundingMap)));
+  return bases.map(analyze).sort((a, b) => b.score - a.score);
 }
 
 export async function GET() {
@@ -155,36 +464,43 @@ export async function GET() {
 
   if (baseUrl) {
     try {
-      const response = await fetch(`${baseUrl}/api/leaderboard`, {
-        headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(7_000),
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error(`monitor_${response.status}`);
-      const payload: unknown = await response.json();
+      const payload = await fetchJson(`${baseUrl}/api/leaderboard`, 7_000);
       const coins = extractRows(payload)
         .map(normalizeRow)
-        .filter((coin): coin is NonNullable<typeof coin> => Boolean(coin))
+        .filter((coin): coin is RadarBase => Boolean(coin))
         .map(analyze)
         .sort((a, b) => b.score - a.score);
-
       if (coins.length) {
         return Response.json({
           mode: "live",
           updatedAt: new Date().toISOString(),
-          sourceStatus: `币安广场监控 · ${coins.length} 个有效币种`,
+          sourceStatus: `币安广场监控已连接 · ${coins.length} 个有效币种 · 缺失字段不参与评分`,
           coins,
-        });
+        }, { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
       }
     } catch {
-      // Fall through to clearly labeled demo data when the independent collector is unavailable.
+      // Continue with Binance public market data. The response labels missing sources explicitly.
     }
+  }
+
+  try {
+    const coins = await buildLiveMarketFallback();
+    if (coins.length) {
+      return Response.json({
+        mode: "hybrid",
+        updatedAt: new Date().toISOString(),
+        sourceStatus: `Binance Futures实时行情 · ${coins.length} 个高波动合约 · 广场/筹码/Aster待接入`,
+        coins,
+      }, { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
+    }
+  } catch {
+    // A fully labeled demo keeps the product usable when the public endpoint is regionally unavailable.
   }
 
   return Response.json({
     mode: "demo",
     updatedAt: new Date().toISOString(),
-    sourceStatus: baseUrl ? "采集服务离线 · 已切换演示数据" : "尚未连接采集服务",
+    sourceStatus: baseUrl ? "外部采集暂不可用 · 已切换演示样本" : "尚未连接广场采集服务 · 当前为演示样本",
     coins: demoCoins.map(analyze).sort((a, b) => b.score - a.score),
-  });
+  }, { headers: { "cache-control": "no-store" } });
 }

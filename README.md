@@ -1,100 +1,26 @@
-# vinext-starter
+# 街灯雷达
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+街灯雷达的第一阶段产品：从币安广场的热门、高波动币中发现候选，再用 Binance Futures OI、资金费率、主动买卖比、Aster 持仓变化、筹码集中度和链上异常进行条件式确认。
 
-## Prerequisites
+## 当前能力
 
-- Node.js `>=22.13.0`
+- 币安广场热度、喊空、套牢与扛单语义的标准接入字段
+- Binance U本位永续合约公开行情和 OI 降级数据源
+- “喊空但抗跌、OI增加”的逼空重点池
+- 筹码集中、Quiet 钱包、CEX 占比和生命周期展示
+- Aster OI、大户持仓变化、链上异常的独立数据槽位
+- 硬性风险闸门与逐币解释
 
-## Quick Start
+页面对实时、部分、待接入和演示数据做明确标记。缺失数据不会被估算后冒充真实值，也不会参与对应因子的评分。
 
-```bash
-npm install
-npm run dev
-npm run build
-```
+## 外部采集连接
 
-This starter does not use `wrangler.jsonc`.
+币安广场采集服务通过服务端运行变量 `SQUARE_MONITOR_BASE_URL` 接入，网站读取其 `/api/leaderboard`。采集器可逐步补充以下字段：
 
-## Included Shape
+- `crowd_mood`、`short_call_ratio`、`trapped_ratio`、`resilience_score`
+- `oi_change_15m`、`oi_change_1h`、`oi_change_4h`
+- `aster.oi_change_1h`、`aster.whale_delta`
+- `chip.top10_pct`、`chip.top1_pct`、`chip.cex_pct`、`chip.quiet_wallet_pct`、`chip.stage`
+- `chain.anomaly_score`、`chain.signal`
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+当前版本没有真实交易接口。
