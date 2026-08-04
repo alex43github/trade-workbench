@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { type ThemeMode, useTerminalTheme } from "../themeStore";
 import styles from "./settings.module.css";
+import { probeBrowserBinance } from "../binancePublicBrowser";
 
 type ConnectionStatus = {
   updatedAt: string;
@@ -27,6 +28,7 @@ export default function ConnectionSettings() {
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [browserMarket, setBrowserMarket] = useState<{ connected: boolean; latencyMs: number; message: string } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -55,7 +57,16 @@ export default function ConnectionSettings() {
     return () => { active = false; };
   }, []);
 
-  const publicLive = Boolean(status?.publicMarket.connected);
+  useEffect(() => {
+    let active = true;
+    probeBrowserBinance()
+      .then(({ latencyMs }) => { if (active) setBrowserMarket({ connected: true, latencyMs, message: "浏览器直连 Binance Futures 可用" }); })
+      .catch((reason) => { if (active) setBrowserMarket({ connected: false, latencyMs: 0, message: reason instanceof Error ? reason.message : "浏览器直连失败" }); });
+    return () => { active = false; };
+  }, []);
+
+  const serverMarketLive = Boolean(status?.publicMarket.connected);
+  const publicLive = serverMarketLive || Boolean(browserMarket?.connected);
   const canPaperTrade = publicLive;
 
   return (
@@ -79,7 +90,7 @@ export default function ConnectionSettings() {
 
         <section className={styles.hero}>
           <div><span className={styles.eyebrow}>SERVER-SIDE CONNECTIONS</span><h2>密钥只进服务端，不进网页。</h2><p>网站不会提供密钥输入框，也不会把密钥保存到浏览器或数据库。测试密钥应限制权限、限制预算，并在测试完成后撤销。</p></div>
-          <div className={`${styles.runState} ${canPaperTrade ? styles.ready : ""}`}><small>当前运行模式</small><strong>{canPaperTrade ? "真实行情模拟盘" : "演示行情模拟盘"}</strong><span>{canPaperTrade ? "公开行情已连通，模拟订单绝不发往交易所" : "服务端无法访问公开行情，页面会明确标注 DEMO"}</span></div>
+          <div className={`${styles.runState} ${canPaperTrade ? styles.ready : ""}`}><small>当前运行模式</small><strong>{canPaperTrade ? "真实行情模拟盘" : "演示行情模拟盘"}</strong><span>{canPaperTrade ? `${serverMarketLive ? "服务端" : "浏览器"}公开行情已连通，模拟订单绝不发往交易所` : "服务端与浏览器都无法访问公开行情，页面会明确标注 DEMO"}</span></div>
         </section>
 
         {error && <p className={styles.error}>{error}</p>}
@@ -87,8 +98,8 @@ export default function ConnectionSettings() {
         <section className={styles.grid} aria-live="polite">
           <article className={styles.card}>
             <div className={styles.cardHead}><div className={styles.icon}>行情</div><StateBadge ok={publicLive} pending={loading && !status} /></div>
-            <h3>Binance Futures 公开行情</h3><p>{status?.publicMarket.message || "正在检测公开 K 线、标记价格和 OI 网络…"}</p>
-            <dl><div><dt>需要 API Key</dt><dd>不需要</dd></div><div><dt>网络延迟</dt><dd>{status ? `${status.publicMarket.latencyMs} ms` : "—"}</dd></div></dl>
+            <h3>Binance Futures 公开行情</h3><p>{serverMarketLive ? status?.publicMarket.message : browserMarket?.connected ? "托管服务端受限，已自动使用浏览器直连" : status?.publicMarket.message || "正在检测公开 K 线、标记价格和 OI 网络…"}</p>
+            <dl><div><dt>连接路径</dt><dd>{serverMarketLive ? "托管服务端" : browserMarket?.connected ? "浏览器直连" : "未连接"}</dd></div><div><dt>网络延迟</dt><dd>{serverMarketLive && status ? `${status.publicMarket.latencyMs} ms` : browserMarket?.connected ? `${browserMarket.latencyMs} ms` : "—"}</dd></div></dl>
           </article>
 
           <article className={styles.card}>

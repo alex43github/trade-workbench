@@ -64,6 +64,7 @@ test("renders connection diagnostics without browser-side secret inputs", async 
   assert.match(html, /密钥只进服务端/);
   assert.match(html, /BINANCE_FUTURES_API_KEY/);
   assert.match(html, /当前没有真实下单接口/);
+  assert.match(html, /连接路径/);
   assert.doesNotMatch(html, /type=["']password["']/i);
 
   const statusResponse = await request("/api/connections", { headers: { accept: "application/json" } });

@@ -9,6 +9,7 @@ import TradeKnowledgePanel from "./TradeKnowledgePanel";
 import TradeChart, { type ChartOverlay, type IndicatorSettings, type MarketBar } from "./TradeChart";
 import { calculateMa } from "./strategyMath";
 import { useTerminalTheme, type ThemeMode } from "../themeStore";
+import { fetchBrowserBinanceKlines } from "../binancePublicBrowser";
 import styles from "./trade.module.css";
 
 type Strategy = {
@@ -76,6 +77,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const [interval, setIntervalValue] = useState("15m");
   const [bars, setBars] = useState<MarketBar[]>([]);
   const [marketMode, setMarketMode] = useState<"live" | "demo">("demo");
+  const [marketSource, setMarketSource] = useState<"server" | "browser" | "demo">("demo");
   const [updatedAt, setUpdatedAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<AccountResponse>(emptyAccount);
@@ -100,17 +102,33 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   ]);
   const previousPositionsRef = useRef<Map<string, AccountPosition>>(new Map());
   const positionsInitializedRef = useRef(false);
+  const latestQuoteRef = useRef<{ symbol: string; price: number; mode: "live" | "demo" }>({ symbol: initialSymbol, price: 0, mode: "demo" });
 
   useEffect(() => {
     let active = true;
-    const load = () => {
-      fetch(`/api/market/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=300`, { cache: "no-store" })
-        .then((response) => { if (!response.ok) throw new Error("market_unavailable"); return response.json() as Promise<MarketResponse>; })
-        .then((payload) => { if (!active) return; setBars(payload.bars); setMarketMode(payload.mode); setUpdatedAt(payload.updatedAt); })
-        .catch(() => { if (active) setEvents((current) => [{ id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), type: "system" as const, message: "行情连接失败，等待下一轮刷新。" }, ...current].slice(0, 10)); })
-        .finally(() => { if (active) setLoading(false); });
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/market/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=300`, { cache: "no-store" });
+        if (!response.ok) throw new Error("market_unavailable");
+        let payload = await response.json() as MarketResponse;
+        let source: "server" | "browser" | "demo" = payload.mode === "live" ? "server" : "demo";
+        if (payload.mode !== "live") {
+          try {
+            payload = await fetchBrowserBinanceKlines(symbol, interval, 300);
+            source = "browser";
+          } catch { /* keep the server's clearly marked demo bars */ }
+        }
+        if (!active) return;
+        setBars(payload.bars); setMarketMode(payload.mode); setMarketSource(source); setUpdatedAt(payload.updatedAt);
+        const latest = payload.bars.at(-1);
+        if (latest) latestQuoteRef.current = { symbol, price: latest.close, mode: payload.mode };
+      } catch {
+        if (active) setEvents((current) => [{ id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), type: "system" as const, message: "行情连接失败，等待下一轮刷新。" }, ...current].slice(0, 10));
+      } finally {
+        if (active) setLoading(false);
+      }
     };
-    load();
+    void load();
     const timer = window.setInterval(load, 30_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [symbol, interval]);
@@ -141,13 +159,18 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
 
   useEffect(() => {
     let active = true;
-    const loadPaper = () => fetch("/api/paper", { cache: "no-store" })
+    const loadPaper = () => {
+      const quote = latestQuoteRef.current;
+      const params = new URLSearchParams();
+      if (quote.price > 0) { params.set("symbol", quote.symbol); params.set("quotedPrice", String(quote.price)); params.set("quoteMode", quote.mode); }
+      return fetch(`/api/paper${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json() as PaperSnapshot & { error?: string };
         if (!response.ok) throw new Error(payload.error || "模拟账户暂不可用");
         if (active) { setPaper(payload); setPaperError(""); }
       })
       .catch((error) => { if (active) setPaperError(error instanceof Error ? error.message : "模拟账户暂不可用"); });
+    };
     void loadPaper();
     const timer = window.setInterval(loadPaper, 15_000);
     return () => { active = false; window.clearInterval(timer); };
@@ -308,7 +331,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
             <div className={styles.themeSwitch} aria-label="主题选择">
               {(["dark", "light", "system"] as ThemeMode[]).map((item) => <button key={item} className={themeMode === item ? styles.selected : ""} onClick={() => setThemeMode(item)}>{item === "dark" ? "深色" : item === "light" ? "浅色" : "跟随系统"}</button>)}
             </div>
-            <span className={styles.dataStatus}><i className={marketMode === "live" ? styles.connected : ""} />{marketMode === "live" ? "BINANCE 实时" : "演示行情"}</span>
+            <span className={styles.dataStatus}><i className={marketMode === "live" ? styles.connected : ""} />{marketMode === "live" ? marketSource === "browser" ? "BINANCE 实时 · 浏览器直连" : "BINANCE 实时 · 服务端" : "演示行情"}</span>
           </div>
         </header>
 
@@ -354,7 +377,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
             </div>
             {indicatorOpen && <IndicatorManager indicators={indicators} setIndicators={setIndicators} updateMaLength={updateMaLength} />}
             <TradeChart bars={bars} bandPct={strategy.entryBandPct} symbol={symbol} theme={resolvedTheme} indicators={indicators} overlays={chartOverlays} />
-            <div className={styles.chartFoot}><span>TradingView Lightweight Charts · Binance Futures 行情</span><span>订单线来自只读账户；MA触及仅是条件检查</span></div>
+            <div className={styles.chartFoot}><span>TradingView Lightweight Charts · {marketSource === "browser" ? "Binance浏览器直连行情" : "Binance Futures 行情"}</span><span>订单线来自只读账户；MA触及仅是条件检查</span></div>
           </div>
 
           <AdaptiveStrategyPanel symbol={symbol} position={selectedPosition} positionSource={selectedPositionSource} accountConnected={account.connected} currentPrice={marketState.latest?.close ?? 0} marketMode={marketMode} maLength={strategy.maLength} maValue={marketState.ma} paperBalance={paper.account.equity} onPaperChanged={refreshPaper} />

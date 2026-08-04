@@ -128,11 +128,23 @@ async function closeAtPrice(position: PaperPositionRow, percent: number, price: 
   return { quantity, price, realizedPnl, fee, fullyClosed: remaining <= 0 };
 }
 
-async function processConditionalOrders() {
+type ClientQuote = { symbol: string; price: number; live: boolean } | null;
+
+function normalizeClientQuote(input?: { symbol?: unknown; quotedPrice?: unknown; quoteMode?: unknown }): ClientQuote {
+  if (!input || input.quoteMode !== "live") return null;
+  try {
+    const symbol = normalizeSymbol(input.symbol);
+    const price = Number(input.quotedPrice);
+    return Number.isFinite(price) && price > 0 ? { symbol, price, live: true } : null;
+  } catch { return null; }
+}
+
+async function processConditionalOrders(clientQuote: ClientQuote) {
   const { positions } = await getRows();
   await Promise.all(positions.map(async (position) => {
     let price: number;
-    try { price = await markPrice(position.symbol); } catch { return; }
+    if (clientQuote?.symbol === position.symbol) price = clientQuote.price;
+    else try { price = await markPrice(position.symbol); } catch { return; }
     const stopHit = position.stop_price !== null && (position.side === "LONG" ? price <= position.stop_price : price >= position.stop_price);
     const targetHit = position.target_price !== null && (position.side === "LONG" ? price >= position.target_price : price <= position.target_price);
     if (stopHit) await closeAtPrice(position, 100, price, "STOP_TRIGGERED");
@@ -140,12 +152,14 @@ async function processConditionalOrders() {
   }));
 }
 
-export async function getPaperSnapshot() {
+export async function getPaperSnapshot(input?: { symbol?: unknown; quotedPrice?: unknown; quoteMode?: unknown }) {
   await ensurePaperSchema();
-  await processConditionalOrders();
+  const clientQuote = normalizeClientQuote(input);
+  await processConditionalOrders(clientQuote);
   const { d1, account, positions, orders, trades } = await getRows();
   const marks = new Map<string, { price: number; live: boolean }>();
   await Promise.all(positions.map(async (position) => {
+    if (clientQuote?.symbol === position.symbol) { marks.set(position.symbol, clientQuote); return; }
     try { marks.set(position.symbol, { price: await markPrice(position.symbol), live: true }); }
     catch { marks.set(position.symbol, { price: position.entry_price, live: false }); }
   }));
