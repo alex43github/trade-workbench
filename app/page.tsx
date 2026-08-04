@@ -209,7 +209,7 @@ export default function Home() {
         <nav className="topbar-nav" aria-label="主导航">
           <a className="active" href="#radar">妖币雷达</a>
           <a href="#method">判断方法</a>
-          <span aria-disabled="true">K线策略 · 下一阶段</span>
+          <a href="/trade">交易工作台</a>
         </nav>
         <div className="topbar-actions">
           <div className="topbar-status">
@@ -371,7 +371,10 @@ export default function Home() {
                 : selectedCoin.participation === "A" ? "等待15m回撤确认，不追第一根加速K线"
                 : selectedCoin.participation === "B" ? "等待OI、筹码或链上证据补齐后再升级"
                 : selectedCoin.participation === "AVOID" ? "已触发硬风险，暂不参与" : "保留观察，不因广场热闹直接交易"}
-              </strong><small>页面只提供条件式研究结论，当前没有真实下单接口。</small></div>
+              </strong><small>页面只提供条件式研究结论，当前没有真实下单接口。</small>
+              <a className="trade-link" href={`/trade?symbol=${encodeURIComponent(selectedCoin.symbol)}`}>
+                打开 {selectedCoin.displayName} 交易工作台 →
+              </a></div>
           </> : <div className="empty-state compact">选择一个币种查看分析。</div>}
         </aside>
       </section>
