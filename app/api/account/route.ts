@@ -86,8 +86,8 @@ async function signedGet<T>(path: string, apiKey: string, secret: string, timest
 }
 
 export async function GET() {
-  const apiKey = process.env.BINANCE_FUTURES_API_KEY;
-  const secret = process.env.BINANCE_FUTURES_API_SECRET;
+  const apiKey = process.env.BINANCE_FUTURES_API_KEY || process.env.BINANCE_API_KEY;
+  const secret = process.env.BINANCE_FUTURES_API_SECRET || process.env.BINANCE_SECRET_KEY;
   if (!apiKey || !secret) {
     return NextResponse.json(disconnected(), { headers: { "cache-control": "no-store" } });
   }

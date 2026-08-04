@@ -12,11 +12,17 @@ type Position = {
 type Props = {
   symbol: string;
   position?: Position;
+  positionSource?: "binance" | "paper";
   accountConnected: boolean;
   currentPrice: number;
+  marketMode: "live" | "demo";
   maLength: number;
   maValue: number;
+  paperBalance: number;
+  onPaperChanged: () => void;
 };
+
+type AiReview = { action: "ALLOW_PAPER" | "REVISE" | "WAIT"; riskLevel: "LOW" | "MEDIUM" | "HIGH"; verdict: string; reasons: string[]; modifications: string[] };
 
 const entryOptions = [
   ["trend", "1h / 4h 趋势与方向一致"], ["ma_pullback", "回撤到MA30上下±1%或盘中触碰"],
@@ -47,7 +53,7 @@ const positionTpOptions = [
 function toggle(items: string[], id: string) { return items.includes(id) ? items.filter((item) => item !== id) : [...items, id]; }
 function fmt(value: number) { return value > 0 ? value.toLocaleString("en-US", { maximumFractionDigits: value >= 100 ? 2 : 4 }) : "—"; }
 
-export default function AdaptiveStrategyPanel({ symbol, position, accountConnected, currentPrice, maLength, maValue }: Props) {
+export default function AdaptiveStrategyPanel({ symbol, position, positionSource, accountConnected, currentPrice, marketMode, maLength, maValue, paperBalance, onPaperChanged }: Props) {
   const mode = position ? "position" : "entry";
   const [tab, setTab] = useState<"checklist" | "natural">("checklist");
   const [side, setSide] = useState<TradeSide>("LONG");
@@ -69,6 +75,11 @@ export default function AdaptiveStrategyPanel({ symbol, position, accountConnect
   const [naturalApplied, setNaturalApplied] = useState(false);
   const [radar, setRadar] = useState<RadarEvidence>({ mode: "unknown", score: null, participation: null, risks: [] });
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [reviewState, setReviewState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [aiMode, setAiMode] = useState("");
+  const [aiReview, setAiReview] = useState<AiReview | null>(null);
+  const [paperState, setPaperState] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [paperMessage, setPaperMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -114,29 +125,85 @@ export default function AdaptiveStrategyPanel({ symbol, position, accountConnect
     setNaturalApplied(true); setTab("checklist");
   }
 
-  async function saveScore() {
-    setSaveState("saving");
-    const plan = mode === "entry"
+  function currentPlan() {
+    return mode === "entry"
       ? { direction: actualSide, entryRules, entryStops, entryTakeProfits, sizeMode, sizeValue, riskPct, stopPrice, targetPrice, noTradeRule, natural }
       : { direction: actualSide, addRules, positionStops, positionTakeProfits, addSizeMode: sizeMode, addSizeValue: sizeValue, riskPct, stopPrice, targetPrice, lossPct, profitPct, noTradeRule, natural };
-    const response = await fetch("/api/trade-knowledge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
-      symbol, side: actualSide, phase: "pretrade", status: "draft", score: score.score,
-      title: `${symbol} ${mode === "entry" ? (actualSide === "LONG" ? "买入" : "卖空") : "持仓管理"}前评分`,
-      summary: score.verdict, strengths: score.strengths, mistakes: score.mistakes, plan,
-      evidence: { radar, currentPrice, maLength, maValue, accountConnected, position: position ?? null },
-      sourceRefs: knowledgeProfile.sourceRefs,
-    }) });
-    setSaveState(response.ok ? "saved" : "error");
-    if (response.ok) window.dispatchEvent(new CustomEvent("trade-knowledge-updated"));
+  }
+
+  function guard() {
+    return {
+      score: score.score, riskPct,
+      triggerCount: mode === "entry" ? entryRules.length : addRules.length,
+      stopCount: mode === "entry" ? entryStops.length : positionStops.length,
+      takeProfitCount: mode === "entry" ? entryTakeProfits.length : positionTakeProfits.length,
+      noTradeRule, radarParticipation: radar.participation,
+    };
+  }
+
+  async function saveScore() {
+    setSaveState("saving");
+    try {
+      const response = await fetch("/api/trade-knowledge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        symbol, side: actualSide, phase: "pretrade", status: "draft", score: score.score,
+        title: `${symbol} ${mode === "entry" ? (actualSide === "LONG" ? "买入" : "卖空") : "持仓管理"}前评分`,
+        summary: score.verdict, strengths: score.strengths, mistakes: score.mistakes, plan: currentPlan(),
+        evidence: { radar, currentPrice, maLength, maValue, accountConnected, positionSource, position: position ?? null },
+        sourceRefs: knowledgeProfile.sourceRefs,
+      }) });
+      setSaveState(response.ok ? "saved" : "error");
+      if (response.ok) window.dispatchEvent(new CustomEvent("trade-knowledge-updated"));
+      return response.ok;
+    } catch { setSaveState("error"); return false; }
+  }
+
+  async function reviewWithAi() {
+    setReviewState("loading");
+    try {
+      const response = await fetch("/api/ai/plan-review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbol, mode, side: actualSide, score: score.score, plan: currentPlan(), radar, currentPrice, maLength, maValue, paperBalance }) });
+      const result = await response.json() as { mode?: string; review?: AiReview };
+      if (!response.ok || !result.review) throw new Error("review_failed");
+      setAiMode(result.mode ?? "rules"); setAiReview(result.review); setReviewState("done");
+    } catch { setReviewState("error"); }
+  }
+
+  async function executePaperOrder() {
+    setPaperState("working"); setPaperMessage("");
+    try {
+      if (!(await saveScore())) throw new Error("操作前评分未能保存");
+      const response = await fetch("/api/paper/order", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        symbol, side: actualSide, sizeMode, sizeValue, stopPrice, targetPrice, quotedPrice: currentPrice, quoteMode: marketMode, guard: guard(), plan: currentPlan(),
+      }) });
+      const result = await response.json() as { error?: string; order?: { price: number; quantity: number; warning?: string | null } };
+      if (!response.ok) throw new Error(result.error || "模拟下单失败");
+      setPaperMessage(`模拟成交 ${result.order?.quantity ?? "—"} @ ${fmt(result.order?.price ?? 0)}${result.order?.warning ? `；${result.order.warning}` : ""}`);
+      setPaperState("done"); onPaperChanged();
+    } catch (error) { setPaperMessage(error instanceof Error ? error.message : "模拟下单失败"); setPaperState("error"); }
+  }
+
+  async function closePaper(percent: 25 | 50 | 100) {
+    setPaperState("working"); setPaperMessage("");
+    try {
+      if (positionSource !== "paper") throw new Error("这里不会操作币安真实仓位；请切换到对应模拟仓位");
+      const response = await fetch("/api/paper/close", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbol, percent, reason: "STRATEGY_PANEL", quotedPrice: currentPrice, quoteMode: marketMode }) });
+      const result = await response.json() as { error?: string; close?: { price: number; realizedPnl: number; fullyClosed: boolean } };
+      if (!response.ok) throw new Error(result.error || "模拟平仓失败");
+      setPaperMessage(`模拟${percent === 100 ? "平仓" : `减仓${percent}%`}完成，已实现 ${result.close?.realizedPnl.toFixed(2) ?? "—"} USDT`);
+      setPaperState("done"); onPaperChanged(); window.dispatchEvent(new CustomEvent("trade-knowledge-updated"));
+    } catch (error) { setPaperMessage(error instanceof Error ? error.message : "模拟平仓失败"); setPaperState("error"); }
   }
 
   return <aside className={styles.strategyPanel} id="strategy">
-    <div className={styles.panelTop}><div><small>{mode === "entry" ? "NO POSITION · ENTRY PLAN" : "POSITION DETECTED · MANAGEMENT"}</small><h2>{mode === "entry" ? "建立新仓计划" : `${position?.side === "LONG" ? "多仓" : "空仓"}管理计划`}</h2></div><span>{accountConnected ? "ACCOUNT VERIFIED" : "DRAFT MODE"}</span></div>
-    {!accountConnected && <p className={styles.stateNotice}>账户未连接，无法核验真实持仓；当前按“无仓”生成策略草案。</p>}
+    <div className={styles.panelTop}><div><small>{mode === "entry" ? "NO POSITION · ENTRY PLAN" : "POSITION DETECTED · MANAGEMENT"}</small><h2>{mode === "entry" ? "建立新仓计划" : `${position?.side === "LONG" ? "多仓" : "空仓"}管理计划`}</h2></div><span>{positionSource === "paper" ? "PAPER POSITION" : accountConnected ? "ACCOUNT VERIFIED" : "DRAFT MODE"}</span></div>
+    {!accountConnected && !position && <p className={styles.stateNotice}>币安只读账户尚未连接；模拟盘可使用公开实时行情独立运行。</p>}
     {position && <div className={styles.positionSnapshot}><span>{symbol.replace("USDT", "")} · {position.leverage}x</span><strong>{position.quantity}</strong><small>均价 {fmt(position.entryPrice)} · 标记 {fmt(position.markPrice)} · PnL <b className={position.unrealizedPnl >= 0 ? styles.up : styles.down}>{position.unrealizedPnl >= 0 ? "+" : ""}{position.unrealizedPnl.toFixed(2)}</b></small></div>}
 
     <div className={styles.scoreCard}><div className={styles.scoreDial} data-grade={score.grade}><strong>{score.score}</strong><span>/100</span></div><div><small>操作前纪律评分 · {score.confidence === "high" ? "高置信" : score.confidence === "medium" ? "中置信" : "低置信"}</small><h3>{score.verdict}</h3><p>街哥已核验规则 {knowledgeProfile.verifiedStreetRules} 条；当前依据交易计划模板与系统风险外壳评分。</p></div></div>
     <div className={styles.scoreReasons}>{score.strengths.slice(0, 2).map((item) => <span key={item}>✓ {item}</span>)}{score.mistakes.slice(0, 3).map((item) => <span className={styles.scoreWarning} key={item}>! {item}</span>)}</div>
+
+    <div className={styles.aiReviewBar}><button onClick={() => void reviewWithAi()} disabled={reviewState === "loading"}>{reviewState === "loading" ? "正在复核" : "AI复核计划"}</button><span>{aiMode === "openai" ? "GPT-5.6" : aiMode ? "纪律引擎" : "可选复核"}</span></div>
+    {aiReview && <div className={styles.aiReviewCard} data-risk={aiReview.riskLevel}><strong>{aiReview.action === "ALLOW_PAPER" ? "可进入模拟盘" : aiReview.action === "WAIT" ? "建议等待" : "需要修改"}</strong><p>{aiReview.verdict}</p>{aiReview.reasons.slice(0, 3).map((item) => <small key={item}>• {item}</small>)}</div>}
+    {reviewState === "error" && <p className={styles.inlineError}>AI复核暂不可用，模拟盘仍由纪律引擎保护。</p>}
 
     <div className={styles.modeTabs}><button className={tab === "checklist" ? styles.selected : ""} onClick={() => setTab("checklist")}>条件勾选</button><button className={tab === "natural" ? styles.selected : ""} onClick={() => setTab("natural")}>自然语言生成</button></div>
     {tab === "natural" ? <div className={styles.naturalPanel}><textarea value={natural} onChange={(event) => setNatural(event.target.value)} placeholder={mode === "entry" ? "例如：HYPE在4h多头趋势中，15m回撤MA30并且OI不下降时买入100 USDT，跌破66止损，涨到72先止盈50%。" : "例如：收盘跌破MA30减仓50%，第二根继续跌破全部退出；回踩不破并且OI增加时加仓50 USDT。"} /><button onClick={applyNaturalLanguage}>生成并写入条件</button><small>自然语言只转换成可检查字段，不会直接发送订单。</small></div> : <>
@@ -154,6 +221,11 @@ export default function AdaptiveStrategyPanel({ symbol, position, accountConnect
       <button className={`${styles.noTradeCheck} ${noTradeRule ? styles.checked : ""}`} onClick={() => setNoTradeRule((value) => !value)}><i />雷达触发AVOID、数据不足或行情过热时禁止执行</button>
     </>}
     <div className={styles.planActions}><button onClick={() => void saveScore()} disabled={saveState === "saving"}>{saveState === "saving" ? "正在保存" : saveState === "saved" ? "已写入操作知识库" : saveState === "error" ? "保存失败，重试" : "保存评分到知识库"}</button><button disabled>真实下单仍锁定</button></div>
+    <div className={styles.paperActions}>
+      {mode === "entry" || positionSource === "paper" ? <button onClick={() => void executePaperOrder()} disabled={paperState === "working" || score.score < 70 || currentPrice <= 0}>{paperState === "working" ? "模拟撮合中" : mode === "entry" ? `确认并模拟${actualSide === "LONG" ? "做多" : "做空"}` : "按计划模拟加仓"}</button> : <button disabled>真实仓位禁止在模拟盘加仓</button>}
+      {positionSource === "paper" && <><button onClick={() => void closePaper(50)} disabled={paperState === "working"}>减仓50%</button><button onClick={() => void closePaper(100)} disabled={paperState === "working"}>全部退出</button></>}
+    </div>
+    <p className={`${styles.paperFeedback} ${paperState === "error" ? styles.inlineError : ""}`}>{paperMessage || `模拟权益 ${paperBalance.toFixed(2)} USDT · 评分至少70分才可执行`}</p>
   </aside>;
 }
 

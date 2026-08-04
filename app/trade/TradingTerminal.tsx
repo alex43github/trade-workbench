@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AdaptiveStrategyPanel from "./AdaptiveStrategyPanel";
 import EquityChart, { type EquityPoint } from "./EquityChart";
+import { emptyPaper, type PaperOrder, type PaperPosition, type PaperSnapshot, type PaperTrade } from "./paperTypes";
 import TradeKnowledgePanel from "./TradeKnowledgePanel";
 import TradeChart, { type ChartOverlay, type IndicatorSettings, type MarketBar } from "./TradeChart";
 import { calculateMa } from "./strategyMath";
@@ -78,6 +79,10 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const [updatedAt, setUpdatedAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<AccountResponse>(emptyAccount);
+  const [paper, setPaper] = useState<PaperSnapshot>(emptyPaper);
+  const [paperError, setPaperError] = useState("");
+  const [paperRevision, setPaperRevision] = useState(0);
+  const [accountView, setAccountView] = useState<"paper" | "binance">("paper");
   const [equityPoints, setEquityPoints] = useState<EquityPoint[]>(() => {
     if (typeof window === "undefined") return [];
     try { return (JSON.parse(window.localStorage.getItem("streetlight-equity-v1") || "[]") as EquityPoint[]).slice(-1000); }
@@ -87,7 +92,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const [indicators, setIndicators] = useState<IndicatorSettings>(defaultIndicators);
   const [overlayVisibility, setOverlayVisibility] = useState<OverlayVisibility>({ positions: true, limits: true, conditional: true, tpsl: true });
   const [indicatorOpen, setIndicatorOpen] = useState(false);
-  const [accountTab, setAccountTab] = useState<"positions" | "orders">("positions");
+  const [accountTab, setAccountTab] = useState<"positions" | "orders" | "trades">("positions");
   const { themeMode, resolvedTheme, setThemeMode } = useTerminalTheme();
   const [armed, setArmed] = useState(false);
   const [events, setEvents] = useState<EventItem[]>([
@@ -134,6 +139,20 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const loadPaper = () => fetch("/api/paper", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json() as PaperSnapshot & { error?: string };
+        if (!response.ok) throw new Error(payload.error || "模拟账户暂不可用");
+        if (active) { setPaper(payload); setPaperError(""); }
+      })
+      .catch((error) => { if (active) setPaperError(error instanceof Error ? error.message : "模拟账户暂不可用"); });
+    void loadPaper();
+    const timer = window.setInterval(loadPaper, 15_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [paperRevision]);
+
   const marketState = useMemo(() => {
     const closedBars = bars.filter((bar) => bar.closed);
     const latest = closedBars.at(-1) ?? bars.at(-1);
@@ -146,6 +165,17 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
 
   const chartOverlays = useMemo<ChartOverlay[]>(() => {
     const result: ChartOverlay[] = [];
+    if (accountView === "paper") {
+      if (overlayVisibility.positions) paper.positions.filter((item) => item.symbol === symbol).forEach((item) => result.push({
+        id: `paper-position-${item.id}`, price: item.entryPrice, kind: "position", side: item.side, label: `模拟${item.side === "LONG" ? "多仓" : "空仓"}均价`,
+      }));
+      paper.orders.filter((item) => item.symbol === symbol).forEach((item) => {
+        const isTpSl = item.type.includes("TAKE_PROFIT") || item.type.includes("STOP");
+        if ((isTpSl && !overlayVisibility.tpsl) || (!isTpSl && !overlayVisibility.conditional)) return;
+        if (item.triggerPrice) result.push({ id: `paper-order-${item.id}`, price: item.triggerPrice, kind: isTpSl ? "tpsl" : "conditional", side: item.side, label: `模拟 ${item.type.replaceAll("_", " ")}` });
+      });
+      return result;
+    }
     if (overlayVisibility.positions) account.positions.filter((item) => item.symbol === symbol).forEach((item) => result.push({
       id: `position-${item.symbol}-${item.positionSide}`, price: item.entryPrice, kind: "position", side: item.side,
       label: `${item.side === "LONG" ? "多仓" : "空仓"} 均价`,
@@ -159,11 +189,26 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
       result.push({ id: `condition-${item.orderId}`, price: orderDisplayPrice(item), kind: isTpSl ? "tpsl" : "conditional", side: item.side, label: item.type.replaceAll("_", " ") });
     });
     return result;
-  }, [account.positions, account.limitOrders, account.conditionalOrders, overlayVisibility, symbol]);
+  }, [accountView, paper.positions, paper.orders, account.positions, account.limitOrders, account.conditionalOrders, overlayVisibility, symbol]);
 
   const accountEquity = account.account.totalBalance + account.account.unrealizedPnl;
-  const equityChange = equityPoints.length > 1 ? accountEquity - equityPoints[0].value : 0;
-  const selectedPosition = account.positions.find((position) => position.symbol === symbol);
+  const paperPosition = paper.positions.find((position) => position.symbol === symbol);
+  const realPosition = account.positions.find((position) => position.symbol === symbol);
+  const selectedPosition = accountView === "paper" && paperPosition ? {
+    symbol: paperPosition.symbol, side: paperPosition.side, quantity: paperPosition.quantity,
+    entryPrice: paperPosition.entryPrice, breakEvenPrice: paperPosition.entryPrice, markPrice: paperPosition.markPrice,
+    unrealizedPnl: paperPosition.unrealizedPnl, liquidationPrice: 0, leverage: paperPosition.leverage,
+    marginType: "PAPER", positionSide: "PAPER",
+  } : realPosition;
+  const selectedPositionSource = accountView === "paper" && paperPosition ? "paper" as const : realPosition ? "binance" as const : undefined;
+  const displayedEquity = accountView === "paper" ? paper.account.equity : accountEquity;
+  const displayedAvailable = accountView === "paper" ? paper.account.availableBalance : account.account.availableBalance;
+  const displayedPnl = accountView === "paper" ? paper.account.unrealizedPnl : account.account.unrealizedPnl;
+  const displayedPositions = accountView === "paper" ? paper.positions.length : account.positions.length;
+  const displayedOrders = accountView === "paper" ? paper.orders.length : account.limitOrders.length + account.conditionalOrders.length;
+  const displayedPoints = accountView === "paper" ? paper.equityPoints : equityPoints;
+  const displayedConnected = accountView === "paper" ? !paperError : account.connected;
+  const equityChange = displayedPoints.length > 1 ? displayedEquity - displayedPoints[0].value : 0;
 
   function chooseSymbol(next: string) {
     setLoading(true); setSymbol(next);
@@ -178,6 +223,20 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   function toggleArmed() {
     const next = !armed; setArmed(next);
     setEvents((current) => [{ id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), type: "system" as const, message: next ? "页面内模拟观察已启动，每30秒刷新条件。" : "模拟观察已暂停。" }, ...current].slice(0, 10));
+  }
+  function refreshPaper() { setPaperRevision((value) => value + 1); }
+  async function resetPaper() {
+    if (!window.confirm("确认清空全部模拟仓位、订单、成交和资金曲线，并恢复为 10,000 USDT？操作知识库不会删除。")) return;
+    await fetch("/api/paper/reset", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirmation: "RESET_PAPER" }) });
+    refreshPaper();
+  }
+  async function closePaper(symbolToClose: string, percent: 25 | 50 | 100) {
+    await fetch("/api/paper/close", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbol: symbolToClose, percent, reason: "ACCOUNT_TABLE", quotedPrice: symbolToClose === symbol ? marketState.latest?.close ?? 0 : 0, quoteMode: marketMode }) });
+    refreshPaper(); window.dispatchEvent(new CustomEvent("trade-knowledge-updated"));
+  }
+  async function cancelPaper(id: string) {
+    await fetch("/api/paper/order", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
+    refreshPaper();
   }
   function runPaperCheck() {
     const message = marketState.inBand ? `${symbol} ${interval}进入MA${strategy.maLength}±${strategy.entryBandPct}%区域，生成模拟买入候选；尚未成交。`
@@ -239,7 +298,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
           <a href="/"><b>◎</b>妖币雷达</a><a className={styles.active} href="/trade"><b>⌁</b>合约交易</a>
           <a href="#strategy"><b>◇</b>策略构建</a><a href="#account"><b>▣</b>持仓与订单</a><a href="#trade-knowledge"><b>◫</b>操作知识库</a>
         </nav>
-        <div className={styles.sidebarFoot}><i className={account.connected ? styles.connected : ""} /><div><strong>{account.connected ? "币安只读已连接" : "币安账户未连接"}</strong><small>{account.connected ? "15秒刷新 · 不含交易权限" : "真实下单未连接"}</small></div></div>
+        <div className={styles.sidebarFoot}><i className={accountView === "paper" || account.connected ? styles.connected : ""} /><div><strong>{accountView === "paper" ? "模拟盘在线" : account.connected ? "币安只读已连接" : "币安账户未连接"}</strong><small>{accountView === "paper" ? "公开行情 · 绝不发送真单" : account.connected ? "15秒刷新 · 不含交易权限" : "真实下单未连接"}</small></div></div>
       </aside>
 
       <div className={styles.appMain}>
@@ -255,21 +314,21 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
 
         <section className={styles.commandBar}>
           <div className={styles.agentState}><span>{selectedPosition ? "持" : "入"}</span><div><strong>{selectedPosition ? `${symbol.replace("USDT", "")} 持仓管理` : "建立新仓计划"}</strong><small>PRE-TRADE SCORE · PAPER ONLY</small></div><button className={armed ? styles.stopButton : styles.startButton} onClick={toggleArmed}>{armed ? "暂停" : "启动观察"}</button></div>
-          <div className={styles.killSwitch}><span>系统止损保护</span><i className={styles.on} /><button disabled>真实交易锁定</button></div>
+          <div className={styles.commandControls}><div className={styles.accountModeSwitch}><button className={accountView === "paper" ? styles.selected : ""} onClick={() => { setAccountView("paper"); setAccountTab("positions"); }}>模拟盘</button><button className={accountView === "binance" ? styles.selected : ""} onClick={() => { setAccountView("binance"); setAccountTab("positions"); }}>币安只读</button></div><div className={styles.killSwitch}><span>系统止损保护</span><i className={styles.on} /><button disabled>真实交易锁定</button></div></div>
         </section>
 
         <section className={styles.summaryGrid}>
-          <article className={styles.balanceCard}><span>总权益</span><strong>{account.connected ? `${formatMoney(accountEquity)} USDT` : "— USDT"}</strong><small>{account.connected ? "钱包余额 + 未实现盈亏" : account.reason}</small></article>
-          <article className={styles.availableCard}><span>可用资金</span><strong>{account.connected ? `${formatMoney(account.account.availableBalance)} USDT` : "— USDT"}</strong><small>只读接口 · 不暴露密钥</small></article>
-          <article className={styles.pnlCard}><span>未实现盈亏</span><strong className={account.account.unrealizedPnl >= 0 ? styles.up : styles.down}>{account.connected ? `${account.account.unrealizedPnl >= 0 ? "+" : ""}${formatMoney(account.account.unrealizedPnl)} USDT` : "— USDT"}</strong><small>资金曲线每5分钟留一份本机快照</small></article>
-          <article className={styles.positionCard}><span>当前持仓</span><strong>{account.connected ? `${account.positions.length} 个` : "—"}</strong><small>{account.connected ? `${account.limitOrders.length + account.conditionalOrders.length} 笔活动委托` : "等待只读账户连接"}</small></article>
+          <article className={styles.balanceCard}><span>{accountView === "paper" ? "模拟总权益" : "币安总权益"}</span><strong>{displayedConnected ? `${formatMoney(displayedEquity)} USDT` : "— USDT"}</strong><small>{accountView === "paper" ? `初始 10,000 · 已实现 ${formatMoney(paper.account.realizedPnl)}` : account.connected ? "钱包余额 + 未实现盈亏" : account.reason}</small></article>
+          <article className={styles.availableCard}><span>可用资金</span><strong>{displayedConnected ? `${formatMoney(displayedAvailable)} USDT` : "— USDT"}</strong><small>{accountView === "paper" ? `3x模拟杠杆 · 已用保证金 ${formatMoney(paper.account.usedMargin)}` : "只读接口 · 不暴露密钥"}</small></article>
+          <article className={styles.pnlCard}><span>未实现盈亏</span><strong className={displayedPnl >= 0 ? styles.up : styles.down}>{displayedConnected ? `${displayedPnl >= 0 ? "+" : ""}${formatMoney(displayedPnl)} USDT` : "— USDT"}</strong><small>{accountView === "paper" ? `累计模拟手续费 ${formatMoney(paper.account.totalFees)}` : "资金曲线每5分钟留一份本机快照"}</small></article>
+          <article className={styles.positionCard}><span>当前持仓</span><strong>{displayedConnected ? `${displayedPositions} 个` : "—"}</strong><small>{displayedConnected ? `${displayedOrders} 笔活动委托` : accountView === "paper" ? paperError : "等待只读账户连接"}</small></article>
         </section>
 
         <section className={styles.insightGrid}>
           <div className={styles.equityPanel}>
-            <div className={styles.sectionHeader}><div><small>ACCOUNT EQUITY</small><h2>资金曲线</h2></div><div className={styles.equityValue}><strong>{account.connected ? formatMoney(accountEquity) : "0.00"}</strong><span className={equityChange >= 0 ? styles.up : styles.down}>{equityChange >= 0 ? "+" : ""}{formatMoney(equityChange)} USDT</span></div></div>
-            <div className={styles.equityChartWrap}><EquityChart points={equityPoints} theme={resolvedTheme} />{!account.connected && <div className={styles.chartEmpty}><strong>连接币安只读账户后开始记录</strong><span>API 密钥仅保存在服务端环境，不进入浏览器。</span></div>}</div>
-            <div className={styles.equityStats}><span>峰值<strong>{equityPoints.length ? formatMoney(Math.max(...equityPoints.map((point) => point.value))) : "—"}</strong></span><span>谷值<strong>{equityPoints.length ? formatMoney(Math.min(...equityPoints.map((point) => point.value))) : "—"}</strong></span><span>数据点<strong>{equityPoints.length}</strong></span><span>账户状态<strong>{account.connected ? "已连接" : "未连接"}</strong></span></div>
+            <div className={styles.sectionHeader}><div><small>{accountView === "paper" ? "PAPER EQUITY" : "BINANCE EQUITY"}</small><h2>资金曲线</h2></div><div className={styles.equityValue}><strong>{displayedConnected ? formatMoney(displayedEquity) : "0.00"}</strong><span className={equityChange >= 0 ? styles.up : styles.down}>{equityChange >= 0 ? "+" : ""}{formatMoney(equityChange)} USDT</span></div></div>
+            <div className={styles.equityChartWrap}><EquityChart points={displayedPoints} theme={resolvedTheme} />{!displayedConnected && <div className={styles.chartEmpty}><strong>连接币安只读账户后开始记录</strong><span>API 密钥仅保存在服务端环境，不进入浏览器。</span></div>}</div>
+            <div className={styles.equityStats}><span>峰值<strong>{displayedPoints.length ? formatMoney(Math.max(...displayedPoints.map((point) => point.value))) : formatMoney(displayedEquity)}</strong></span><span>谷值<strong>{displayedPoints.length ? formatMoney(Math.min(...displayedPoints.map((point) => point.value))) : formatMoney(displayedEquity)}</strong></span><span>数据点<strong>{displayedPoints.length}</strong></span><span>账户状态<strong>{accountView === "paper" ? "模拟运行" : account.connected ? "只读已连接" : "未连接"}</strong></span></div>
           </div>
           <div className={styles.logPanel}>
             <div className={styles.sectionHeader}><div><small>DECISION LOG</small><h2>策略决策</h2></div><button onClick={runPaperCheck}>立即检查</button></div>
@@ -298,17 +357,17 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
             <div className={styles.chartFoot}><span>TradingView Lightweight Charts · Binance Futures 行情</span><span>订单线来自只读账户；MA触及仅是条件检查</span></div>
           </div>
 
-          <AdaptiveStrategyPanel symbol={symbol} position={selectedPosition} accountConnected={account.connected} currentPrice={marketState.latest?.close ?? 0} maLength={strategy.maLength} maValue={marketState.ma} />
+          <AdaptiveStrategyPanel symbol={symbol} position={selectedPosition} positionSource={selectedPositionSource} accountConnected={account.connected} currentPrice={marketState.latest?.close ?? 0} marketMode={marketMode} maLength={strategy.maLength} maValue={marketState.ma} paperBalance={paper.account.equity} onPaperChanged={refreshPaper} />
         </section>
 
         <section className={styles.accountPanel} id="account">
-          <div className={styles.accountHeader}><div><small>BINANCE USDⓈ-M</small><h2>持仓与活动委托</h2></div><div className={styles.accountTabs}><button className={accountTab === "positions" ? styles.selected : ""} onClick={() => setAccountTab("positions")}>当前持仓 {account.positions.length}</button><button className={accountTab === "orders" ? styles.selected : ""} onClick={() => setAccountTab("orders")}>限价 / 条件单 {account.limitOrders.length + account.conditionalOrders.length}</button></div><span>{account.connected ? `更新 ${new Date(account.updatedAt).toLocaleTimeString("zh-CN")}` : account.reason}</span></div>
-          {accountTab === "positions" ? <PositionTable positions={account.positions} connected={account.connected} /> : <OrderTable orders={[...account.limitOrders, ...account.conditionalOrders]} connected={account.connected} />}
+          <div className={styles.accountHeader}><div><small>{accountView === "paper" ? "PAPER USDⓈ-M" : "BINANCE USDⓈ-M"}</small><h2>{accountView === "paper" ? "模拟持仓与成交" : "真实持仓与活动委托"}</h2></div><div className={styles.accountTabs}><button className={accountTab === "positions" ? styles.selected : ""} onClick={() => setAccountTab("positions")}>当前持仓 {displayedPositions}</button><button className={accountTab === "orders" ? styles.selected : ""} onClick={() => setAccountTab("orders")}>活动委托 {displayedOrders}</button>{accountView === "paper" && <button className={accountTab === "trades" ? styles.selected : ""} onClick={() => setAccountTab("trades")}>成交 {paper.trades.length}</button>}</div><span>{accountView === "paper" ? <button className={styles.resetPaperButton} onClick={() => void resetPaper()}>重置模拟盘</button> : account.connected ? `更新 ${new Date(account.updatedAt).toLocaleTimeString("zh-CN")}` : account.reason}</span></div>
+          {accountView === "paper" ? accountTab === "positions" ? <PaperPositionTable positions={paper.positions} onClose={closePaper} /> : accountTab === "orders" ? <PaperOrderTable orders={paper.orders} onCancel={cancelPaper} /> : <PaperTradeTable trades={paper.trades} /> : accountTab === "positions" ? <PositionTable positions={account.positions} connected={account.connected} /> : <OrderTable orders={[...account.limitOrders, ...account.conditionalOrders]} connected={account.connected} />}
         </section>
 
         <TradeKnowledgePanel symbol={symbol} />
 
-        <footer className={styles.tradeFooter}>只读账户、行情分析、模拟策略互相隔离。连接账户后仍默认禁止交易与提现权限。</footer>
+        <footer className={styles.tradeFooter}>模拟盘按币安公开标记价格轮询撮合，并计入0.04%模拟手续费；它不能保证真实限价成交。真实交易接口仍不存在。</footer>
       </div>
     </main>
   );
@@ -348,4 +407,19 @@ function PositionTable({ positions, connected }: { positions: AccountPosition[];
 function OrderTable({ orders, connected }: { orders: AccountOrder[]; connected: boolean }) {
   if (!connected || !orders.length) return <div className={styles.tableEmpty}><strong>{connected ? "当前没有活动委托" : "币安只读账户尚未连接"}</strong><span>{connected ? "限价单、条件单和止盈止损单会在这里与K线同步显示。" : "密钥只放服务端，并保持交易与提现权限关闭。"}</span></div>;
   return <div className={styles.tableWrap}><table><thead><tr><th>时间</th><th>合约</th><th>方向</th><th>类型</th><th>触发/委托价</th><th>已成交/总量</th><th>只减仓</th><th>状态</th></tr></thead><tbody>{orders.map((item) => <tr key={item.orderId}><td>{new Date(item.updateTime).toLocaleString("zh-CN", { hour12: false })}</td><td><strong>{item.symbol.replace("USDT", "")}</strong><small>USDT 永续</small></td><td className={item.side === "BUY" ? styles.up : styles.down}>{item.side === "BUY" ? "买入" : "卖出"}</td><td>{item.type.replaceAll("_", " ")}</td><td>{formatPrice(orderDisplayPrice(item))}</td><td>{item.executedQuantity} / {item.quantity}</td><td>{item.reduceOnly ? "是" : "否"}</td><td>{item.status}</td></tr>)}</tbody></table></div>;
+}
+
+function PaperPositionTable({ positions, onClose }: { positions: PaperPosition[]; onClose: (symbol: string, percent: 25 | 50 | 100) => Promise<void> }) {
+  if (!positions.length) return <div className={styles.tableEmpty}><strong>模拟盘当前没有持仓</strong><span>先在策略面板补齐止损、止盈并达到70分，然后确认模拟开仓。</span></div>;
+  return <div className={styles.tableWrap}><table><thead><tr><th>合约</th><th>方向</th><th>数量 / 次数</th><th>开仓均价</th><th>标记价格</th><th>未实现盈亏</th><th>止损 / 止盈</th><th>操作</th></tr></thead><tbody>{positions.map((item) => <tr key={item.id}><td><strong>{item.symbol.replace("USDT", "")}</strong><small>模拟 · {item.leverage}x</small></td><td className={item.side === "LONG" ? styles.up : styles.down}>{item.side === "LONG" ? "做多" : "做空"}</td><td>{item.quantity}<small>已买入 {item.entries}/3</small></td><td>{formatPrice(item.entryPrice)}</td><td>{formatPrice(item.markPrice)}{item.quoteLive === false && <small>实时标记价暂停</small>}</td><td className={item.unrealizedPnl >= 0 ? styles.up : styles.down}>{item.unrealizedPnl >= 0 ? "+" : ""}{formatMoney(item.unrealizedPnl)}</td><td>{item.stopPrice ? formatPrice(item.stopPrice) : "—"} / {item.targetPrice ? formatPrice(item.targetPrice) : "—"}</td><td><div className={styles.tableActions}><button onClick={() => void onClose(item.symbol, 50)}>减50%</button><button onClick={() => void onClose(item.symbol, 100)}>全退</button></div></td></tr>)}</tbody></table></div>;
+}
+
+function PaperOrderTable({ orders, onCancel }: { orders: PaperOrder[]; onCancel: (id: string) => Promise<void> }) {
+  if (!orders.length) return <div className={styles.tableEmpty}><strong>当前没有模拟条件单</strong><span>填写固定止损价或止盈价后，模拟开仓会自动生成对应条件单。</span></div>;
+  return <div className={styles.tableWrap}><table><thead><tr><th>时间</th><th>合约</th><th>方向</th><th>类型</th><th>触发价</th><th>数量</th><th>评分</th><th>操作</th></tr></thead><tbody>{orders.map((item) => <tr key={item.id}><td>{new Date(item.createdAt).toLocaleString("zh-CN", { hour12: false })}</td><td><strong>{item.symbol.replace("USDT", "")}</strong><small>模拟条件单</small></td><td className={item.side === "BUY" ? styles.up : styles.down}>{item.side === "BUY" ? "买入" : "卖出"}</td><td>{item.type.replaceAll("_", " ")}</td><td>{item.triggerPrice ? formatPrice(item.triggerPrice) : "—"}</td><td>{item.quantity}</td><td>{item.score}/100</td><td><div className={styles.tableActions}><button onClick={() => void onCancel(item.id)}>撤销</button></div></td></tr>)}</tbody></table></div>;
+}
+
+function PaperTradeTable({ trades }: { trades: PaperTrade[] }) {
+  if (!trades.length) return <div className={styles.tableEmpty}><strong>还没有模拟成交</strong><span>第一笔成交后，这里会记录价格、数量、手续费和已实现盈亏。</span></div>;
+  return <div className={styles.tableWrap}><table><thead><tr><th>时间</th><th>合约</th><th>动作</th><th>成交价</th><th>数量</th><th>手续费</th><th>已实现盈亏</th><th>原因</th></tr></thead><tbody>{trades.map((item) => <tr key={item.id}><td>{new Date(item.createdAt).toLocaleString("zh-CN", { hour12: false })}</td><td><strong>{item.symbol.replace("USDT", "")}</strong><small>模拟成交</small></td><td className={item.side === "BUY" ? styles.up : styles.down}>{item.intent === "OPEN" ? "开仓" : "平仓"} · {item.side}</td><td>{formatPrice(item.price)}</td><td>{item.quantity}</td><td>{formatMoney(item.fee)}</td><td className={item.realizedPnl >= 0 ? styles.up : styles.down}>{item.realizedPnl >= 0 ? "+" : ""}{formatMoney(item.realizedPnl)}</td><td>{item.reason.replaceAll("_", " ")}</td></tr>)}</tbody></table></div>;
 }
