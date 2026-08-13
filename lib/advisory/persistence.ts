@@ -7,6 +7,7 @@ type Prepared = {
   bind(...values: unknown[]): Prepared;
   first<T = Record<string, unknown>>(): Promise<T | null>;
   all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
+  run(): Promise<unknown>;
 };
 type D1Like = { prepare(sql: string): Prepared; batch<T = unknown>(statements: Prepared[]): Promise<T[]> };
 
@@ -15,6 +16,7 @@ type ConsultationRow = {
   snapshot_hash: string; payload_json: string; consensus_json: string; failures_json: string;
 };
 type OpinionRow = { decision_json: string };
+type ProgressRow = { id: string; analysis_date: string; symbol: string; failures_json: string; source_mode: MarketSnapshot["mode"]; snapshot_hash: string; payload_json: string };
 
 function parseJson<T>(value: string): T { return JSON.parse(value) as T; }
 
@@ -39,6 +41,38 @@ export function createD1ConsultationRepository(db: D1Like): ConsultationReposito
         consensus: parseJson<ConsultationResult["consensus"]>(row.consensus_json),
       };
     },
+    async getProgress(idempotencyKey) {
+      const row = await db.prepare(`SELECT c.id, c.analysis_date, c.symbol, c.failures_json,
+        m.source_mode, m.snapshot_hash, m.payload_json FROM consultations c
+        JOIN market_snapshots m ON m.id = c.market_snapshot_id
+        WHERE c.idempotency_key = ? AND c.status IN ('RUNNING','PAUSED_PROVIDER_ERROR') LIMIT 1`)
+        .bind(idempotencyKey).first<ProgressRow>();
+      if (!row) return undefined;
+      const opinionRows = await db.prepare("SELECT decision_json FROM expert_opinions WHERE consultation_id = ? ORDER BY created_at, round, expert_id")
+        .bind(row.id).all<OpinionRow>();
+      return { id: row.id, analysisDate: row.analysis_date, symbol: row.symbol, mode: row.source_mode, snapshotHash: row.snapshot_hash,
+        snapshot: parseJson<MarketSnapshot>(row.payload_json), opinions: opinionRows.results.map((item) => parseJson<DecisionContract>(item.decision_json)),
+        failures: parseJson<ConsultationResult["failures"]>(row.failures_json || "[]") };
+    },
+    async begin(idempotencyKey, value) {
+      const snapshotId = `snapshot:${value.snapshotHash}`;
+      await db.batch([
+        db.prepare(`INSERT OR IGNORE INTO market_snapshots
+          (id, symbol, snapshot_hash, source_mode, quality, last_closed_at, payload_json)
+          VALUES (?, ?, ?, ?, 'complete', ?, ?)`)
+          .bind(snapshotId, value.symbol, value.snapshotHash, value.mode, lastClosedDailyAt(value.snapshot), JSON.stringify(value.snapshot)),
+        db.prepare(`INSERT OR IGNORE INTO consultations
+          (id, analysis_date, symbol, status, market_snapshot_id, idempotency_key, failures_json)
+          VALUES (?, ?, ?, 'RUNNING', ?, ?, '[]')`)
+          .bind(value.id, value.analysisDate, value.symbol, snapshotId, idempotencyKey),
+      ]);
+    },
+    async saveOpinion(_idempotencyKey, opinion) {
+      await db.prepare(`INSERT OR IGNORE INTO expert_opinions
+        (id, consultation_id, expert_id, round, direction, skill_version, decision_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .bind(`${opinion.consultationId}:${opinion.round}:${opinion.expertId}`, opinion.consultationId, opinion.expertId, opinion.round, opinion.direction, opinion.skillVersion, JSON.stringify(opinion)).run();
+    },
     async save(idempotencyKey, value) {
       const snapshotId = `snapshot:${value.snapshotHash}`;
       const statements: Prepared[] = [];
@@ -60,7 +94,9 @@ export function createD1ConsultationRepository(db: D1Like): ConsultationReposito
         .bind(snapshotId, value.symbol, value.snapshotHash, value.mode, lastClosedDailyAt(value.snapshot), JSON.stringify(value.snapshot)));
       statements.push(db.prepare(`INSERT INTO consultations
         (id, analysis_date, symbol, status, market_snapshot_id, idempotency_key, failures_json, completed_at)
-        VALUES (?, ?, ?, 'COMPLETED', ?, ?, ?, CURRENT_TIMESTAMP)`)
+        VALUES (?, ?, ?, 'COMPLETED', ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(idempotency_key) DO UPDATE SET status = 'COMPLETED', failures_json = excluded.failures_json,
+          completed_at = CURRENT_TIMESTAMP`)
         .bind(value.id, value.analysisDate, value.symbol, snapshotId, idempotencyKey, JSON.stringify(value.failures)));
       for (const opinion of value.opinions) {
         statements.push(db.prepare(`INSERT OR REPLACE INTO expert_opinions

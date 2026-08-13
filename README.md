@@ -27,11 +27,22 @@
 ```text
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5
+AI_PROVIDER=openai
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-sonnet-4-5
+DEEPSEEK_API_KEY=...
+DEEPSEEK_MODEL=deepseek-chat
+OPENCODE_GO_API_KEY=...
+OPENCODE_GO_MODEL=deepseek-v4-flash
 ADVISORY_JOB_TOKEN=一个足够长的随机值
 BARK_BASE_URL=https://api.day.app/你的设备Key
 ```
 
 `BARK_BASE_URL` 可留空；留空时会诊仍会保存，只跳过手机通知。OpenAI 和 Bark 密钥永远只在服务端使用，不写入 D1，也不返回浏览器。
+
+模型供应商可在 `/settings` 全局手动切换。系统支持 OpenAI、Claude、DeepSeek 直连与 OpenCode Go DeepSeek；不会自动跨供应商切换。额度、限流或鉴权失败会暂停会诊并生成告警，切换后继续使用原行情快照，只补齐尚未完成的专家轮次。每份意见保存实际模型供应商和模型名。
+
+`/radar` 复用 `binance-square-monitor` 的 `/api/leaderboard`，展示热议币、看空但抗跌的币和空头拥挤评分。高分只表示“强烈建议立即研究”，不会自动调用专家、模拟开仓或真实下单。
 
 ### 触发每日会诊
 

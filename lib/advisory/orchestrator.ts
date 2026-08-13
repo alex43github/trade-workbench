@@ -7,7 +7,14 @@ import { ModelProviderError } from "./model-gateway.ts";
 
 export type ConsultationFailure = { expertId: string; round: "R1" | "R2" | "R3"; error: string };
 export type ConsultationResult = { id: string; analysisDate: string; symbol: string; mode: MarketSnapshot["mode"]; snapshotHash: string; snapshot: MarketSnapshot; opinions: DecisionContract[]; failures: ConsultationFailure[]; consensus: ReturnType<typeof buildConsensus> };
-export type ConsultationRepository = { get(key: string): Promise<ConsultationResult | undefined>; save(key: string, value: ConsultationResult): Promise<void> };
+export type ConsultationProgress = Omit<ConsultationResult, "consensus"> & { consensus?: ConsultationResult["consensus"] };
+export type ConsultationRepository = {
+  get(key: string): Promise<ConsultationResult | undefined>;
+  save(key: string, value: ConsultationResult): Promise<void>;
+  getProgress?(key: string): Promise<ConsultationProgress | undefined>;
+  begin?(key: string, value: ConsultationProgress): Promise<void>;
+  saveOpinion?(key: string, value: DecisionContract): Promise<void>;
+};
 
 export async function runDailyConsultation(options: {
   symbol: string; analysisDate: string; idempotencyKey: string;
@@ -17,9 +24,12 @@ export async function runDailyConsultation(options: {
 }): Promise<ConsultationResult> {
   const existing = await options.repository.get(options.idempotencyKey);
   if (existing) return existing;
-  const snapshot = await options.snapshotBuilder(options.symbol);
-  const consultationId = crypto.randomUUID();
-  const failures: ConsultationFailure[] = [];
+  const progress = await options.repository.getProgress?.(options.idempotencyKey);
+  const snapshot = progress?.snapshot ?? await options.snapshotBuilder(options.symbol);
+  const consultationId = progress?.id ?? crypto.randomUUID();
+  const failures: ConsultationFailure[] = [...(progress?.failures ?? [])];
+  const restored = progress?.opinions ?? [];
+  if (!progress && options.repository.begin) await options.repository.begin(options.idempotencyKey, { id: consultationId, analysisDate: options.analysisDate, symbol: snapshot.symbol, mode: snapshot.mode, snapshotHash: snapshot.snapshotHash, snapshot, opinions: [], failures });
   async function runWithRetry(input: ExpertRunnerInput) {
     let lastError = "expert failed";
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -32,12 +42,19 @@ export async function runDailyConsultation(options: {
     failures.push({ expertId: input.expert.id, round: input.round, error: lastError });
     return null;
   }
-  const r1 = (await Promise.all(EXPERTS.map((expert) => runWithRetry({ consultationId, expert, round: "R1", snapshot })))).filter((item): item is DecisionContract => item !== null);
+  async function checkpoint(input: ExpertRunnerInput) {
+    const current = restored.find((item) => item.round === input.round && item.expertId === input.expert.id);
+    if (current) return current;
+    const value = await runWithRetry(input);
+    if (value && options.repository.saveOpinion) await options.repository.saveOpinion(options.idempotencyKey, value);
+    return value;
+  }
+  const r1 = (await Promise.all(EXPERTS.map((expert) => checkpoint({ consultationId, expert, round: "R1", snapshot })))).filter((item): item is DecisionContract => item !== null);
   const r2 = (await Promise.all(EXPERTS.filter((expert) => r1.some((item) => item.expertId === expert.id)).map((expert) => {
     const peers = r1.filter((item) => item.expertId !== expert.id).map((item, index) => ({ alias: `Expert ${String.fromCharCode(65 + index)}`, direction: item.direction, supportingEvidence: item.supportingEvidence, refutingEvidence: item.refutingEvidence }));
-    return runWithRetry({ consultationId, expert, round: "R2", snapshot, peerArguments: peers, previousDecision: r1.find((item) => item.expertId === expert.id) });
+    return checkpoint({ consultationId, expert, round: "R2", snapshot, peerArguments: peers, previousDecision: r1.find((item) => item.expertId === expert.id) });
   }))).filter((item): item is DecisionContract => item !== null);
-  const r3 = (await Promise.all(EXPERTS.filter((expert) => r2.some((item) => item.expertId === expert.id)).map((expert) => runWithRetry({ consultationId, expert, round: "R3", snapshot, previousDecision: r2.find((item) => item.expertId === expert.id) })))).filter((item): item is DecisionContract => item !== null);
+  const r3 = (await Promise.all(EXPERTS.filter((expert) => r2.some((item) => item.expertId === expert.id)).map((expert) => checkpoint({ consultationId, expert, round: "R3", snapshot, previousDecision: r2.find((item) => item.expertId === expert.id) })))).filter((item): item is DecisionContract => item !== null);
   for (const expert of EXPERTS) {
     if (!r1.some((item) => item.expertId === expert.id)) {
       failures.push({ expertId: expert.id, round: "R2", error: "skipped because R1 failed" }, { expertId: expert.id, round: "R3", error: "skipped because R1 failed" });
