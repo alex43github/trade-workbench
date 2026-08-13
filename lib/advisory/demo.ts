@@ -24,6 +24,7 @@ function decision(expertId: ExpertId, round: "R1" | "R2" | "R3"): DecisionContra
     snapshotHash: "demo-snapshot-not-live", symbol: "BTCUSDT", marketRegime: "日线偏强、4H突破后整理",
     direction, setupName: copy.setup, contextTimeframe: "1d", executionTimeframe: "4h", validUntil: "2026-08-14T00:00:00.000Z",
     triggerConditions: directional ? ["4H保持在突破区域上方", "1H回踩后重新收强"] : [],
+    machineTrigger: directional ? { type: "PRICE_IN_ZONE", timeframe: "1h", price: null } : null,
     entryZone: directional ? { low: 116200, high: 117100 } : null,
     invalidation: directional ? "4H实体重新收回原箱体" : "", stopPrice: directional ? 114800 : null,
     targets: directional ? [120800, 124000] : [], managementPlan: directional ? "第一目标减仓，剩余仓位跟随4H结构" : "等待1H与4H右侧确认",

@@ -187,6 +187,16 @@ export const notificationDeliveries = sqliteTable("notification_deliveries", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const pendingPaperPlans = sqliteTable("pending_paper_plans", {
+  id: text("id").primaryKey(), accountId: text("account_id").notNull(), consultationId: text("consultation_id").notNull(),
+  expertId: text("expert_id").notNull(), symbol: text("symbol").notNull(), status: text("status").notNull().default("PENDING"),
+  validUntil: text("valid_until").notNull(), decisionJson: text("decision_json").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("uq_pending_plans_account_consultation").on(table.accountId, table.consultationId),
+  index("idx_pending_plans_status_symbol").on(table.status, table.symbol),
+]);
+
 export const jobRuns = sqliteTable("job_runs", {
   id: text("id").primaryKey(), jobType: text("job_type").notNull(), idempotencyKey: text("idempotency_key").notNull().unique(),
   status: text("status").notNull(), stage: text("stage").notNull(), leaseToken: text("lease_token"), error: text("error"),

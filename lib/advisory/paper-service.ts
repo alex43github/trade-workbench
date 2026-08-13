@@ -1,6 +1,7 @@
 import { MAX_LEVERAGE } from "./config.ts";
 import type { ConsultationResult } from "./orchestrator.ts";
 import { validateAccountAction } from "./accounts.ts";
+import { validateStopRisk } from "./plan-monitor.ts";
 
 const TAKER_FEE_RATE = 0.0004;
 
@@ -101,8 +102,19 @@ export async function applyFormalPaperActions(db: D1Database, result: Consultati
     }
     if (positions.length) { outcomes.push({ expertId: decision.expertId, status: "REJECTED", reason: "one position per symbol" }); continue; }
     const trigger = evaluateOpenTrigger(decision, price, result.snapshot.capturedAt);
-    if (!trigger.ok) { outcomes.push({ expertId: decision.expertId, status: "WAITING_TRIGGER", reason: trigger.reason }); continue; }
+    if (!trigger.ok) {
+      if (trigger.reason === "entry zone not reached" && decision.machineTrigger) {
+        await db.prepare(`INSERT OR IGNORE INTO pending_paper_plans
+          (id, account_id, consultation_id, expert_id, symbol, status, valid_until, decision_json)
+          VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?)`)
+          .bind(crypto.randomUUID(), account.id, result.id, decision.expertId, result.symbol, decision.validUntil, JSON.stringify(decision)).run();
+        outcomes.push({ expertId: decision.expertId, status: "WAITING_TRIGGER", reason: "pending plan persisted" });
+      } else outcomes.push({ expertId: decision.expertId, status: "REJECTED", reason: trigger.reason });
+      continue;
+    }
     const fill = calculatePaperOpen({ price, leverage: decision.leverage, marginUsdt: decision.marginUsdt, cashBalance: account.cash_balance });
+    const risk = validateStopRisk({ direction: decision.direction as "LONG" | "SHORT", entryPrice: price, stopPrice: decision.stopPrice!, quantity: fill.quantity, maxLossUsdt: decision.maxLossUsdt });
+    if (!risk.ok) { outcomes.push({ expertId: decision.expertId, status: "REJECTED", reason: `declared max loss is below stop risk ${risk.requiredLossUsdt.toFixed(2)} USDT` }); continue; }
     const orderId = crypto.randomUUID();
     const side = decision.direction === "SHORT" ? "SHORT" : "LONG";
     const reserved = await db.prepare(`UPDATE expert_accounts SET cash_balance = cash_balance - ?,

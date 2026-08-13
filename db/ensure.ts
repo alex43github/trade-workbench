@@ -134,6 +134,12 @@ export async function ensureAdvisorySchema() {
       trigger_price REAL, quantity REAL NOT NULL, status TEXT NOT NULL,
       payload_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, filled_at TEXT
     )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS pending_paper_plans (
+      id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, consultation_id TEXT NOT NULL,
+      expert_id TEXT NOT NULL, symbol TEXT NOT NULL, status TEXT DEFAULT 'PENDING' NOT NULL,
+      valid_until TEXT NOT NULL, decision_json TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS expert_trades (
       id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, order_id TEXT NOT NULL,
       symbol TEXT NOT NULL, price REAL NOT NULL, quantity REAL NOT NULL,
@@ -182,6 +188,8 @@ export async function ensureAdvisorySchema() {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_positions_account_symbol ON expert_positions(account_id, symbol)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_orders_account_status ON expert_orders(account_id, status)"),
     env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uq_expert_orders_account_consultation ON expert_orders(account_id, consultation_id)"),
+    env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_plans_account_consultation ON pending_paper_plans(account_id, consultation_id)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_pending_plans_status_symbol ON pending_paper_plans(status, symbol)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_trades_account_created ON expert_trades(account_id, created_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_equity_account_recorded ON expert_equity_snapshots(account_id, recorded_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_review_tasks_status_due ON review_tasks(status, due_at)"),

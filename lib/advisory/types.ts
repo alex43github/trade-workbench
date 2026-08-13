@@ -3,6 +3,11 @@ export type Direction = "LONG" | "SHORT" | "NEUTRAL";
 export type ConsultationRound = "R1" | "R2" | "R3";
 
 export type PriceZone = { low: number; high: number };
+export type MachineTrigger = {
+  type: "PRICE_IN_ZONE" | "CLOSE_BREAKOUT" | "CLOSE_BREAKDOWN";
+  timeframe: "1h" | "4h";
+  price: number | null;
+};
 
 export type AccountAction = {
   action: "OPEN" | "HOLD" | "CLOSE" | "REDUCE";
@@ -23,6 +28,7 @@ export type DecisionContract = {
   executionTimeframe: string;
   validUntil: string;
   triggerConditions: string[];
+  machineTrigger?: MachineTrigger | null;
   entryZone: PriceZone | null;
   invalidation: string;
   stopPrice: number | null;

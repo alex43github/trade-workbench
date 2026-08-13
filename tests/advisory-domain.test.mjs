@@ -13,6 +13,7 @@ function opinion(expertId, direction, overrides = {}) {
     direction, setupName: direction === "NEUTRAL" ? "等待" : "结构确认",
     contextTimeframe: "1d", executionTimeframe: "4h", validUntil: "2026-08-14T00:00:00Z",
     triggerConditions: direction === "NEUTRAL" ? [] : ["4H收盘确认"],
+    machineTrigger: direction === "NEUTRAL" ? null : { type: "PRICE_IN_ZONE", timeframe: "1h", price: null },
     entryZone: direction === "NEUTRAL" ? null : { low: 100, high: 102 },
     invalidation: direction === "NEUTRAL" ? "" : "跌破结构低点", stopPrice: direction === "NEUTRAL" ? null : 98,
     targets: direction === "NEUTRAL" ? [] : [108, 112], managementPlan: "分批退出",
