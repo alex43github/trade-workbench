@@ -1,5 +1,6 @@
 let initialized = false;
 let paperInitialized = false;
+let advisoryInitialized = false;
 
 export async function ensureTradeKnowledgeSchema() {
   if (initialized) return;
@@ -74,4 +75,98 @@ export async function ensurePaperSchema() {
   ]);
   await env.DB.prepare("PRAGMA optimize").run();
   paperInitialized = true;
+}
+
+export async function ensureAdvisorySchema() {
+  if (advisoryInitialized) return;
+  const { env } = await import("cloudflare:workers");
+  if (!env.DB) throw new Error("Cloudflare D1 binding `DB` is unavailable");
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS experts (
+      id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL,
+      skill_version TEXT NOT NULL, enabled INTEGER DEFAULT 1 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS strategy_versions (
+      id TEXT PRIMARY KEY NOT NULL, expert_id TEXT NOT NULL, version TEXT NOT NULL,
+      status TEXT NOT NULL, summary TEXT DEFAULT '' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS market_snapshots (
+      id TEXT PRIMARY KEY NOT NULL, symbol TEXT NOT NULL, snapshot_hash TEXT NOT NULL,
+      source_mode TEXT NOT NULL, quality TEXT NOT NULL, last_closed_at TEXT NOT NULL,
+      payload_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS consultations (
+      id TEXT PRIMARY KEY NOT NULL, analysis_date TEXT NOT NULL, symbol TEXT NOT NULL,
+      status TEXT NOT NULL, market_snapshot_id TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, completed_at TEXT
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS expert_opinions (
+      id TEXT PRIMARY KEY NOT NULL, consultation_id TEXT NOT NULL, expert_id TEXT NOT NULL,
+      round TEXT NOT NULL, direction TEXT NOT NULL, skill_version TEXT NOT NULL,
+      decision_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS consensus_decisions (
+      id TEXT PRIMARY KEY NOT NULL, consultation_id TEXT NOT NULL UNIQUE, direction TEXT NOT NULL,
+      strength TEXT NOT NULL, push_eligible INTEGER DEFAULT 0 NOT NULL,
+      state_version INTEGER DEFAULT 1 NOT NULL, payload_json TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS expert_accounts (
+      id TEXT PRIMARY KEY NOT NULL, expert_id TEXT NOT NULL, season_id TEXT NOT NULL,
+      initial_balance REAL DEFAULT 500 NOT NULL, cash_balance REAL DEFAULT 500 NOT NULL,
+      realized_pnl REAL DEFAULT 0 NOT NULL, total_fees REAL DEFAULT 0 NOT NULL,
+      max_leverage INTEGER DEFAULT 10 NOT NULL, status TEXT DEFAULT 'ACTIVE' NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS expert_positions (
+      id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, consultation_id TEXT,
+      strategy_version_id TEXT NOT NULL, symbol TEXT NOT NULL, side TEXT NOT NULL,
+      quantity REAL NOT NULL, entry_price REAL NOT NULL, leverage INTEGER NOT NULL,
+      isolated_margin REAL NOT NULL, stop_price REAL, target_price REAL,
+      opened_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS expert_orders (
+      id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, consultation_id TEXT,
+      symbol TEXT NOT NULL, side TEXT NOT NULL, intent TEXT NOT NULL, type TEXT NOT NULL,
+      trigger_price REAL, quantity REAL NOT NULL, status TEXT NOT NULL,
+      payload_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, filled_at TEXT
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS expert_trades (
+      id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, order_id TEXT NOT NULL,
+      symbol TEXT NOT NULL, price REAL NOT NULL, quantity REAL NOT NULL,
+      fee REAL DEFAULT 0 NOT NULL, realized_pnl REAL DEFAULT 0 NOT NULL,
+      reason TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS expert_equity_snapshots (
+      id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, recorded_at INTEGER NOT NULL,
+      equity REAL NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS review_tasks (
+      id TEXT PRIMARY KEY NOT NULL, consultation_id TEXT, trade_id TEXT, review_type TEXT NOT NULL,
+      status TEXT NOT NULL, due_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS review_reports (
+      id TEXT PRIMARY KEY NOT NULL, task_id TEXT NOT NULL, expert_id TEXT NOT NULL,
+      judgment_score INTEGER NOT NULL, execution_score INTEGER NOT NULL, outcome_score INTEGER NOT NULL,
+      attribution_json TEXT DEFAULT '[]' NOT NULL, candidate_experience_json TEXT DEFAULT '{}' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_deliveries (
+      id TEXT PRIMARY KEY NOT NULL, channel TEXT NOT NULL, dedupe_key TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL, attempts INTEGER DEFAULT 0 NOT NULL, error TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS job_runs (
+      id TEXT PRIMARY KEY NOT NULL, job_type TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL, stage TEXT NOT NULL, error TEXT,
+      started_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, completed_at TEXT
+    )`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_consultations_date_symbol ON consultations(analysis_date, symbol)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_opinions_consultation_round ON expert_opinions(consultation_id, round)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_accounts_expert_season ON expert_accounts(expert_id, season_id)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_review_tasks_status_due ON review_tasks(status, due_at)"),
+  ]);
+  advisoryInitialized = true;
 }

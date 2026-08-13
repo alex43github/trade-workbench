@@ -93,3 +93,42 @@ export const paperEquitySnapshots = sqliteTable("paper_equity_snapshots", {
 }, (table) => [
   index("idx_paper_equity_recorded").on(table.recordedAt),
 ]);
+
+export const experts = sqliteTable("experts", {
+  id: text("id").primaryKey(), name: text("name").notNull(), role: text("role").notNull(),
+  skillVersion: text("skill_version").notNull(), enabled: integer("enabled").notNull().default(1),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const consultations = sqliteTable("consultations", {
+  id: text("id").primaryKey(), analysisDate: text("analysis_date").notNull(), symbol: text("symbol").notNull(),
+  status: text("status").notNull(), marketSnapshotId: text("market_snapshot_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+}, (table) => [index("idx_consultations_date_symbol").on(table.analysisDate, table.symbol)]);
+
+export const expertOpinions = sqliteTable("expert_opinions", {
+  id: text("id").primaryKey(), consultationId: text("consultation_id").notNull(), expertId: text("expert_id").notNull(),
+  round: text("round").notNull(), direction: text("direction").notNull(), skillVersion: text("skill_version").notNull(),
+  decisionJson: text("decision_json").notNull(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_expert_opinions_consultation_round").on(table.consultationId, table.round)]);
+
+export const expertAccounts = sqliteTable("expert_accounts", {
+  id: text("id").primaryKey(), expertId: text("expert_id").notNull(), seasonId: text("season_id").notNull(),
+  initialBalance: real("initial_balance").notNull().default(500), cashBalance: real("cash_balance").notNull().default(500),
+  realizedPnl: real("realized_pnl").notNull().default(0), totalFees: real("total_fees").notNull().default(0),
+  maxLeverage: integer("max_leverage").notNull().default(10), status: text("status").notNull().default("ACTIVE"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_expert_accounts_expert_season").on(table.expertId, table.seasonId)]);
+
+export const notificationDeliveries = sqliteTable("notification_deliveries", {
+  id: text("id").primaryKey(), channel: text("channel").notNull(), dedupeKey: text("dedupe_key").notNull().unique(),
+  status: text("status").notNull(), attempts: integer("attempts").notNull().default(0), error: text("error"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const jobRuns = sqliteTable("job_runs", {
+  id: text("id").primaryKey(), jobType: text("job_type").notNull(), idempotencyKey: text("idempotency_key").notNull().unique(),
+  status: text("status").notNull(), stage: text("stage").notNull(), error: text("error"),
+  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`), completedAt: text("completed_at"),
+});
