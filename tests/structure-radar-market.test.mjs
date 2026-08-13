@@ -143,3 +143,30 @@ test("scanner advances an existing candidate before searching for a new one", as
   assert.equal(result.status, "transition");
   assert.deepEqual(order, ["save:CONFIRMED", "emit:CONFIRMED", "detect"]);
 });
+
+test("scanner continues advancing a confirmed signal", async () => {
+  const cache = new BarCache();
+  const confirmed = {
+    id: "BTCUSDT:1h:PLATFORM_RECLAIM:abc", symbol: "BTCUSDT", timeframe: "1h", setup: "PLATFORM_RECLAIM",
+    state: "CONFIRMED", stateVersion: 2, anchorHash: "abc", detectedAt: 1_000, expiresAfterBars: 6,
+    lastProcessedBarTime: 4_600, processedBars: 1,
+    geometry: { platformLower: 100, tolerance: 0.5, invalidationPrice: 97, atr: 1, reclaimHigh: 101 },
+  };
+  cache.replace("BTCUSDT", "1h", [{ time: 4_600, open: 101, high: 102, low: 100, close: 101, volume: 1, closed: true }]);
+  const emitted = [];
+  const scanner = new RadarScanner({
+    cache,
+    detectors: [async () => null],
+    store: {
+      async get() { return confirmed; },
+      async list() { return [confirmed]; },
+      async save(signal) { emitted.push(`save:${signal.state}`); },
+    },
+    async onSignal(signal) { emitted.push(`emit:${signal.state}`); },
+  });
+  const result = await scanner.handleClosedBar("BTCUSDT", "1h", {
+    time: 8_200, open: 99, high: 99.4, low: 96.5, close: 97.5, volume: 2, closed: true,
+  });
+  assert.equal(result.status, "transition");
+  assert.deepEqual(emitted, ["save:INVALIDATED", "emit:INVALIDATED"]);
+});

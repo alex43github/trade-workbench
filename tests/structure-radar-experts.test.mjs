@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { arbitrateR4, validateExpertDecision } from "../lib/structure-radar/expert-consensus.ts";
 import { buildExpertBundle, runExpertRound } from "../services/structure-radar/expert-runner.ts";
+import { runFourExpertConsultation } from "../services/structure-radar/orchestrator.ts";
 
 function decision(expert, vote = "SUPPORT", overrides = {}) {
   return {
@@ -112,4 +113,47 @@ test("runner always invokes Codex in ephemeral read-only schema mode", async () 
   });
   assert.deepEqual(args.slice(0, 5), ["exec", "--ephemeral", "--sandbox", "read-only", "--output-schema"]);
   assert.equal(args.at(-1), "-");
+});
+
+test("consultation snapshots every Skill bundle hash before R1", async () => {
+  const order = [];
+  const result = await runFourExpertConsultation({
+    signal: { id: "s" }, marketSnapshot: { symbol: "BTCUSDT" },
+    skillPaths: { ict: "/ict", street: "/street", jingxin: "/jingxin", bitlanglang: "/bitlanglang" },
+    async buildBundle(expert, path) { order.push(`hash:${expert}`); return { expert, root: path, files: ["SKILL.md"], hash: `${expert}-hash` }; },
+    async runRound(input) { order.push(`run:${input.round}:${input.expert}`); return { status: "complete", decision: decision(input.expert, "SUPPORT", { round: input.round }), attempts: 1, errors: [] }; },
+  });
+  assert.equal(order.slice(0, 4).every((item) => item.startsWith("hash:")), true);
+  assert.equal(result.skillVersions.bitlanglang.hash, "bitlanglang-hash");
+});
+
+test("every expert round receives the signal geometry with the market snapshot", async () => {
+  const snapshots = [];
+  const signal = { id: "s", geometry: { platformLower: 99, invalidationPrice: 97 } };
+  await runFourExpertConsultation({
+    signal, marketSnapshot: { symbol: "BTCUSDT", bars: [{ close: 100 }] },
+    skillPaths: { ict: "/ict", street: "/street", jingxin: "/jingxin", bitlanglang: "/bitlanglang" },
+    async buildBundle(expert, path) { return { expert, root: path, files: ["SKILL.md"], hash: `${expert}-hash` }; },
+    async runRound(input) {
+      snapshots.push(input.marketSnapshot);
+      return { status: "complete", decision: decision(input.expert, "SUPPORT", { round: input.round }), attempts: 1, errors: [] };
+    },
+  });
+  assert.equal(snapshots.length, 12);
+  assert.deepEqual(snapshots[0], { signal, market: { symbol: "BTCUSDT", bars: [{ close: 100 }] } });
+});
+
+test("one missing Skill becomes unavailable without aborting the consultation", async () => {
+  const result = await runFourExpertConsultation({
+    signal: { id: "s" }, marketSnapshot: { symbol: "BTCUSDT" },
+    skillPaths: { ict: "/ict", street: "/street", jingxin: "/jingxin", bitlanglang: "/missing" },
+    async buildBundle(expert, path) {
+      if (expert === "bitlanglang") throw new Error("missing Skill");
+      return { expert, root: path, files: ["SKILL.md"], hash: `${expert}-hash` };
+    },
+    async runRound(input) { return { status: "complete", decision: decision(input.expert, "SUPPORT", { round: input.round }), attempts: 1, errors: [] }; },
+  });
+  assert.equal(result.r3.length, 3);
+  assert.equal(result.consensus.grade, "3/4");
+  assert.equal(result.skillVersions.bitlanglang.status, "unavailable");
 });

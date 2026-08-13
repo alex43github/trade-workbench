@@ -1,7 +1,7 @@
 import { arbitrateR4, type ConsensusResult } from "../../lib/structure-radar/expert-consensus.ts";
 import { EXPERT_IDS, type ExpertDecision, type ExpertId, type ExpertRound } from "../../lib/structure-radar/expert-types.ts";
 import { buildNotification } from "../../lib/structure-radar/notification-policy.ts";
-import { runExpertRound } from "./expert-runner.ts";
+import { buildExpertBundle, runExpertRound } from "./expert-runner.ts";
 
 type RoundInput = {
   expert: ExpertId;
@@ -23,14 +23,26 @@ export async function runFourExpertConsultation(input: {
   marketSnapshot: unknown;
   skillPaths: Record<ExpertId, string>;
   runRound?: (input: RoundInput) => Promise<RoundResult>;
+  buildBundle?: typeof buildExpertBundle;
 }) {
   const runner = input.runRound ?? runExpertRound;
+  const bundleBuilder = input.buildBundle ?? buildExpertBundle;
+  const bundleResults = await Promise.all(EXPERT_IDS.map(async (expert) => {
+    try {
+      return { status: "ready" as const, ...await bundleBuilder(expert, input.skillPaths[expert]) };
+    } catch (error) {
+      return { expert, status: "unavailable" as const, root: input.skillPaths[expert], files: [], hash: "", error: error instanceof Error ? error.message : "Skill unavailable" };
+    }
+  }));
+  const skillVersions = Object.fromEntries(bundleResults.map((bundle) => [bundle.expert, bundle])) as Record<ExpertId, typeof bundleResults[number]>;
+  const availableExperts = EXPERT_IDS.filter((expert) => skillVersions[expert].status === "ready");
+  const expertSnapshot = { signal: input.signal, market: input.marketSnapshot };
   async function runStage(round: ExpertRound, peerThesesByExpert?: Map<ExpertId, { thesis: string }[]>) {
-    return Promise.all(EXPERT_IDS.map(async (expert) => runner({
+    return Promise.all(availableExperts.map(async (expert) => runner({
       expert,
       round,
       skillPath: input.skillPaths[expert],
-      marketSnapshot: input.marketSnapshot,
+      marketSnapshot: expertSnapshot,
       peerTheses: peerThesesByExpert?.get(expert),
     })));
   }
@@ -48,7 +60,7 @@ export async function runFourExpertConsultation(input: {
   }
   const r3Results = await runStage("R3", r3Peers);
   const r3 = r3Results.flatMap((result) => result.decision ? [result.decision] : []);
-  return { r1, r2, r3, consensus: arbitrateR4(r3) };
+  return { r1, r2, r3, consensus: arbitrateR4(r3), skillVersions };
 }
 
 type Repository = {
@@ -74,6 +86,7 @@ type Consultation = {
   r2: ExpertDecision[];
   r3: ExpertDecision[];
   consensus: ConsensusResult;
+  skillVersions?: Partial<Record<ExpertId, { hash: string; files: string[]; root: string }>>;
 };
 
 type PositionSnapshot = Record<string, unknown> & {

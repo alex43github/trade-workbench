@@ -23,6 +23,7 @@ export class KlineWebSocketFeed {
   readonly #sockets = new Map<number, SocketLike>();
   readonly #timers = new Map<number, unknown>();
   readonly #attempts = new Map<number, number>();
+  readonly #messageQueues = new Map<number, Promise<void>>();
   #running = false;
 
   constructor(options: FeedOptions) {
@@ -46,7 +47,10 @@ export class KlineWebSocketFeed {
       try {
         const data = event && typeof event === "object" && "data" in event ? event.data : event;
         const value = typeof data === "string" ? JSON.parse(data) : data;
-        void this.#options.onEvent(value);
+        const queued = (this.#messageQueues.get(batchIndex) ?? Promise.resolve())
+          .then(() => this.#options.onEvent(value))
+          .catch(() => this.#options.onStatus?.({ batch: batchIndex, state: "error", attempt }));
+        this.#messageQueues.set(batchIndex, queued.then(() => undefined));
       } catch {
         this.#options.onStatus?.({ batch: batchIndex, state: "error", attempt });
       }
@@ -81,5 +85,6 @@ export class KlineWebSocketFeed {
     this.#timers.clear();
     for (const socket of this.#sockets.values()) socket.close();
     this.#sockets.clear();
+    this.#messageQueues.clear();
   }
 }

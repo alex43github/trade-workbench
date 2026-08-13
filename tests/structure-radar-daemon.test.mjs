@@ -6,7 +6,7 @@ import { RadarOrchestrator, runFourExpertConsultation } from "../services/struct
 import { RadarRepository } from "../services/structure-radar/radar-repository.ts";
 import { KlineWebSocketFeed, reconnectDelay } from "../services/structure-radar/websocket-feed.ts";
 import { loadRadarConfig } from "../services/structure-radar/config.ts";
-import { bootstrapMarket } from "../services/structure-radar/runtime.ts";
+import { bootstrapMarket, isNotifiableSignalState } from "../services/structure-radar/runtime.ts";
 import { BarCache } from "../services/structure-radar/bar-cache.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -32,6 +32,7 @@ test("runs R1 independently, R2 anonymously, and R3 under each expert identity",
   const result = await runFourExpertConsultation({
     signal: candidate, marketSnapshot: { symbol: "BTCUSDT" },
     skillPaths: { ict: "/ict", street: "/street", jingxin: "/jingxin", bitlanglang: "/bitlanglang" },
+    async buildBundle(expert, path) { return { expert, root: path, files: ["SKILL.md"], hash: `${expert}-hash` }; },
     async runRound(input) {
       calls.push({ expert: input.expert, round: input.round, peers: input.peerTheses ?? [] });
       return { status: "complete", decision: expertDecision(input.expert, "SUPPORT", input.round), attempts: 1, errors: [] };
@@ -111,6 +112,15 @@ test("repository restores enriched signals and immutable consultation history", 
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("repository serializes concurrent writes without losing signals", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "radar-concurrent-"));
+  try {
+    const repository = new RadarRepository(directory);
+    await Promise.all(Array.from({ length: 12 }, (_, index) => repository.saveEnrichedSignal({ ...candidate, id: `signal-${index}`, anchorHash: `hash-${index}` })));
+    assert.equal((await repository.list()).length, 12);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("real HTTP adapter binds loopback and serves health", async () => {
   const api = createRadarHttpServer({
     token: "token", repository: { async list() { return []; }, async get() { return null; } },
@@ -141,12 +151,47 @@ test("websocket feed reconnects with capped exponential delay", () => {
   feed.stop();
 });
 
+test("websocket feed serializes closed-candle callbacks within a stream batch", async () => {
+  const order = [];
+  let socket;
+  let releaseFirst;
+  const firstPending = new Promise((resolve) => { releaseFirst = resolve; });
+  const feed = new KlineWebSocketFeed({
+    batches: [["btcusdt@kline_1h"]],
+    socketFactory() { socket = { close() {}, addEventListener(type, callback) { socket[type] = callback; } }; return socket; },
+    async onEvent(value) {
+      order.push(`start:${value.sequence}`);
+      if (value.sequence === 1) await firstPending;
+      order.push(`end:${value.sequence}`);
+    },
+  });
+  feed.start();
+  socket.message({ data: JSON.stringify({ sequence: 1 }) });
+  socket.message({ data: JSON.stringify({ sequence: 2 }) });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ["start:1"]);
+  releaseFirst();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ["start:1", "end:1", "start:2", "end:2"]);
+  feed.stop();
+});
+
 test("daemon configuration is loopback-only and notifications default off", () => {
   const config = loadRadarConfig({ RADAR_PORT: "9000", RADAR_DATA_DIRECTORY: "/tmp/radar", RADAR_NOTIFY_ENABLED: undefined });
   assert.equal(config.hostname, "127.0.0.1");
   assert.equal(config.port, 9_000);
   assert.equal(config.notificationsEnabled, false);
   assert.deepEqual(config.timeframes, ["15m", "1h", "4h"]);
+});
+
+test("candidate, confirmation, add, target, and invalidation states are notifiable", () => {
+  assert.equal(isNotifiableSignalState("CANDIDATE"), true);
+  assert.equal(isNotifiableSignalState("CONFIRMED"), true);
+  assert.equal(isNotifiableSignalState("ADD_CANDIDATE"), true);
+  assert.equal(isNotifiableSignalState("TAKE_PROFIT_WATCH"), true);
+  assert.equal(isNotifiableSignalState("INVALIDATED"), true);
+  assert.equal(isNotifiableSignalState("EXPIRED"), false);
 });
 
 test("market bootstrap loads every symbol and timeframe before building stream batches", async () => {
@@ -166,4 +211,18 @@ test("market bootstrap loads every symbol and timeframe before building stream b
   assert.deepEqual(requested.sort(), ["BTCUSDT:15m", "BTCUSDT:1h", "BTCUSDT:4h", "ETHUSDT:15m", "ETHUSDT:1h", "ETHUSDT:4h"].sort());
   assert.deepEqual(result.batches.map((batch) => batch.length), [4, 2]);
   assert.equal(result.failures.length, 0);
+});
+
+test("market bootstrap globally throttles REST backfill starts", async () => {
+  let clock = 0;
+  const starts = [];
+  const cache = new BarCache();
+  await bootstrapMarket({
+    cache, timeframes: ["1h"], concurrency: 3, minimumStartIntervalMs: 80,
+    now: () => clock,
+    async sleep(milliseconds) { clock += milliseconds; },
+    async listSymbols() { return [{ symbol: "AUSDT" }, { symbol: "BUSDT" }, { symbol: "CUSDT" }]; },
+    async fetchBars(symbol) { starts.push({ symbol, at: clock }); return [{ time: 1_000, open: 100, high: 101, low: 99, close: 100, volume: 1, closed: true }]; },
+  });
+  assert.deepEqual(starts.map((item) => item.at), [0, 80, 160]);
 });

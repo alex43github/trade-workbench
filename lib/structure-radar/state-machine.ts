@@ -30,6 +30,8 @@ export type TrackedSignal = {
   consensusGrade?: string;
   planHash?: string;
   geometry: PlatformGeometry | TrendlineGeometry;
+  consultation?: { consensus?: { executionPlan?: { entry: { min: number; max: number }; stop: number; targets: number[] } | null } };
+  position?: { state: string; side?: "LONG" | "SHORT"; entryPrice?: number; markPrice?: number };
 };
 
 export function signalId(input: Pick<TrackedSignal, "symbol" | "timeframe" | "setup" | "anchorHash">) {
@@ -86,6 +88,7 @@ function advanceTrendline(signal: TrackedSignal, bar: ClosedBar, processedBars: 
 
 export function advanceSignal(signal: TrackedSignal, bars: readonly ClosedBar[]): TrackedSignal {
   validateClosedBars(bars);
+  if (signal.state === "CONFIRMED") return advanceConfirmedSignal(signal, bars);
   if (signal.state !== "CANDIDATE") return signal;
   let current = signal;
   const newBars = bars.filter((bar) => bar.time > signal.lastProcessedBarTime);
@@ -97,6 +100,47 @@ export function advanceSignal(signal: TrackedSignal, bars: readonly ClosedBar[])
     if (current.state !== "CANDIDATE") return current;
     if (processedBars >= current.expiresAfterBars) {
       return transition(current, "EXPIRED", "CONFIRMATION_WINDOW_EXPIRED", bar.time, processedBars);
+    }
+  }
+  return current;
+}
+
+function advanceConfirmedSignal(signal: TrackedSignal, bars: readonly ClosedBar[]): TrackedSignal {
+  const newBars = bars.filter((bar) => bar.time > signal.lastProcessedBarTime);
+  if (newBars.length === 0) return signal;
+  let current = signal;
+  for (const bar of newBars) {
+    const processedBars = (current.processedBars ?? 0) + 1;
+    const invalidated = current.setup === "PLATFORM_RECLAIM"
+      ? bar.low <= (current.geometry as PlatformGeometry).invalidationPrice ||
+        bar.close < (current.geometry as PlatformGeometry).platformLower - current.geometry.tolerance
+      : bar.close < (current.geometry as TrendlineGeometry).projectedLine +
+        (current.geometry as TrendlineGeometry).slopePerBar * processedBars - current.geometry.tolerance;
+    if (invalidated) return transition(current, "INVALIDATED", "CONFIRMED_STRUCTURE_BROKEN", bar.time, processedBars);
+
+    const plan = current.consultation?.consensus?.executionPlan;
+    const position = current.position;
+    const firstTarget = plan?.targets[0];
+    if (plan && position?.side && firstTarget) {
+      const targetReached = position.side === "LONG" ? bar.high >= firstTarget : bar.low <= firstTarget;
+      if (targetReached) return transition(current, "TAKE_PROFIT_WATCH", "FIRST_TARGET_REACHED", bar.time, processedBars);
+    }
+    current = { ...current, processedBars, lastProcessedBarTime: bar.time };
+  }
+
+  const position = current.position;
+  const postSignalPosition = position?.state === "POST_CANDIDATE_POSITION" || position?.state === "POST_CONFIRM_POSITION";
+  const latestClose = newBars.at(-1)?.close;
+  const profitable = position?.side === "LONG"
+    ? Number(latestClose) > Number(position.entryPrice)
+    : position?.side === "SHORT" ? Number(latestClose) < Number(position.entryPrice) : false;
+  if (postSignalPosition && profitable && bars.length >= 3) {
+    const [first, middle, latest] = bars.slice(-3);
+    const higherLowBreakout = position?.side === "LONG"
+      ? middle.low > first.low && latest.close > Math.max(first.high, middle.high)
+      : middle.high < first.high && latest.close < Math.min(first.low, middle.low);
+    if (higherLowBreakout) {
+      return transition(current, "ADD_CANDIDATE", "PROFITABLE_HIGHER_LOW_BREAKOUT", latest.time, current.processedBars ?? 0);
     }
   }
   return current;

@@ -37,7 +37,10 @@ test("formats candidate and confirmation titles with a full expert plan", () => 
 test("formats add, take-profit, and invalidation notifications", () => {
   assert.match(buildNotification(signal({ state: "ADD_CANDIDATE" }), consensus(), { state: "POST_CANDIDATE_POSITION", entryPrice: 99 })?.title ?? "", /加仓候选/);
   assert.match(buildNotification(signal({ state: "TAKE_PROFIT_WATCH" }), consensus(), { state: "POST_CONFIRM_POSITION", entryPrice: 99 })?.title ?? "", /止盈观察/);
-  assert.match(buildNotification(signal({ state: "INVALIDATED" }), consensus(), { state: "NO_POSITION" })?.title ?? "", /失效/);
+  const invalidated = buildNotification(signal({ state: "INVALIDATED" }), consensus(), { state: "NO_POSITION" });
+  assert.match(invalidated?.title ?? "", /失效/);
+  assert.doesNotMatch(invalidated?.body ?? "", /入场区|止损：|目标：/);
+  assert.match(invalidated?.body ?? "", /原计划作废/);
 });
 
 test("removes unified prices for incomplete, shape-only, and major-divergence opinions", () => {
@@ -74,6 +77,21 @@ test("Bark client URL-encodes content and delivers a state version once", async 
     assert.equal(calls.length, 1);
     assert.match(calls[0], /%E5%80%99%E9%80%89%20BTC%2FUSDT/);
     assert.match(calls[0], /%26/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("concurrent Bark calls for one state version produce one delivery", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "bark-concurrent-"));
+  let calls = 0;
+  try {
+    const client = new BarkClient({
+      enabled: true, baseUrl: "https://api.day.app/device-key", storageDirectory: directory,
+      async fetcher() { calls += 1; await new Promise((resolve) => setTimeout(resolve, 5)); return new Response("ok", { status: 200 }); },
+    });
+    const message = { key: "same:1:bark", title: "候选", body: "内容", group: "雷达" };
+    const results = await Promise.all([client.sendOnce(message), client.sendOnce(message)]);
+    assert.equal(calls, 1);
+    assert.deepEqual(results.map((item) => item.status).sort(), ["delivered", "duplicate"]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

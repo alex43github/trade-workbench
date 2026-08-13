@@ -50,6 +50,7 @@ export class BarkClient {
   readonly #path: string;
   readonly #fetcher: Fetcher;
   readonly #sleep: (milliseconds: number) => Promise<void>;
+  #deliveryQueue: Promise<unknown> = Promise.resolve();
 
   constructor(options: BarkClientOptions) {
     this.#enabled = options.enabled;
@@ -77,7 +78,7 @@ export class BarkClient {
     await rename(temporary, this.#path);
   }
 
-  async sendOnce(message: BarkMessage) {
+  async #sendUnlocked(message: BarkMessage) {
     if (!this.#enabled) return { status: "disabled" as const, attempts: 0 };
     if (!this.#baseUrl.startsWith("https://") && !this.#baseUrl.startsWith("http://127.0.0.1")) {
       return { status: "failed" as const, attempts: 0, error: "Bark URL must use HTTPS" };
@@ -103,5 +104,11 @@ export class BarkClient {
     const failed: Delivery = { key: message.key, status: "failed", attempts: 3, updatedAt: new Date().toISOString(), error: lastError };
     await this.#write([...deliveries.filter((item) => item.key !== message.key), failed]);
     return { status: "failed" as const, attempts: 3, error: lastError };
+  }
+
+  async sendOnce(message: BarkMessage) {
+    const operation = this.#deliveryQueue.then(() => this.#sendUnlocked(message));
+    this.#deliveryQueue = operation.catch(() => undefined);
+    return operation;
   }
 }

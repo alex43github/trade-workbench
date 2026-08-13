@@ -20,6 +20,7 @@ function consultations(value: unknown): ConsultationRecord[] {
 export class RadarRepository {
   readonly #directory: string;
   readonly #path: string;
+  #writeQueue: Promise<void> = Promise.resolve();
 
   constructor(directory: string) {
     this.#directory = directory;
@@ -45,23 +46,33 @@ export class RadarRepository {
     await rename(temporary, this.#path);
   }
 
+  async #update(mutator: (stored: Stored) => void) {
+    const operation = this.#writeQueue.then(async () => {
+      const stored = await this.#read();
+      mutator(stored);
+      await this.#write(stored);
+    });
+    this.#writeQueue = operation.catch(() => undefined);
+    return operation;
+  }
+
   async list() { return (await this.#read()).signals; }
   async get(id: string) { return (await this.#read()).signals.find((signal) => signal.id === id) ?? null; }
   async consultations(signalId: string) { return (await this.#read()).consultations.filter((item) => item.signalId === signalId); }
 
   async saveEnrichedSignal(signal: SignalRecord) {
-    const stored = await this.#read();
-    const index = stored.signals.findIndex((item) => item.id === signal.id);
-    if (index >= 0) stored.signals[index] = signal;
-    else stored.signals.push(signal);
-    await this.#write(stored);
+    await this.#update((stored) => {
+      const index = stored.signals.findIndex((item) => item.id === signal.id);
+      if (index >= 0) stored.signals[index] = signal;
+      else stored.signals.push(signal);
+    });
   }
 
   async save(signal: SignalRecord) { return this.saveEnrichedSignal(signal); }
 
   async saveConsultation(consultation: ConsultationRecord) {
-    const stored = await this.#read();
-    stored.consultations.push({ ...consultation, createdAt: consultation.createdAt ?? new Date().toISOString() });
-    await this.#write(stored);
+    await this.#update((stored) => {
+      stored.consultations.push({ ...consultation, createdAt: consultation.createdAt ?? new Date().toISOString() });
+    });
   }
 }

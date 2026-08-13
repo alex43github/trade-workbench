@@ -112,3 +112,38 @@ test("JSON store survives reload and replaces files atomically", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("confirmed signal invalidates before any add or target transition", () => {
+  const confirmed = { ...platformSignal(), state: "CONFIRMED", stateVersion: 2, lastProcessedBarTime: 200 };
+  const next = advanceSignal(confirmed, [bar(300, { open: 99, high: 99.5, low: 96.5, close: 97.5 })]);
+  assert.equal(next.state, "INVALIDATED");
+  assert.equal(next.stateVersion, 3);
+});
+
+test("confirmed long position enters take-profit watch at target one", () => {
+  const confirmed = {
+    ...platformSignal(), state: "CONFIRMED", stateVersion: 2, lastProcessedBarTime: 200,
+    consultation: { consensus: { executionPlan: { entry: { min: 99, max: 100 }, stop: 97, targets: [104, 108] } } },
+    position: { state: "POST_CANDIDATE_POSITION", side: "LONG", entryPrice: 100, markPrice: 103 },
+  };
+  const next = advanceSignal(confirmed, [bar(300, { open: 103, high: 104.5, low: 102.8, close: 104.2 })]);
+  assert.equal(next.state, "TAKE_PROFIT_WATCH");
+});
+
+test("confirmed signal creates add candidate only after profitable higher-low breakout", () => {
+  const confirmed = {
+    ...platformSignal(), state: "CONFIRMED", stateVersion: 2, lastProcessedBarTime: 200,
+    consultation: { consensus: { executionPlan: { entry: { min: 99, max: 100 }, stop: 97, targets: [110, 115] } } },
+    position: { state: "POST_CANDIDATE_POSITION", side: "LONG", entryPrice: 100, markPrice: 103 },
+  };
+  const structureBars = [
+    bar(100, { open: 101, high: 103, low: 99, close: 102 }),
+    bar(200, { open: 102, high: 103.2, low: 100, close: 102.5 }),
+    bar(300, { open: 102.5, high: 104, low: 101, close: 103.5 }),
+  ];
+  const next = advanceSignal(confirmed, structureBars);
+  assert.equal(next.state, "ADD_CANDIDATE");
+  assert.equal(next.reason, "PROFITABLE_HIGHER_LOW_BREAKOUT");
+  const losing = advanceSignal({ ...confirmed, position: { ...confirmed.position, entryPrice: 105, markPrice: 99 } }, structureBars);
+  assert.equal(losing.state, "CONFIRMED");
+});

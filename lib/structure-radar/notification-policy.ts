@@ -75,6 +75,11 @@ export function buildNotification(
     `形态：${setup}｜触发：${new Date(signal.detectedAt * 1_000).toISOString()}`,
     `持仓：${POSITION_LABELS[position.state] ?? position.state}${position.entryPrice ? `｜均价 ${price(position.entryPrice)}` : ""}`,
   ];
+  if (signal.state === "INVALIDATED") {
+    lines.push("结构已经失效：原计划作废，入场、止损、目标与加仓条件全部取消；等待新的独立结构。");
+    lines.push("研究预警，不保证上涨；禁止亏损加仓。");
+    return { key: notificationKey(signal, "bark"), title, body: lines.join("\n"), group: "强势币结构雷达" };
+  }
   const fullPlanAllowed = consensus.validOpinions >= 3 &&
     ["FULL_PLAN", "AGGRESSIVE_CANDIDATE"].includes(consensus.alertPolicy);
   if (fullPlanAllowed && consensus.executionPlan?.entry && consensus.executionPlan.stop !== null) {

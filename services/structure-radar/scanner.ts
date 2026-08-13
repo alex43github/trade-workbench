@@ -98,9 +98,10 @@ export class RadarScanner {
     let transitioned: TrackedSignal | null = null;
     const activeSignals = this.#store.list ? await this.#store.list() : [];
     for (const existing of activeSignals.filter((item) =>
-      item.symbol === symbol.toUpperCase() && item.timeframe === timeframe && item.state === "CANDIDATE",
+      item.symbol === symbol.toUpperCase() && item.timeframe === timeframe &&
+      (item.state === "CANDIDATE" || item.state === "CONFIRMED"),
     )) {
-      const advanced = advanceSignal(existing, [bar]);
+      const advanced = advanceSignal(existing, bars);
       if (advanced.stateVersion !== existing.stateVersion) {
         await this.#store.save(advanced);
         await this.#onSignal?.(advanced);
