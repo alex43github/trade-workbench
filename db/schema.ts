@@ -192,3 +192,15 @@ export const jobRuns = sqliteTable("job_runs", {
   status: text("status").notNull(), stage: text("stage").notNull(), error: text("error"),
   startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`), completedAt: text("completed_at"),
 });
+
+export const advisorySettings = sqliteTable("advisory_settings", {
+  key: text("key").primaryKey(), value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const systemAlerts = sqliteTable("system_alerts", {
+  id: text("id").primaryKey(), type: text("type").notNull(), severity: text("severity").notNull(),
+  status: text("status").notNull().default("OPEN"), title: text("title").notNull(), message: text("message").notNull(),
+  contextJson: text("context_json").notNull().default("{}"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  resolvedAt: text("resolved_at"),
+}, (table) => [index("idx_system_alerts_status_created").on(table.status, table.createdAt)]);

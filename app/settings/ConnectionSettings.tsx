@@ -11,6 +11,7 @@ type ConnectionStatus = {
   publicMarket: { connected: boolean; latencyMs: number; message: string };
   binancePrivate: { configured: boolean; connected: boolean; message: string };
   openai: { configured: boolean; model: string; message: string };
+  ai: { activeProvider: string; configured: boolean; model: string; message: string; providers: Array<{ id: string; name: string; configured: boolean; model: string }> };
   squareMonitor: { configured: boolean; message: string };
   safety: { secretsExposedToBrowser: boolean; realOrderRouteEnabled: boolean; mode: "live-paper" | "demo-paper" };
 };
@@ -29,6 +30,17 @@ export default function ConnectionSettings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [browserMarket, setBrowserMarket] = useState<{ connected: boolean; latencyMs: number; message: string } | null>(null);
+  const [switchingProvider, setSwitchingProvider] = useState("");
+
+  const switchProvider = async (provider: string) => {
+    setSwitchingProvider(provider); setError("");
+    try {
+      const response = await fetch("/api/advisory/provider", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider }) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await refresh();
+    } catch { setError("模型供应商切换失败；密钥仍只在服务端配置。"); }
+    finally { setSwitchingProvider(""); }
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -110,8 +122,9 @@ export default function ConnectionSettings() {
 
           <article className={styles.card}>
             <div className={styles.cardHead}><div className={styles.icon}>AI</div><StateBadge ok={Boolean(status?.openai.configured)} pending={loading && !status} /></div>
-            <h3>OpenAI 计划复核</h3><p>{status?.openai.message || "正在检查服务端环境…"}</p>
-            <dl><div><dt>模型</dt><dd>{status?.openai.model || "—"}</dd></div><div><dt>无密钥时</dt><dd>规则引擎</dd></div></dl>
+            <h3>全局 AI 模型供应商</h3><p>{status?.ai.message || "正在检查服务端环境…"}</p>
+            <dl><div><dt>当前模型</dt><dd>{status?.ai.model || "—"}</dd></div><div><dt>切换方式</dt><dd>故障提醒后手动</dd></div></dl>
+            <div className={styles.providerGrid}>{status?.ai.providers.map((provider) => <button key={provider.id} disabled={Boolean(switchingProvider)} className={status.ai.activeProvider === provider.id ? styles.providerActive : ""} onClick={() => void switchProvider(provider.id)}><b>{provider.name}</b><small>{provider.model}</small><span>{provider.configured ? status.ai.activeProvider === provider.id ? "当前使用" : "切换" : "未配置"}</span></button>)}</div>
           </article>
 
           <article className={styles.card}>
@@ -125,7 +138,7 @@ export default function ConnectionSettings() {
           <div className={styles.setupTitle}><span>安全配置清单</span><small>只在托管站点的加密环境变量中填写</small></div>
           <div className={styles.setupGrid}>
             <div><b>1</b><h3>Binance 临时只读密钥</h3><p>仅用于余额、持仓和挂单展示。保持合约交易、现货交易和提现权限关闭；可用时增加 IP 白名单。</p><SecretName>BINANCE_FUTURES_API_KEY</SecretName><SecretName>BINANCE_FUTURES_API_SECRET</SecretName></div>
-            <div><b>2</b><h3>OpenAI 临时项目密钥</h3><p>使用独立 Project、设置较低预算与用量警报。它只复核策略，不能绕过风险闸门或发送订单。</p><SecretName>OPENAI_API_KEY</SecretName><SecretName>OPENAI_MODEL</SecretName></div>
+            <div><b>2</b><h3>模型供应商密钥</h3><p>可配置 OpenAI、Claude、DeepSeek 或 OpenCode Go。网站只允许全局手动切换，故障时主动提醒但不会擅自换模型。</p><SecretName>OPENAI_API_KEY</SecretName><SecretName>ANTHROPIC_API_KEY</SecretName><SecretName>DEEPSEEK_API_KEY</SecretName><SecretName>OPENCODE_GO_API_KEY</SecretName></div>
             <div><b>3</b><h3>测试完成后轮换</h3><p>删除 Binance 测试密钥，撤销 OpenAI 临时密钥，再用正式的受限密钥替换。不要在聊天中发送任何密钥。</p><span className={styles.safeLine}>✓ 浏览器不接触密钥</span><span className={styles.safeLine}>✓ 当前没有真实下单接口</span></div>
           </div>
         </section>

@@ -164,6 +164,16 @@ export async function ensureAdvisorySchema() {
       status TEXT NOT NULL, stage TEXT NOT NULL, error TEXT,
       started_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, completed_at TEXT
     )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS advisory_settings (
+      key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS system_alerts (
+      id TEXT PRIMARY KEY NOT NULL, type TEXT NOT NULL, severity TEXT NOT NULL,
+      status TEXT DEFAULT 'OPEN' NOT NULL, title TEXT NOT NULL, message TEXT NOT NULL,
+      context_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      resolved_at TEXT
+    )`),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_consultations_date_symbol ON consultations(analysis_date, symbol)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_strategy_versions_expert_created ON strategy_versions(expert_id, created_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_market_snapshots_symbol_created ON market_snapshots(symbol, created_at)"),
@@ -176,6 +186,7 @@ export async function ensureAdvisorySchema() {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_equity_account_recorded ON expert_equity_snapshots(account_id, recorded_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_review_tasks_status_due ON review_tasks(status, due_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_review_reports_expert_created ON review_reports(expert_id, created_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_system_alerts_status_created ON system_alerts(status, created_at)"),
   ]);
   await env.DB.prepare("PRAGMA optimize").run();
   advisoryInitialized = true;
