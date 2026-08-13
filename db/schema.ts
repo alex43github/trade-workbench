@@ -183,7 +183,7 @@ export const reviewReports = sqliteTable("review_reports", {
 
 export const notificationDeliveries = sqliteTable("notification_deliveries", {
   id: text("id").primaryKey(), channel: text("channel").notNull(), dedupeKey: text("dedupe_key").notNull().unique(),
-  status: text("status").notNull(), attempts: integer("attempts").notNull().default(0), error: text("error"),
+  status: text("status").notNull(), attempts: integer("attempts").notNull().default(0), error: text("error"), payloadJson: text("payload_json").notNull().default("{}"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

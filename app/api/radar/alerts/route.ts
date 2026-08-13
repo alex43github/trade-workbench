@@ -33,10 +33,10 @@ export async function POST(request: Request) {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(key, value).run();
       outcomes.push({ symbol: coin.symbol, status: "SENT", reason: decision.reason });
     } catch (error) {
-      await db.prepare(`INSERT INTO notification_deliveries (id, channel, dedupe_key, status, attempts, error)
-        VALUES (?, 'bark', ?, 'FAILED', 1, ?)
-        ON CONFLICT(dedupe_key) DO UPDATE SET status = 'FAILED', attempts = attempts + 1, error = excluded.error, updated_at = CURRENT_TIMESTAMP`)
-        .bind(crypto.randomUUID(), `crowding:${coin.symbol}:${current.level}:${current.score}`, error instanceof Error ? error.message : "Bark failed").run();
+      await db.prepare(`INSERT INTO notification_deliveries (id, channel, dedupe_key, status, attempts, error, payload_json)
+        VALUES (?, 'bark', ?, 'FAILED', 1, ?, ?)
+        ON CONFLICT(dedupe_key) DO UPDATE SET status = 'FAILED', attempts = attempts + 1, error = excluded.error, payload_json = excluded.payload_json, updated_at = CURRENT_TIMESTAMP`)
+        .bind(crypto.randomUUID(), `crowding:${coin.symbol}:${current.level}:${current.score}`, error instanceof Error ? error.message : "Bark failed", JSON.stringify({ title, body })).run();
       outcomes.push({ symbol: coin.symbol, status: "FAILED" });
     }
   }

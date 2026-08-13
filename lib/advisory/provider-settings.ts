@@ -12,6 +12,6 @@ export async function getActiveProvider(db: D1Settings, env: ProviderEnv = proce
 export async function setActiveProvider(db: D1Settings, value: unknown): Promise<ModelProviderId> {
   if (!isModelProviderId(value)) throw new Error("unsupported model provider");
   await db.prepare(`INSERT INTO advisory_settings (key, value, updated_at) VALUES ('active_model_provider', ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind("active_model_provider", value).run();
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(value).run();
   return value;
 }

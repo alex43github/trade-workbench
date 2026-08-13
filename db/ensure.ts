@@ -162,7 +162,7 @@ export async function ensureAdvisorySchema() {
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_deliveries (
       id TEXT PRIMARY KEY NOT NULL, channel TEXT NOT NULL, dedupe_key TEXT NOT NULL UNIQUE,
-      status TEXT NOT NULL, attempts INTEGER DEFAULT 0 NOT NULL, error TEXT,
+      status TEXT NOT NULL, attempts INTEGER DEFAULT 0 NOT NULL, error TEXT, payload_json TEXT DEFAULT '{}' NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS job_runs (

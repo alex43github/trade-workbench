@@ -5,12 +5,14 @@ import { getActiveProvider, setActiveProvider } from "../lib/advisory/provider-s
 
 function memoryDb() {
   let active = null;
+  const calls = [];
   return {
+    calls,
     prepare(sql) {
       return {
         values: [], bind(...values) { this.values = values; return this; },
         async first() { return active ? { value: active } : null; },
-        async run() { if (/INSERT INTO advisory_settings/.test(sql)) active = this.values[1]; return { success: true }; },
+        async run() { calls.push({ sql, values: this.values }); if (/INSERT INTO advisory_settings/.test(sql)) active = this.values[0]; return { success: true }; },
       };
     },
   };
@@ -21,5 +23,6 @@ test("global provider persists one valid manual selection", async () => {
   assert.equal(await getActiveProvider(db, { AI_PROVIDER: "openai" }), "openai");
   await setActiveProvider(db, "anthropic");
   assert.equal(await getActiveProvider(db, { AI_PROVIDER: "openai" }), "anthropic");
+  assert.deepEqual(db.calls[0].values, ["anthropic"]);
   await assert.rejects(() => setActiveProvider(db, "unknown"), /unsupported/);
 });
