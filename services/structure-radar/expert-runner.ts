@@ -36,7 +36,13 @@ async function defaultExecute(input: ExecuteInput) {
   return new Promise<string>((resolve, reject) => {
     const child = spawn("codex", input.args, {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { PATH: process.env.PATH ?? "", NODE_ENV: process.env.NODE_ENV ?? "production" },
+      env: {
+        PATH: process.env.PATH ?? "",
+        NODE_ENV: process.env.NODE_ENV ?? "production",
+        ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+        ...(process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}),
+        ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
+      },
     });
     let stdout = "";
     let stderr = "";

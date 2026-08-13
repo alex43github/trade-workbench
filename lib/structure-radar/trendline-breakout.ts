@@ -28,6 +28,8 @@ export type TrendlineBreakoutCandidate = {
   breakoutIndex: number;
   close: number;
   volumeRatio: number;
+  atr: number;
+  breakoutHigh: number;
 };
 
 function lineAt(first: IndexedPrice, second: IndexedPrice, index: number) {
@@ -78,7 +80,8 @@ export async function detectTrendlineBreakout(
       index: pivot.index + startIndex,
     }));
     if (pivots.length < 3) continue;
-    const tolerance = Math.max(0.2 * atr(windowBars, 14), history.at(-1)!.close * 0.0025);
+    const atrValue = atr(windowBars, 14);
+    const tolerance = Math.max(0.2 * atrValue, history.at(-1)!.close * 0.0025);
 
     for (let firstIndex = 0; firstIndex < pivots.length - 2; firstIndex += 1) {
       for (let secondIndex = firstIndex + 2; secondIndex < pivots.length; secondIndex += 1) {
@@ -110,7 +113,7 @@ export async function detectTrendlineBreakout(
           (sum, touch) => sum + Math.abs(touch.price - lineAt(first, second, touch.index)) / tolerance,
           0,
         ) / validationTouches.length;
-        const bodyAtr = Math.abs(breakout.close - breakout.open) / Math.max(atr(history, 14), Number.EPSILON);
+        const bodyAtr = Math.abs(breakout.close - breakout.open) / Math.max(atrValue, Number.EPSILON);
         const candidate: Omit<TrendlineBreakoutCandidate, "anchorHash"> = {
           symbol: config.symbol,
           timeframe: config.timeframe,
@@ -127,6 +130,8 @@ export async function detectTrendlineBreakout(
           breakoutIndex,
           close: breakout.close,
           volumeRatio,
+          atr: atrValue,
+          breakoutHigh: breakout.high,
         };
         if (!best || candidate.score > best.score) best = candidate;
       }

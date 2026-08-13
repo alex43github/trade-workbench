@@ -121,3 +121,25 @@ test("scanner backfills a gap before detecting on the newest bar", async () => {
   assert.equal(backfills, 1);
   assert.equal(scannedLength, 3);
 });
+
+test("scanner advances an existing candidate before searching for a new one", async () => {
+  const cache = new BarCache();
+  const current = {
+    id: "BTCUSDT:1h:PLATFORM_RECLAIM:abc", symbol: "BTCUSDT", timeframe: "1h", setup: "PLATFORM_RECLAIM",
+    state: "CANDIDATE", stateVersion: 1, anchorHash: "abc", detectedAt: 1_000, expiresAfterBars: 6,
+    lastProcessedBarTime: 1_000, geometry: { platformLower: 100, tolerance: 0.5, invalidationPrice: 97, atr: 1, reclaimHigh: 101 },
+  };
+  cache.replace("BTCUSDT", "1h", [{ time: 1_000, open: 100, high: 101, low: 99, close: 100, volume: 1, closed: true }]);
+  const order = [];
+  const scanner = new RadarScanner({
+    cache, detectors: [async () => { order.push("detect"); return null; }],
+    store: {
+      async get() { return current; }, async list() { return [current]; },
+      async save(signal) { order.push(`save:${signal.state}`); },
+    },
+    async onSignal(signal) { order.push(`emit:${signal.state}`); },
+  });
+  const result = await scanner.handleClosedBar("BTCUSDT", "1h", { time: 4_600, open: 100.8, high: 101.4, low: 99.8, close: 101.1, volume: 2, closed: true });
+  assert.equal(result.status, "transition");
+  assert.deepEqual(order, ["save:CONFIRMED", "emit:CONFIRMED", "detect"]);
+});

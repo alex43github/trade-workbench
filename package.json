@@ -12,6 +12,9 @@
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
+    ,"radar:start": "node services/structure-radar/main.ts"
+    ,"radar:test": "node --test tests/structure-radar-*.test.mjs"
+    ,"radar:check": "npm run radar:test && tsc --noEmit"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

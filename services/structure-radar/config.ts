@@ -10,3 +10,20 @@ export const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
   "4h": 4 * 60 * 60,
 };
 
+export function loadRadarConfig(environment: Record<string, string | undefined> = process.env) {
+  const requestedPort = Number.parseInt(environment.RADAR_PORT ?? "8790", 10);
+  return {
+    hostname: "127.0.0.1" as const,
+    port: Number.isInteger(requestedPort) && requestedPort > 0 && requestedPort <= 65_535 ? requestedPort : 8_790,
+    dataDirectory: environment.RADAR_DATA_DIRECTORY?.trim() || ".data/structure-radar",
+    localToken: environment.RADAR_LOCAL_TOKEN?.trim() || "",
+    notificationsEnabled: environment.RADAR_NOTIFY_ENABLED === "true",
+    timeframes: [...RADAR_TIMEFRAMES],
+    skillPaths: {
+      ict: environment.RADAR_ICT_SKILL_PATH || "/Users/niangao/.codex/skills/ict-trading/SKILL.md",
+      street: environment.RADAR_STREET_SKILL_PATH || "/Users/niangao/.codex/skills/street-trading/SKILL.md",
+      jingxin: environment.RADAR_JINGXIN_SKILL_PATH || "/Users/niangao/.codex/skills/jingxin-trading/SKILL.md",
+      bitlanglang: environment.RADAR_BITLANGLANG_SKILL_PATH || "/Users/niangao/.codex/skills/bitlanglang-trading/SKILL.md",
+    },
+  };
+}

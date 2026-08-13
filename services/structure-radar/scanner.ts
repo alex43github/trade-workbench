@@ -1,5 +1,5 @@
 import type { ClosedBar, Timeframe } from "../../lib/structure-radar/types.ts";
-import { signalId, type TrackedSignal } from "../../lib/structure-radar/state-machine.ts";
+import { advanceSignal, signalId, type TrackedSignal } from "../../lib/structure-radar/state-machine.ts";
 import { BarCache } from "./bar-cache.ts";
 import { parseClosedKlineEvent } from "./binance-public.ts";
 
@@ -21,6 +21,7 @@ type Detector = (
 
 type SignalStoreBoundary = {
   get(id: string): Promise<TrackedSignal | null>;
+  list?(): Promise<TrackedSignal[]>;
   save(signal: TrackedSignal): Promise<unknown>;
 };
 
@@ -94,6 +95,20 @@ export class RadarScanner {
     }
 
     const bars = this.#cache.get(symbol, timeframe);
+    let transitioned: TrackedSignal | null = null;
+    const activeSignals = this.#store.list ? await this.#store.list() : [];
+    for (const existing of activeSignals.filter((item) =>
+      item.symbol === symbol.toUpperCase() && item.timeframe === timeframe && item.state === "CANDIDATE",
+    )) {
+      const advanced = advanceSignal(existing, [bar]);
+      if (advanced.stateVersion !== existing.stateVersion) {
+        await this.#store.save(advanced);
+        await this.#onSignal?.(advanced);
+        transitioned = advanced;
+      } else if (advanced.lastProcessedBarTime !== existing.lastProcessedBarTime) {
+        await this.#store.save(advanced);
+      }
+    }
     for (const detector of this.#detectors) {
       const candidate = await detector(bars, { symbol, timeframe });
       if (!candidate) continue;
@@ -117,6 +132,7 @@ export class RadarScanner {
       await this.#onSignal?.(signal);
       return { status: "candidate" as const, signal };
     }
+    if (transitioned) return { status: "transition" as const, signal: transitioned };
     return { status: "scanned" as const };
   }
 }

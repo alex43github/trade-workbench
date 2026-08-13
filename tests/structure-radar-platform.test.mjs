@@ -17,6 +17,8 @@ test("detects a sweep below a long platform followed by a closed-bar reclaim", a
   assert.ok(result.lowerTouches.length >= 3);
   assert.ok(result.upperTouches.length >= 3);
   assert.ok(result.invalidationPrice <= 96.8);
+  assert.ok(result.atr > 0);
+  assert.ok(result.reclaimHigh >= result.platformLower);
 });
 
 test("rejects a reclaim that arrives after three bars", async () => {
@@ -32,4 +34,11 @@ test("returns the same anchor hash when identical closed bars are replayed", asy
   const first = await detectPlatformReclaim(bars, config);
   const replay = await detectPlatformReclaim(bars.map((bar) => ({ ...bar })), config);
   assert.equal(first?.anchorHash, replay?.anchorHash);
+});
+
+test("does not emit a historical reclaim after a later unrelated bar closes", async () => {
+  const bars = makePlatformReclaimBars();
+  const last = bars.at(-1);
+  bars.push({ ...last, time: last.time + 3_600, open: 100, high: 101, low: 99.5, close: 100.2, volume: 1_000 });
+  assert.equal(await detectPlatformReclaim(bars, config), null);
 });

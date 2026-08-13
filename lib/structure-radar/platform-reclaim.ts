@@ -27,6 +27,8 @@ export type PlatformReclaimCandidate = {
   sweepIndex: number;
   reclaimIndex: number;
   invalidationPrice: number;
+  atr: number;
+  reclaimHigh: number;
 };
 
 function separatedTouches(
@@ -87,7 +89,8 @@ export async function detectPlatformReclaim(
       const platformBars = bars.slice(startIndex, sweepIndex);
       const { lower, upper } = robustEdges(platformBars);
       if (!(upper > lower)) continue;
-      const tolerance = Math.max(0.25 * atr(platformBars, 14), bars[sweepIndex - 1].close * 0.003);
+      const atrValue = atr(platformBars, 14);
+      const tolerance = Math.max(0.25 * atrValue, bars[sweepIndex - 1].close * 0.003);
       const lowerTouches = separatedTouches(platformBars, startIndex, lower, tolerance, "low", minTouchSeparation);
       const upperTouches = separatedTouches(platformBars, startIndex, upper, tolerance, "high", minTouchSeparation);
       if (lowerTouches.length < minTouches || upperTouches.length < minTouches) continue;
@@ -107,6 +110,7 @@ export async function detectPlatformReclaim(
         }
       }
       if (reclaimIndex < 0) continue;
+      if (reclaimIndex !== bars.length - 1) continue;
 
       const candidate: Omit<PlatformReclaimCandidate, "anchorHash"> = {
         symbol: config.symbol,
@@ -124,6 +128,8 @@ export async function detectPlatformReclaim(
         sweepIndex,
         reclaimIndex,
         invalidationPrice: sweep.low,
+        atr: atrValue,
+        reclaimHigh: bars[reclaimIndex].high,
       };
       if (!best || candidate.score > best.score || (candidate.score === best.score && candidate.window > best.window)) {
         best = candidate;
