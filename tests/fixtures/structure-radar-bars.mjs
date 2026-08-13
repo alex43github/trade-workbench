@@ -59,3 +59,37 @@ export function makePlatformReclaimBars({ reclaimDelay = 1, reclaim = true } = {
   };
   return [...platform, sweep, ...waiting, reclaimBar];
 }
+
+export function makeTrendlineBreakoutBars({
+  volumeMultiplier = 1.8,
+  wickOnly = false,
+  flat = false,
+  unconfirmedThird = false,
+} = {}) {
+  const startTime = 1_720_000_000;
+  const triggerIndex = 50;
+  const pivotIndexes = unconfirmedThird ? [8, 24, 48] : [8, 24, 40];
+  const pivotPrices = flat ? [106, 106, 106] : unconfirmedThird ? [110, 106, 100] : [110, 106, 102];
+  const bars = Array.from({ length: triggerIndex }, (_, index) => {
+    const pivotAt = pivotIndexes.indexOf(index);
+    return {
+      time: startTime + index * 3_600,
+      open: 94.2,
+      high: pivotAt >= 0 ? pivotPrices[pivotAt] : 95,
+      low: 93,
+      close: 94,
+      volume: 1_000 + (index % 4) * 20,
+      closed: true,
+    };
+  });
+  bars.push({
+    time: startTime + triggerIndex * 3_600,
+    open: 96.8,
+    high: 101,
+    low: 96.4,
+    close: wickOnly ? 97 : 100.2,
+    volume: 1_030 * volumeMultiplier,
+    closed: true,
+  });
+  return bars;
+}
