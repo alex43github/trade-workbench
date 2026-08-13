@@ -1,0 +1,139 @@
+//@version=6
+indicator("Strong Coin Structure Radar / 强势币结构雷达", shorttitle="结构雷达", overlay=true, max_lines_count=30, max_labels_count=100)
+
+groupStructure = "结构参数（与本地扫描器 v1 对齐）"
+platformWindowChoice = input.string("48", "平台窗口", options=["48", "96", "168"], group=groupStructure)
+platformWindow = platformWindowChoice == "48" ? 48 : platformWindowChoice == "96" ? 96 : 168
+minTouches = input.int(3, "每侧最少触点", minval=2, maxval=8, group=groupStructure)
+touchSeparation = input.int(3, "触点最小间隔", minval=1, maxval=12, group=groupStructure)
+reclaimBars = input.int(3, "假跌破最多收回 K 数", minval=1, maxval=6, group=groupStructure)
+pivotLeft = input.int(2, "Pivot 左侧 K 数", minval=1, maxval=10, group=groupStructure)
+pivotRight = input.int(3, "Pivot 右侧确认 K 数", minval=1, maxval=10, group=groupStructure) // pivot confirmation default: 3
+volumeMultiple = input.float(1.5, "突破量 / 20 根中位量", minval=1.0, step=0.1, group=groupStructure)
+confirmBars = input.int(6, "候选确认有效期", minval=1, maxval=12, group=groupStructure)
+
+groupDisplay = "显示"
+showPlatform = input.bool(true, "平台假跌破收回", group=groupDisplay)
+showTrendline = input.bool(true, "下降趋势线放量突破", group=groupDisplay)
+showVolumeLabel = input.bool(true, "显示突破量比", group=groupDisplay)
+
+groupPlan = "Bark 计划线（手动填入）"
+manualEntry = input.float(0.0, "Entry / 入场", minval=0.0, group=groupPlan)
+manualStop = input.float(0.0, "Stop / 止损", minval=0.0, group=groupPlan)
+manualTarget1 = input.float(0.0, "Target 1 / 目标一", minval=0.0, group=groupPlan)
+manualTarget2 = input.float(0.0, "Target 2 / 目标二", minval=0.0, group=groupPlan)
+
+atr14 = ta.atr(14)
+platformTolerance = math.max(0.25 * atr14, close * 0.003)
+trendTolerance = math.max(0.20 * atr14, close * 0.0025)
+volumeMedian20 = ta.median(volume[1], 20)
+volumeRatio = volumeMedian20 > 0 ? volume / volumeMedian20 : 0.0
+
+// 用触发 K 之前窗口的稳健分位近似本地多触点平台边界；本地服务保存的结构快照为通知依据。
+platformLower = ta.percentile_nearest_rank(low[1], platformWindow, 12)
+platformUpper = ta.percentile_nearest_rank(high[1], platformWindow, 88)
+
+countSeparatedTouches(float boundary, bool upper) =>
+    int count = 0
+    int lastOffset = -10000
+    for offset = 1 to platformWindow
+        float value = upper ? high[offset] : low[offset]
+        if math.abs(value - boundary) <= platformTolerance and math.abs(offset - lastOffset) >= touchSeparation
+            count += 1
+            lastOffset := offset
+    count
+
+lowerTouches = bar_index > platformWindow ? countSeparatedTouches(platformLower, false) : 0
+upperTouches = bar_index > platformWindow ? countSeparatedTouches(platformUpper, true) : 0
+platformReady = lowerTouches >= minTouches and upperTouches >= minTouches and platformUpper > platformLower
+
+var int sweepAge = na
+var float sweepLow = na
+newSweep = showPlatform and platformReady and low < platformLower - platformTolerance * 0.25 and low[1] >= platformLower - platformTolerance * 0.25
+if newSweep
+    sweepAge := 0
+    sweepLow := low
+else if not na(sweepAge)
+    sweepAge += 1
+    sweepLow := math.min(sweepLow, low)
+    if sweepAge > reclaimBars
+        sweepAge := na
+        sweepLow := na
+
+platformCandidate = showPlatform and barstate.isconfirmed and not na(sweepAge) and sweepAge <= reclaimBars and close > platformLower and math.max(open, close) > platformLower
+if platformCandidate
+    sweepAge := na
+
+var int platformCandidateBar = na
+var float platformInvalidation = na
+if platformCandidate
+    platformCandidateBar := bar_index
+    platformInvalidation := sweepLow
+platformConfirmWindow = not na(platformCandidateBar) and bar_index > platformCandidateBar and bar_index - platformCandidateBar <= confirmBars
+platformRetest = platformConfirmWindow and low <= platformLower + platformTolerance and close > platformLower + platformTolerance and low > platformInvalidation
+platformDisplacement = platformConfirmWindow and math.abs(close - open) >= 0.75 * atr14 and close > high[1]
+platformConfirmed = barstate.isconfirmed and (platformRetest or platformDisplacement)
+platformInvalidated = barstate.isconfirmed and not na(platformCandidateBar) and (low <= platformInvalidation or close < platformLower - platformTolerance)
+if platformConfirmed or platformInvalidated or (not na(platformCandidateBar) and bar_index - platformCandidateBar > confirmBars)
+    platformCandidateBar := na
+
+// 最近三个已确认 pivot high：第一与第三作为锚点，中间 pivot 验证触达。
+pivotHigh = ta.pivothigh(high, pivotLeft, pivotRight)
+var int pivotIndex1 = na
+var int pivotIndex2 = na
+var int pivotIndex3 = na
+var float pivotPrice1 = na
+var float pivotPrice2 = na
+var float pivotPrice3 = na
+if not na(pivotHigh)
+    pivotIndex1 := pivotIndex2
+    pivotPrice1 := pivotPrice2
+    pivotIndex2 := pivotIndex3
+    pivotPrice2 := pivotPrice3
+    pivotIndex3 := bar_index - pivotRight
+    pivotPrice3 := pivotHigh
+
+anchorsReady = not na(pivotIndex1) and not na(pivotIndex3) and pivotIndex3 - pivotIndex1 >= 5 and pivotPrice3 < pivotPrice1
+slope = anchorsReady ? (pivotPrice3 - pivotPrice1) / (pivotIndex3 - pivotIndex1) : na
+trendNow = anchorsReady ? pivotPrice1 + slope * (bar_index - pivotIndex1) : na
+middleProjection = anchorsReady ? pivotPrice1 + slope * (pivotIndex2 - pivotIndex1) : na
+extraTouch = anchorsReady and math.abs(pivotPrice2 - middleProjection) <= trendTolerance
+trendCandidate = showTrendline and barstate.isconfirmed and anchorsReady and extraTouch and close > trendNow + trendTolerance and math.max(open, close) > trendNow + trendTolerance and volumeRatio >= volumeMultiple
+
+var int trendCandidateBar = na
+var float trendBreakoutHigh = na
+if trendCandidate
+    trendCandidateBar := bar_index
+    trendBreakoutHigh := high
+trendConfirmWindow = not na(trendCandidateBar) and bar_index > trendCandidateBar and bar_index - trendCandidateBar <= confirmBars
+trendRetest = trendConfirmWindow and low <= trendNow + trendTolerance and close > trendNow + trendTolerance
+trendContinuation = trendConfirmWindow and close > trendBreakoutHigh and close - close[bar_index - trendCandidateBar] >= atr14
+trendConfirmed = barstate.isconfirmed and (trendRetest or trendContinuation)
+trendInvalidated = barstate.isconfirmed and not na(trendCandidateBar) and close < trendNow - trendTolerance
+if trendConfirmed or trendInvalidated or (not na(trendCandidateBar) and bar_index - trendCandidateBar > confirmBars)
+    trendCandidateBar := na
+
+plot(showPlatform and platformReady ? platformLower : na, "平台下沿", color=color.new(color.lime, 15), linewidth=1, style=plot.style_linebr)
+plot(showPlatform and platformReady ? platformUpper : na, "平台上沿", color=color.new(color.lime, 55), linewidth=1, style=plot.style_linebr)
+plot(showTrendline and anchorsReady ? trendNow : na, "自动下降趋势线", color=color.new(color.red, 10), linewidth=2, style=plot.style_linebr)
+
+plotshape(platformCandidate, "平台收回候选", shape.labelup, location.belowbar, color=color.orange, text="收回候选", textcolor=color.white, size=size.tiny)
+plotshape(platformConfirmed, "平台收回确认", shape.labelup, location.belowbar, color=color.lime, text="收回确认", textcolor=color.black, size=size.tiny)
+plotshape(trendCandidate, "趋势线突破候选", shape.labelup, location.belowbar, color=color.rgb(143, 103, 245), text="突破候选", textcolor=color.white, size=size.tiny)
+plotshape(trendConfirmed, "趋势线突破确认", shape.labelup, location.belowbar, color=color.aqua, text="突破确认", textcolor=color.black, size=size.tiny)
+plotshape(platformInvalidated or trendInvalidated, "结构失效", shape.labeldown, location.abovebar, color=color.red, text="失效", textcolor=color.white, size=size.tiny)
+
+if trendCandidate and showVolumeLabel
+    label.new(bar_index, high, "量比 " + str.tostring(volumeRatio, "#.##") + "x", style=label.style_label_down, color=color.new(color.purple, 15), textcolor=color.white, size=size.tiny)
+
+plot(manualEntry > 0 ? manualEntry : na, "Manual Entry", color=color.yellow, linewidth=2, style=plot.style_linebr)
+plot(manualStop > 0 ? manualStop : na, "Manual Stop", color=color.red, linewidth=2, style=plot.style_linebr)
+plot(manualTarget1 > 0 ? manualTarget1 : na, "Manual Target 1", color=color.aqua, linewidth=1, style=plot.style_linebr)
+plot(manualTarget2 > 0 ? manualTarget2 : na, "Manual Target 2", color=color.blue, linewidth=1, style=plot.style_linebr)
+
+alertcondition(platformCandidate, "平台假跌破收回候选", "{{ticker}} {{interval}} 平台假跌破收回候选")
+alertcondition(platformConfirmed, "平台假跌破收回确认", "{{ticker}} {{interval}} 平台假跌破收回确认")
+alertcondition(trendCandidate, "下降趋势线放量突破候选", "{{ticker}} {{interval}} 下降趋势线放量突破候选")
+alertcondition(trendConfirmed, "下降趋势线放量突破确认", "{{ticker}} {{interval}} 下降趋势线放量突破确认")
+alertcondition(platformInvalidated or trendInvalidated, "结构失效", "{{ticker}} {{interval}} 结构失效")
+
