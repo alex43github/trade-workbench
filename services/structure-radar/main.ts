@@ -4,7 +4,7 @@ import { createReadonlyAccountClient } from "./binance-readonly-account.ts";
 import { fetchClosedKlines, listUsdtPerpetuals } from "./binance-public.ts";
 import { loadRadarConfig } from "./config.ts";
 import { createRadarHttpServer, listenRadarHttpServer } from "./http-server.ts";
-import { RadarOrchestrator, runFourExpertConsultation } from "./orchestrator.ts";
+import { RadarOrchestrator, runFourExpertConsultation, type ProcessSignal } from "./orchestrator.ts";
 import { RadarRepository } from "./radar-repository.ts";
 import { bootstrapMarket } from "./runtime.ts";
 import { RadarScanner } from "./scanner.ts";
@@ -24,7 +24,7 @@ const bark = new BarkClient({
 });
 const positionFirstSeen = new Map<string, number>();
 
-async function readPosition(signal: any) {
+async function readPosition(signal: ProcessSignal) {
   const apiKey = process.env.BINANCE_FUTURES_API_KEY;
   const secret = process.env.BINANCE_FUTURES_API_SECRET;
   const now = Math.floor(Date.now() / 1_000);
@@ -51,7 +51,7 @@ async function readPosition(signal: any) {
       symbol: signal.symbol,
       direction: "LONG",
       candidateAt: signal.detectedAt,
-      confirmedAt: signal.state === "CONFIRMED" ? signal.lastProcessedBarTime : null,
+      confirmedAt: signal.state === "CONFIRMED" ? signal.lastProcessedBarTime ?? null : null,
     }, { connected: true, observedAt: now, positions }, now);
     return { ...classified, ...(classified.position ?? {}) };
   } catch {
@@ -70,8 +70,7 @@ const orchestrator = new RadarOrchestrator({
   notifier: bark,
 });
 
-let scanner: RadarScanner;
-scanner = new RadarScanner({
+const scanner = new RadarScanner({
   cache,
   detectors: [
     (bars, context) => detectPlatformReclaim(bars, { ...context }),
@@ -82,8 +81,9 @@ scanner = new RadarScanner({
   onSignal: async (signal) => {
     const bars = cache.get(signal.symbol, signal.timeframe);
     const latest = bars.at(-1);
-    if (!latest || !["CANDIDATE", "CONFIRMED", "INVALIDATED"].includes(signal.state)) return;
-    await orchestrator.processCandidate({ ...signal, close: latest.close, mode: "live" }, {
+    if (!latest || (signal.state !== "CANDIDATE" && signal.state !== "CONFIRMED" && signal.state !== "INVALIDATED")) return;
+    const processSignal: ProcessSignal = { ...signal, state: signal.state, close: latest.close, mode: "live" };
+    await orchestrator.processCandidate(processSignal, {
       symbol: signal.symbol,
       timeframe: signal.timeframe,
       setup: signal.setup,

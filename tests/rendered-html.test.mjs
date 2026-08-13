@@ -104,3 +104,25 @@ test("falls back to the explainable discipline reviewer without an OpenAI key", 
   assert.equal(payload.mode, "rules");
   assert.equal(payload.review.action, "ALLOW_PAPER");
 });
+
+test("server-renders the strong coin structure radar", async () => {
+  const response = await request("/structure-radar");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /强势币结构雷达/);
+  assert.match(html, /平台假跌破收回/);
+  assert.match(html, /下降趋势线放量突破/);
+  assert.match(html, /15m.*1h.*4h/s);
+  assert.match(html, /ICT.*街哥.*静心.*bit浪浪/s);
+  assert.match(html, /只读持仓/);
+  assert.match(html, /不会自动下单/);
+});
+
+test("structure radar API reports a disconnected daemon without demo signals", async () => {
+  const response = await request("/api/structure-radar", { headers: { accept: "application/json" } });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.connected, false);
+  assert.deepEqual(payload.signals, []);
+  assert.equal(payload.mode, "disconnected");
+});

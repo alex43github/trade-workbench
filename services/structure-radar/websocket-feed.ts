@@ -1,7 +1,7 @@
 import { BINANCE_FUTURES_STREAM } from "./config.ts";
 
 type SocketLike = {
-  addEventListener(type: "open" | "message" | "close" | "error", callback: (event: any) => void): void;
+  addEventListener(type: "open" | "message" | "close" | "error", callback: (event: unknown) => void): void;
   close(): void;
 };
 
@@ -44,7 +44,8 @@ export class KlineWebSocketFeed {
     });
     socket.addEventListener("message", (event) => {
       try {
-        const value = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        const data = event && typeof event === "object" && "data" in event ? event.data : event;
+        const value = typeof data === "string" ? JSON.parse(data) : data;
         void this.#options.onEvent(value);
       } catch {
         this.#options.onStatus?.({ batch: batchIndex, state: "error", attempt });

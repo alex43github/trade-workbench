@@ -1,4 +1,4 @@
-import { arbitrateR4 } from "../../lib/structure-radar/expert-consensus.ts";
+import { arbitrateR4, type ConsensusResult } from "../../lib/structure-radar/expert-consensus.ts";
 import { EXPERT_IDS, type ExpertDecision, type ExpertId, type ExpertRound } from "../../lib/structure-radar/expert-types.ts";
 import { buildNotification } from "../../lib/structure-radar/notification-policy.ts";
 import { runExpertRound } from "./expert-runner.ts";
@@ -56,17 +56,45 @@ type Repository = {
   saveEnrichedSignal(value: unknown): Promise<void>;
 };
 
+export type ProcessSignal = Record<string, unknown> & {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  setup: "PLATFORM_RECLAIM" | "TRENDLINE_BREAKOUT";
+  state: "CANDIDATE" | "CONFIRMED" | "ADD_CANDIDATE" | "TAKE_PROFIT_WATCH" | "INVALIDATED";
+  stateVersion: number;
+  detectedAt: number;
+  mode: "live" | "demo" | "fixture";
+  close: number;
+  lastProcessedBarTime?: number;
+};
+
+type Consultation = {
+  r1: ExpertDecision[];
+  r2: ExpertDecision[];
+  r3: ExpertDecision[];
+  consensus: ConsensusResult;
+};
+
+type PositionSnapshot = Record<string, unknown> & {
+  state: string;
+  side?: "LONG" | "SHORT";
+  entryPrice?: number;
+};
+
+type NotificationMessage = { key: string; title: string; body: string; group: string };
+
 export class RadarOrchestrator {
   readonly #repository: Repository;
-  readonly #consult: (signal: unknown, snapshot: unknown) => Promise<any>;
-  readonly #readPosition: (signal: unknown) => Promise<any>;
-  readonly #notifier: { sendOnce(message: any): Promise<any> };
+  readonly #consult: (signal: ProcessSignal, snapshot: Record<string, unknown>) => Promise<Consultation>;
+  readonly #readPosition: (signal: ProcessSignal) => Promise<PositionSnapshot>;
+  readonly #notifier: { sendOnce(message: NotificationMessage): Promise<unknown> };
 
   constructor(options: {
     repository: Repository;
-    consult: (signal: unknown, snapshot: unknown) => Promise<any>;
-    readPosition: (signal: unknown) => Promise<any>;
-    notifier: { sendOnce(message: any): Promise<any> };
+    consult: (signal: ProcessSignal, snapshot: Record<string, unknown>) => Promise<Consultation>;
+    readPosition: (signal: ProcessSignal) => Promise<PositionSnapshot>;
+    notifier: { sendOnce(message: NotificationMessage): Promise<unknown> };
   }) {
     this.#repository = options.repository;
     this.#consult = options.consult;
@@ -74,15 +102,14 @@ export class RadarOrchestrator {
     this.#notifier = options.notifier;
   }
 
-  async processCandidate(signal: any, marketSnapshot: any) {
+  async processCandidate(signal: ProcessSignal, marketSnapshot: Record<string, unknown> & { close?: number }) {
     const consultation = await this.#consult(signal, marketSnapshot);
     await this.#repository.saveConsultation({ signalId: signal.id, ...consultation });
     const position = await this.#readPosition(signal);
-    const enriched = { ...signal, close: signal.close ?? marketSnapshot.close, consultation, position };
+    const enriched = { ...signal, consultation, position };
     await this.#repository.saveEnrichedSignal(enriched);
     const message = buildNotification(enriched, consultation.consensus, position);
     const delivery = message ? await this.#notifier.sendOnce(message) : { status: "suppressed" };
     return { status: "complete" as const, consensus: consultation.consensus, position, delivery };
   }
 }
-

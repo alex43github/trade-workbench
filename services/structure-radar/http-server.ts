@@ -1,6 +1,6 @@
 type Repository = {
-  list(): Promise<any[]>;
-  get(id: string): Promise<any | null>;
+  list(): Promise<Array<Record<string, unknown> & { symbol?: unknown; state?: unknown; setup?: unknown; timeframe?: unknown }>>;
+  get(id: string): Promise<Record<string, unknown> | null>;
 };
 
 type RadarApiOptions = {

@@ -201,7 +201,7 @@ export default function Home() {
     <main className="app-shell radar-terminal" data-theme={resolvedTheme}>
       <aside className="radar-sidebar">
         <a className="radar-brand" href="#top"><span>街</span><div><strong>街灯终端</strong><small>STREETLIGHT</small></div></a>
-        <nav><a className="active" href="#radar"><b>◎</b>妖币雷达</a><a href="/trade"><b>⌁</b>合约交易</a><a href="#method"><b>◇</b>判断方法</a><a href="/trade#trade-knowledge"><b>◫</b>操作知识库</a><a href="/settings"><b>⚙</b>连接设置</a></nav>
+        <nav><a className="active" href="#radar"><b>◎</b>妖币雷达</a><a href="/structure-radar"><b>⌁</b>结构雷达</a><a href="/trade"><b>◇</b>合约交易</a><a href="#method"><b>△</b>判断方法</a><a href="/trade#trade-knowledge"><b>◫</b>操作知识库</a><a href="/settings"><b>⚙</b>连接设置</a></nav>
         <div className="radar-sidebar-foot"><i className={data?.mode === "live" ? "connected" : ""} /><div><strong>{data?.mode === "live" ? "数据源实时" : data?.mode === "hybrid" ? "部分数据实时" : "当前演示模式"}</strong><small>{data ? relativeTime(data.updatedAt) : "连接中"}</small></div></div>
       </aside>
       <div className="radar-app-main">
