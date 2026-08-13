@@ -161,7 +161,7 @@ export async function ensureAdvisorySchema() {
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS job_runs (
       id TEXT PRIMARY KEY NOT NULL, job_type TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
-      status TEXT NOT NULL, stage TEXT NOT NULL, error TEXT,
+      status TEXT NOT NULL, stage TEXT NOT NULL, lease_token TEXT, error TEXT,
       started_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, completed_at TEXT
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS advisory_settings (

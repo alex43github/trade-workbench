@@ -38,14 +38,14 @@ export async function runPostConsensus(db: D1Database, result: ConsultationResul
         barkBaseUrl: process.env.BARK_BASE_URL, store: d1DeliveryStore(db),
       });
       if (bark.status === "FAILED") {
-        await failJobRun(db, idempotencyKey, bark.error ?? "Bark delivery failed", "bark_retryable");
+        await failJobRun(db, idempotencyKey, claim.token!, bark.error ?? "Bark delivery failed", "bark_retryable");
         return { paper, bark, deduplicated: false, retryable: true };
       }
     }
-    await completeJobRun(db, idempotencyKey);
+    await completeJobRun(db, idempotencyKey, claim.token!);
     return { paper, bark, deduplicated: false, retryable: false };
   } catch (error) {
-    await failJobRun(db, idempotencyKey, error, "effects_failed");
+    await failJobRun(db, idempotencyKey, claim.token!, error, "effects_failed");
     throw error;
   }
 }

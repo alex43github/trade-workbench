@@ -3,11 +3,14 @@ import { MetricCard } from "./components/MetricCard";
 import { StatusBadge } from "./components/StatusBadge";
 import { getDashboardSnapshot } from "@/lib/advisory/store";
 import styles from "./advisory.module.css";
+import { getSquareIntelligenceSummary } from "@/lib/radar/server";
+import squareStyles from "./square-brief.module.css";
 
 function money(value: number) { return `${value.toFixed(2)} USDT`; }
 
 export default async function AdvisoryDashboard() {
   const data = await getDashboardSnapshot();
+  const square = await getSquareIntelligenceSummary();
   return <AdvisoryShell active="/" title="AI 交易驾驶舱" eyebrow="DAILY MARKET COUNCIL / UTC CLOSE">
     <section className={styles.notice}><b>{data.mode === "demo" ? "DEMO" : "LIVE"}</b><p>{data.warning}</p><a href="/settings">查看数据连接 →</a></section>
     <section className={styles.heroGrid}>
@@ -29,6 +32,7 @@ export default async function AdvisoryDashboard() {
       <MetricCard label="方向分歧" value="1" note="2多对2空只做预警" tone="warning" />
       <MetricCard label="真实下单" value="LOCKED" note="Decision API 尚未开放" tone="negative" />
     </section>
+    <section className={squareStyles.brief}><div><small>BINANCE SQUARE / LIVE INTELLIGENCE</small><h2>市场现在最热，以及谁在看空扛单。</h2><p>热度用于发现，空头拥挤用于强烈建议立即研究；任何信号都不会自动触发专家或模拟开仓。</p></div><article><span>讨论最多</span><strong>{square.hot?.displayName ?? "等待广场数据"}</strong><small>{square.hot ? `${square.hot.mentionCount} 条提及 · 热度变化 ${square.hot.heatChange.toFixed(0)}%` : "采集服务未返回有效样本"}</small></article><article className={squareStyles.crowding}><span>空头扛单候选</span><strong>{square.crowding?.displayName ?? "暂无高可信候选"}</strong><small>{square.crowding ? `拥挤评分 ${square.crowding.shortCrowding?.score ?? 0}/100 · 看空 ${square.crowding.shortCallRatio.toFixed(0)}%` : "等待看空、抗跌与OI共振"}</small><a href="/radar">查看完整证据 →</a></article></section>
     <section className={styles.section}><div className={styles.sectionHead}><div><small>MARKET BOARD</small><h2>四币共识</h2></div><a href="/consultations">全部会诊 →</a></div>
       <div className={styles.symbolGrid}>{data.symbols.map((item) => <article key={item.symbol} className={styles.symbolCard}><div><span>{item.displaySymbol}</span><StatusBadge tone={item.direction === "LONG" ? "good" : "muted"}>{item.strength}</StatusBadge></div><strong>{item.direction === "LONG" ? "偏多" : item.direction === "SHORT" ? "偏空" : "观望"}</strong><p>{item.summary}</p></article>)}</div>
     </section>

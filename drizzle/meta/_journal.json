@@ -36,6 +36,13 @@
       "when": 1786614314530,
       "tag": "0004_whole_psynapse",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786614476959,
+      "tag": "0005_mean_earthquake",
+      "breakpoints": true
     }
   ]
 }

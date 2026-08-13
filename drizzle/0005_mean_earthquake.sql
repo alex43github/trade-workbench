@@ -1,0 +1,1 @@
+ALTER TABLE `job_runs` ADD `lease_token` text;

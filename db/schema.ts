@@ -189,7 +189,7 @@ export const notificationDeliveries = sqliteTable("notification_deliveries", {
 
 export const jobRuns = sqliteTable("job_runs", {
   id: text("id").primaryKey(), jobType: text("job_type").notNull(), idempotencyKey: text("idempotency_key").notNull().unique(),
-  status: text("status").notNull(), stage: text("stage").notNull(), error: text("error"),
+  status: text("status").notNull(), stage: text("stage").notNull(), leaseToken: text("lease_token"), error: text("error"),
   startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`), completedAt: text("completed_at"),
 });
 

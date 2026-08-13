@@ -6,16 +6,20 @@ import { createD1ConsultationRepository } from "./persistence.ts";
 import { runPostConsensus } from "./post-consensus.ts";
 import { claimJobRun, completeJobRun, failJobRun } from "./jobs.ts";
 
+export function dailyConsultationKey(analysisDate: string, symbol: string) { return `daily:${analysisDate}:${symbol}`; }
+
 export async function runDailyAdvisoryJob(db: D1Database, symbols: readonly string[] = CORE_SYMBOLS) {
   const repository = createD1ConsultationRepository(db);
   const results: Array<{ symbol: string; analysisDate?: string; status: "COMPLETED" | "FAILED" | "IN_PROGRESS"; result?: ConsultationResult; effects?: unknown; error?: string }> = [];
   for (const symbol of symbols) {
     let jobKey: string | undefined;
+    let leaseToken: string | undefined;
     try {
       const snapshot = await buildClosedMarketSnapshot(symbol);
       const analysisDate = marketAnalysisDate(snapshot);
-      jobKey = `daily:${analysisDate}:${symbol}:${snapshot.snapshotHash}`;
+      jobKey = dailyConsultationKey(analysisDate, symbol);
       const claim = await claimJobRun(db, { type: "DAILY_CONSULTATION", key: jobKey, stage: "expert_council" });
+      leaseToken = claim.token;
       if (!claim.acquired) {
         if (claim.status === "RUNNING") { results.push({ symbol, analysisDate, status: "IN_PROGRESS" }); continue; }
         const existing = await repository.get(jobKey);
@@ -28,11 +32,11 @@ export async function runDailyAdvisoryJob(db: D1Database, symbols: readonly stri
         symbol, analysisDate, idempotencyKey: jobKey,
         snapshotBuilder: async () => snapshot, expertRunner: runExpertRound, repository,
       });
-      await completeJobRun(db, jobKey, "consultation_saved");
+      await completeJobRun(db, jobKey, leaseToken!, "consultation_saved");
       const effects = await runPostConsensus(db, result);
       results.push({ symbol, analysisDate, status: "COMPLETED", result, effects });
     } catch (error) {
-      if (jobKey) await failJobRun(db, jobKey, error, "consultation_failed");
+      if (jobKey && leaseToken) await failJobRun(db, jobKey, leaseToken, error, "consultation_failed");
       results.push({ symbol, status: "FAILED", error: error instanceof Error ? error.message : "daily job failed" });
     }
   }

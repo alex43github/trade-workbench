@@ -19,6 +19,8 @@ type RadarCoin = {
   heatScore: number;
   heatChange: number;
   mentionCount: number;
+  authorCount?: number;
+  relativeBtc4h?: number;
   crowdMood: CrowdMood;
   shortCallRatio: number;
   trappedRatio: number;
@@ -44,6 +46,7 @@ type RadarCoin = {
   verdict: string;
   reasons: string[];
   risks: string[];
+  shortCrowding?: { score: number; level: "INSUFFICIENT" | "WATCH" | "CANDIDATE" | "HIGH_CONFIDENCE" | "SQUEEZE_TRIGGER"; components: { sentiment: number; resilience: number; positioning: number; flow: number; trigger: number }; evidence: string[]; risks: string[] };
   coverage: {
     square: DataState;
     binanceOi: DataState;
@@ -58,6 +61,9 @@ type RadarResponse = {
   updatedAt: string;
   sourceStatus: string;
   coins: RadarCoin[];
+  hotCoins?: RadarCoin[];
+  resilientCoins?: RadarCoin[];
+  shortCrowding?: RadarCoin[];
 };
 
 type Filter = "all" | "squeeze" | "candidate" | "concentrated" | "risk";
@@ -251,6 +257,12 @@ export default function Home() {
         </div>
       )}
 
+      <section className="square-intel-strip" aria-label="币安广场情报摘要">
+        <article><span>当前热议第一</span><strong>{data?.hotCoins?.[0]?.displayName ?? "等待数据"}</strong><small>{data?.hotCoins?.[0] ? `${data.hotCoins[0].mentionCount} 条提及 · 热度 ${formatPercent(data.hotCoins[0].heatChange, 0)}` : "连接广场后显示"}</small></article>
+        <article><span>看空但抗跌</span><strong>{data?.resilientCoins?.[0]?.displayName ?? "暂无达标"}</strong><small>{data?.resilientCoins?.[0] ? `看空 ${data.resilientCoins[0].shortCallRatio.toFixed(0)}% · 相对BTC ${formatPercent(data.resilientCoins[0].relativeBtc4h ?? 0, 1)}` : "需要65%看空与有效样本"}</small></article>
+        <article className="strong-research"><span>强烈建议研究</span><strong>{data?.shortCrowding?.[0]?.displayName ?? "暂无高可信扛单币"}</strong><small>{data?.shortCrowding?.[0] ? `空头拥挤 ${data.shortCrowding[0].shortCrowding?.score ?? 0}/100 · 不代表直接买入` : "等待舆情、OI与抗跌共振"}</small></article>
+      </section>
+
       <section className="workspace" id="radar">
         <div className="radar-panel">
           <div className="section-heading">
@@ -338,6 +350,8 @@ export default function Home() {
             {(selectedCoin.crowdMood === "SHORT_CROWD" || selectedCoin.crowdMood === "TRAPPED") &&
               <div className="contrarian-card"><span>反向情绪观察</span><strong>{crowdCopy[selectedCoin.crowdMood].label}</strong>
                 <p>若价格继续抗跌、OI增加且主动卖盘无法压低价格，才升级为逼空候选。情绪本身不能证明方向。</p></div>}
+
+            {selectedCoin.shortCrowding && selectedCoin.shortCrowding.level !== "INSUFFICIENT" && <div className="crowding-score-card"><span>SHORT CROWDING SCORE</span><strong>{selectedCoin.shortCrowding.score}<small>/100</small></strong><p>{selectedCoin.shortCrowding.level === "SQUEEZE_TRIGGER" ? "挤压触发候选" : selectedCoin.shortCrowding.level === "HIGH_CONFIDENCE" ? "高可信空头扛单" : selectedCoin.shortCrowding.level === "CANDIDATE" ? "空头拥挤候选" : "普通观察"}</p><div>{Object.entries(selectedCoin.shortCrowding.components).map(([key,value]) => <i key={key}><b>{value}</b>{key}</i>)}</div></div>}
 
             <div className="evidence-grid">
               <div><span>喊空占比</span><strong>{selectedCoin.shortCallRatio ? `${selectedCoin.shortCallRatio.toFixed(0)}%` : "—"}</strong></div>

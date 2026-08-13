@@ -1,3 +1,5 @@
+import { scoreShortCrowding } from "@/lib/radar/short-crowding";
+
 type PlainObject = Record<string, unknown>;
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
 type CrowdMood = "SHORT_CROWD" | "TRAPPED" | "CHASE_LONG" | "MIXED" | "UNKNOWN";
@@ -15,6 +17,13 @@ type RadarCoin = {
   heatScore: number;
   heatChange: number;
   mentionCount: number;
+  authorCount?: number;
+  bullishRatio?: number;
+  neutralRatio?: number;
+  relativeBtc4h?: number;
+  maxDrawdown24h?: number;
+  shortLiquidations1h?: number;
+  breakoutScore?: number;
   crowdMood: CrowdMood;
   shortCallRatio: number;
   trappedRatio: number;
@@ -47,9 +56,10 @@ type RadarCoin = {
     chips: DataState;
     chain: DataState;
   };
+  shortCrowding?: ReturnType<typeof scoreShortCrowding>;
 };
 
-type RadarBase = Omit<RadarCoin, "score" | "participation" | "setupTags" | "verdict" | "reasons" | "risks">;
+type RadarBase = Omit<RadarCoin, "score" | "participation" | "setupTags" | "verdict" | "reasons" | "risks" | "shortCrowding">;
 
 const BINANCE_FUTURES = "https://fapi.binance.com";
 const BINANCE_FUTURES_DATA = "https://fapi.binance.com/futures/data";
@@ -269,6 +279,13 @@ function analyze(base: RadarBase): RadarCoin {
             ? "当前命中硬风险条件。热度越高越应谨慎，不因反向情绪强行参与。"
             : "存在波动或讨论线索，但目前不足以形成可执行计划，保留观察。";
 
+  const shortCrowding = scoreShortCrowding({
+    bearishRatio: base.shortCallRatio, mentionCount: base.mentionCount, authorCount: base.authorCount ?? Math.max(0, Math.round(base.mentionCount * .35)), heatChange: base.heatChange,
+    change4h: base.change4h, relativeBtc4h: base.relativeBtc4h ?? 0, maxDrawdown24h: base.maxDrawdown24h ?? Math.max(0, -Math.min(base.change1h, base.change4h, base.change24h)), resilienceScore: base.resilienceScore,
+    oi1h: base.oi1h, oi4h: base.oi4h, fundingRate: base.fundingRate, takerRatio: base.takerRatio,
+    shortLiquidations1h: base.shortLiquidations1h ?? 0, breakoutScore: base.breakoutScore ?? Math.max(0, Math.min(100, base.resilienceScore + base.change4h * 3)),
+    squareCovered: base.coverage.square !== "pending", positionCovered: base.coverage.binanceOi !== "pending",
+  });
   return {
     ...base,
     score,
@@ -277,6 +294,7 @@ function analyze(base: RadarBase): RadarCoin {
     verdict,
     reasons: reasons.length ? reasons.slice(0, 7) : ["已进入高波动初筛池，等待更多证据"],
     risks: risks.slice(0, 7),
+    shortCrowding,
   };
 }
 
@@ -334,6 +352,13 @@ function normalizeRow(item: unknown): RadarBase | null {
     heatScore: number(firstValue(sources, ["heat_score", "heatScore", "heat", "social_score", "score"])),
     heatChange: number(firstValue(sources, ["heat_change", "heatChange", "heat_acceleration", "growth_rate"])),
     mentionCount: number(firstValue(sources, ["mention_count", "mentions", "post_count", "posts_count"])),
+    authorCount: number(firstValue(sources, ["author_count", "authors", "unique_authors", "creator_count"])),
+    bullishRatio: number(firstValue([heat, row], ["bullish_ratio", "long_call_ratio", "bull_ratio"])),
+    neutralRatio: number(firstValue([heat, row], ["neutral_ratio", "neutralRatio"])),
+    relativeBtc4h: number(firstValue(sources, ["relative_btc_4h", "relativeBtc4h", "btc_relative_strength_4h"])),
+    maxDrawdown24h: number(firstValue(sources, ["max_drawdown_24h", "maxDrawdown24h", "drawdown_24h"])),
+    shortLiquidations1h: number(firstValue(sources, ["short_liquidations_1h", "shortLiquidations1h", "short_liq_1h"])),
+    breakoutScore: number(firstValue(sources, ["breakout_score", "breakoutScore", "structure_score"])),
     crowdMood: normalizeCrowd(firstValue([heat, row], ["crowd_mood", "crowdMood", "sentiment_label"]), shortCallRatio, trappedRatio),
     shortCallRatio, trappedRatio,
     resilienceScore: number(firstValue(sources, ["resilience_score", "resilienceScore", "absorption_score"]), 50),
@@ -471,11 +496,14 @@ export async function GET() {
         .map(analyze)
         .sort((a, b) => b.score - a.score);
       if (coins.length) {
+        const hotCoins = [...coins].sort((a, b) => (b.mentionCount + b.heatChange) - (a.mentionCount + a.heatChange)).slice(0, 10);
+        const resilientCoins = coins.filter((item) => item.shortCallRatio >= 65 && (item.change4h >= 0 || (item.relativeBtc4h ?? 0) > 0)).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
+        const shortCrowding = coins.filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
         return Response.json({
           mode: "live",
           updatedAt: new Date().toISOString(),
           sourceStatus: `币安广场监控已连接 · ${coins.length} 个有效币种 · 缺失字段不参与评分`,
-          coins,
+          coins, hotCoins, resilientCoins, shortCrowding,
         }, { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
       }
     } catch {
@@ -502,5 +530,8 @@ export async function GET() {
     updatedAt: new Date().toISOString(),
     sourceStatus: baseUrl ? "外部采集暂不可用 · 已切换演示样本" : "尚未连接广场采集服务 · 当前为演示样本",
     coins: demoCoins.map(analyze).sort((a, b) => b.score - a.score),
+    hotCoins: demoCoins.map(analyze).sort((a, b) => b.mentionCount - a.mentionCount).slice(0, 10),
+    resilientCoins: demoCoins.map(analyze).filter((item) => item.shortCallRatio >= 65),
+    shortCrowding: demoCoins.map(analyze).filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")),
   }, { headers: { "cache-control": "no-store" } });
 }
