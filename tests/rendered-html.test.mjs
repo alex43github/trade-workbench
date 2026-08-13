@@ -12,18 +12,42 @@ async function request(path = "/", init = {}) {
   );
 }
 
-test("server-renders the completed Streetlight Radar product", async () => {
+test("server-renders the AI advisory command center", async () => {
   const response = await request();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+  const html = await response.text();
+  assert.match(html, /AI 交易驾驶舱/);
+  assert.match(html, /ICT/);
+  assert.match(html, /街哥/);
+  assert.match(html, /静心/);
+  assert.match(html, /bit浪浪/);
+  assert.match(html, /2\/4/);
+  assert.match(html, /仅建议/);
+  assert.match(html, /href="\/consultations"/);
+  assert.match(html, /href="\/arena"/);
+  assert.match(html, /href="\/reviews"/);
+  assert.match(html, /href="\/replay"/);
+  assert.match(html, /href="\/radar"/);
+  assert.doesNotMatch(html, /Your site is taking shape|Building your site|codex-preview/);
+});
+
+test("keeps the completed market radar at its own route", async () => {
+  const response = await request("/radar");
+  assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /街灯雷达/);
   assert.match(html, /人群在喊空/);
   assert.match(html, /高波动重点池/);
   assert.match(html, /筹码与链上验真/);
-  assert.match(html, /街灯终端/);
-  assert.match(html, /跟随系统/);
-  assert.doesNotMatch(html, /Your site is taking shape|Building your site|codex-preview/);
+});
+
+test("renders consultation arena review and replay routes", async () => {
+  for (const [path, expected] of [["/consultations", /专家会诊/], ["/arena", /模拟竞赛/], ["/reviews", /复盘与进化/], ["/replay", /盲测实验室/]]) {
+    const response = await request(path);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), expected);
+  }
 });
 
 test("server-renders the paper trading strategy lab", async () => {

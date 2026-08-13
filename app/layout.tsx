@@ -24,15 +24,15 @@ export async function generateMetadata(): Promise<Metadata> {
     origin = new URL("http://localhost:3000");
   }
   const socialImage = new URL("/og.png", origin).toString();
-  const title = "街灯雷达｜广场热度、OI与筹码情报";
-  const description = "追踪币安广场反向情绪，以Binance Futures OI、Aster持仓、筹码集中度和链上异常进行条件式确认。";
+  const title = "交易议会｜多专家 AI 行情咨询与模拟盘";
+  const description = "ICT、街哥、静心与bit浪浪四套体系的结构化会诊、模拟竞赛和可追溯复盘。只提供建议与模拟交易。";
 
   return {
     metadataBase: origin,
     title,
     description,
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title, description, type: "website", images: [{ url: socialImage, width: 1672, height: 939, alt: "街灯雷达" }] },
+    openGraph: { title, description, type: "website", images: [{ url: socialImage, width: 1672, height: 939, alt: "交易议会" }] },
     twitter: { card: "summary_large_image", title, description, images: [socialImage] },
   };
 }
