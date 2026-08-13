@@ -103,3 +103,13 @@ test("R2 prompt anonymizes peer identities", async () => {
   assert.match(prompt, /Peer A/);
   assert.doesNotMatch(prompt, /ict/i);
 });
+
+test("runner always invokes Codex in ephemeral read-only schema mode", async () => {
+  let args = [];
+  await runExpertRound({
+    expert: "street", round: "R1", skillPath: "/tmp/street/SKILL.md", marketSnapshot: { symbol: "BTCUSDT" },
+    async execute(input) { args = input.args; return JSON.stringify(decision("street", "SUPPORT", { round: "R1" })); },
+  });
+  assert.deepEqual(args.slice(0, 5), ["exec", "--ephemeral", "--sandbox", "read-only", "--output-schema"]);
+  assert.equal(args.at(-1), "-");
+});
