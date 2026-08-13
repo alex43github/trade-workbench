@@ -78,7 +78,12 @@ export class RadarScanner {
     if (append.status === "duplicate") return { status: "duplicate" as const };
     if (append.status === "gap") {
       if (!this.#backfill) {
-        return { status: "data_quality_error" as const, reason: "KLINE_GAP", ...append };
+        return {
+          status: "data_quality_error" as const,
+          reason: "KLINE_GAP",
+          expectedTime: append.expectedTime,
+          receivedTime: append.receivedTime,
+        };
       }
       const recovered = await this.#backfill(symbol, timeframe);
       if (!recovered.some((item) => item.time === bar.time)) {

@@ -34,11 +34,11 @@ export async function listUsdtPerpetuals(fetcher: PublicFetcher = fetch): Promis
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
     .filter((item) => item.status === "TRADING" && item.contractType === "PERPETUAL" && item.quoteAsset === "USDT")
     .filter((item) => item.underlyingType !== "INDEX")
-    .map((item) => ({
+    .map((item): FuturesSymbol => ({
       symbol: String(item.symbol),
-      status: "TRADING",
-      contractType: "PERPETUAL",
-      quoteAsset: "USDT",
+      status: "TRADING" as const,
+      contractType: "PERPETUAL" as const,
+      quoteAsset: "USDT" as const,
       marginAsset: String(item.marginAsset ?? "USDT"),
     }))
     .filter((item) => /^[A-Z0-9]{2,30}USDT$/.test(item.symbol))
@@ -111,4 +111,3 @@ export function parseClosedKlineEvent(value: unknown): { symbol: string; timefra
   validateClosedBars([bar]);
   return { symbol: String(data.s ?? "").toUpperCase(), timeframe, bar };
 }
-

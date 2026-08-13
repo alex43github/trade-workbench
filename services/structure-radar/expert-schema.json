@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["expert", "round", "vote", "direction", "thesis", "confidence", "entry", "stop", "targets", "management", "citations"],
+  "properties": {
+    "expert": { "enum": ["ict", "street", "jingxin", "bitlanglang"] },
+    "round": { "enum": ["R1", "R2", "R3"] },
+    "vote": { "enum": ["SUPPORT", "OPPOSE", "NEUTRAL"] },
+    "direction": { "enum": ["LONG", "SHORT", "NEUTRAL"] },
+    "thesis": { "type": "string", "minLength": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+    "entry": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "object", "additionalProperties": false, "required": ["min", "max"], "properties": { "min": { "type": "number" }, "max": { "type": "number" } } }
+      ]
+    },
+    "stop": { "type": ["number", "null"] },
+    "targets": { "type": "array", "items": { "type": "number" } },
+    "management": { "type": "array", "items": { "type": "string" } },
+    "citations": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": false, "required": ["ref", "note"], "properties": { "ref": { "type": "string" }, "note": { "type": "string" } } }
+    }
+  }
+}
+
