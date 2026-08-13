@@ -4,7 +4,8 @@ import styles from "../advisory.module.css";
 
 const nav = [
   ["/", "◫", "今日驾驶舱"], ["/consultations", "◎", "专家会诊"], ["/arena", "⌁", "模拟竞赛"],
-  ["/reviews", "◇", "复盘与进化"], ["/replay", "◌", "盲测实验室"], ["/radar", "◈", "市场雷达"], ["/settings", "⚙", "连接设置"],
+  ["/reviews", "◇", "复盘与进化"], ["/replay", "◌", "盲测实验室"], ["/radar", "◈", "市场雷达"],
+  ["/structure-radar", "△", "结构雷达"], ["/settings", "⚙", "连接设置"],
 ] as const;
 
 export function AdvisoryShell({ active, title, eyebrow, children }: { active: string; title: string; eyebrow: string; children: ReactNode }) {

@@ -11,7 +11,10 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "radar:start": "node --use-env-proxy --env-file-if-exists=.env services/structure-radar/main.ts",
+    "radar:test": "node --test tests/structure-radar-*.test.mjs",
+    "radar:check": "npm run radar:test && tsc --noEmit"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
