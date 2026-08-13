@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { buildConsensus } from "../lib/advisory/consensus.ts";
 import { validateDecision } from "../lib/advisory/validate.ts";
+import { ALLOWED_SOURCE_REFS, EXPERT_GUIDES } from "../lib/advisory/expert-guides.ts";
+import { extractResponseText } from "../lib/advisory/expert-runner.ts";
 
 function opinion(expertId, direction, overrides = {}) {
   return {
@@ -12,7 +14,7 @@ function opinion(expertId, direction, overrides = {}) {
     contextTimeframe: "1d", executionTimeframe: "4h", validUntil: "2026-08-14T00:00:00Z",
     triggerConditions: direction === "NEUTRAL" ? [] : ["4H收盘确认"],
     entryZone: direction === "NEUTRAL" ? null : { low: 100, high: 102 },
-    invalidation: direction === "NEUTRAL" ? "" : "跌破结构低点",
+    invalidation: direction === "NEUTRAL" ? "" : "跌破结构低点", stopPrice: direction === "NEUTRAL" ? null : 98,
     targets: direction === "NEUTRAL" ? [] : [108, 112], managementPlan: "分批退出",
     leverage: direction === "NEUTRAL" ? 1 : 3, marginUsdt: direction === "NEUTRAL" ? 0 : 50,
     maxLossUsdt: direction === "NEUTRAL" ? 0 : 5, expectedRr: direction === "NEUTRAL" ? 0 : 2,
@@ -25,6 +27,26 @@ function opinion(expertId, direction, overrides = {}) {
 }
 
 const ids = ["ict", "street", "jingxin", "bitlanglang"];
+
+test("each expert runtime guide preserves its own source namespace and no-trade discipline", () => {
+  assert.match(EXPERT_GUIDES.ict, /PDF-\d{3} p\./);
+  assert.doesNotMatch(EXPERT_GUIDES.ict, /JG-|JX-|BL-/);
+  assert.match(EXPERT_GUIDES.street, /JG-\d{3} @/);
+  assert.doesNotMatch(EXPERT_GUIDES.street, /PDF-|JX-|BL-/);
+  assert.match(EXPERT_GUIDES.jingxin, /JX-\d{3} @/);
+  assert.doesNotMatch(EXPERT_GUIDES.jingxin, /PDF-|JG-|BL-/);
+  assert.match(EXPERT_GUIDES.bitlanglang, /BL-\d{3} @/);
+  assert.doesNotMatch(EXPERT_GUIDES.bitlanglang, /PDF-|JG-|JX-/);
+  assert.ok(Object.values(EXPERT_GUIDES).every((guide) => /观望|不做|等待/.test(guide)));
+  assert.equal(ALLOWED_SOURCE_REFS.ict.includes("PDF-999 p.1"), false);
+  assert.equal(ALLOWED_SOURCE_REFS.street.includes("JG-999 @ 00:00:00"), false);
+});
+
+test("Responses API text parser supports both aggregate and raw message shapes", () => {
+  assert.equal(extractResponseText({ output_text: '{"ok":true}' }), '{"ok":true}');
+  assert.equal(extractResponseText({ output: [{ type: "message", content: [{ type: "output_text", text: '{"ok":true}' }] }] }), '{"ok":true}');
+  assert.equal(extractResponseText({ output: [] }), null);
+});
 
 test("validates directional geometry and leverage", () => {
   assert.equal(validateDecision(opinion("ict", "LONG")).ok, true);

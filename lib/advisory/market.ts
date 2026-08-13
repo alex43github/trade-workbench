@@ -4,6 +4,16 @@ export type MarketSnapshot = {
   timeframes: { "1d": ClosedBar[]; "4h": ClosedBar[]; "1h": ClosedBar[] };
 };
 
+export function lastClosedDailyAt(snapshot: MarketSnapshot) {
+  const closeTime = snapshot.timeframes["1d"].at(-1)?.closeTime;
+  if (!closeTime || !Number.isFinite(closeTime)) throw new Error("snapshot has no closed daily bar");
+  return new Date(closeTime).toISOString();
+}
+
+export function marketAnalysisDate(snapshot: MarketSnapshot) {
+  return lastClosedDailyAt(snapshot).slice(0, 10);
+}
+
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 function normalizeSymbol(value: string) {
@@ -44,4 +54,3 @@ export async function buildClosedMarketSnapshot(symbolInput: string, options: { 
   const canonical = JSON.stringify({ symbol, timeframes });
   return { symbol, mode: "live", source: "binance", capturedAt: new Date(now).toISOString(), snapshotHash: await sha256(canonical), timeframes };
 }
-

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const tradeKnowledge = sqliteTable("trade_knowledge", {
   id: text("id").primaryKey(),
@@ -100,11 +100,23 @@ export const experts = sqliteTable("experts", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const strategyVersions = sqliteTable("strategy_versions", {
+  id: text("id").primaryKey(), expertId: text("expert_id").notNull(), version: text("version").notNull(),
+  status: text("status").notNull(), summary: text("summary").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_strategy_versions_expert_created").on(table.expertId, table.createdAt)]);
+
+export const marketSnapshots = sqliteTable("market_snapshots", {
+  id: text("id").primaryKey(), symbol: text("symbol").notNull(), snapshotHash: text("snapshot_hash").notNull(),
+  sourceMode: text("source_mode").notNull(), quality: text("quality").notNull(), lastClosedAt: text("last_closed_at").notNull(),
+  payloadJson: text("payload_json").notNull().default("{}"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_market_snapshots_symbol_created").on(table.symbol, table.createdAt)]);
+
 export const consultations = sqliteTable("consultations", {
   id: text("id").primaryKey(), analysisDate: text("analysis_date").notNull(), symbol: text("symbol").notNull(),
   status: text("status").notNull(), marketSnapshotId: text("market_snapshot_id").notNull(),
   idempotencyKey: text("idempotency_key").notNull().unique(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  completedAt: text("completed_at"),
+  failuresJson: text("failures_json").notNull().default("[]"), completedAt: text("completed_at"),
 }, (table) => [index("idx_consultations_date_symbol").on(table.analysisDate, table.symbol)]);
 
 export const expertOpinions = sqliteTable("expert_opinions", {
@@ -113,6 +125,13 @@ export const expertOpinions = sqliteTable("expert_opinions", {
   decisionJson: text("decision_json").notNull(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_expert_opinions_consultation_round").on(table.consultationId, table.round)]);
 
+export const consensusDecisions = sqliteTable("consensus_decisions", {
+  id: text("id").primaryKey(), consultationId: text("consultation_id").notNull().unique(),
+  direction: text("direction").notNull(), strength: text("strength").notNull(),
+  pushEligible: integer("push_eligible").notNull().default(0), stateVersion: integer("state_version").notNull().default(1),
+  payloadJson: text("payload_json").notNull(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const expertAccounts = sqliteTable("expert_accounts", {
   id: text("id").primaryKey(), expertId: text("expert_id").notNull(), seasonId: text("season_id").notNull(),
   initialBalance: real("initial_balance").notNull().default(500), cashBalance: real("cash_balance").notNull().default(500),
@@ -120,6 +139,47 @@ export const expertAccounts = sqliteTable("expert_accounts", {
   maxLeverage: integer("max_leverage").notNull().default(10), status: text("status").notNull().default("ACTIVE"),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_expert_accounts_expert_season").on(table.expertId, table.seasonId)]);
+
+export const expertPositions = sqliteTable("expert_positions", {
+  id: text("id").primaryKey(), accountId: text("account_id").notNull(), consultationId: text("consultation_id"),
+  strategyVersionId: text("strategy_version_id").notNull(), symbol: text("symbol").notNull(), side: text("side").notNull(),
+  quantity: real("quantity").notNull(), entryPrice: real("entry_price").notNull(), leverage: integer("leverage").notNull(),
+  isolatedMargin: real("isolated_margin").notNull(), stopPrice: real("stop_price"), targetPrice: real("target_price"),
+  openedAt: text("opened_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_expert_positions_account_symbol").on(table.accountId, table.symbol)]);
+
+export const expertOrders = sqliteTable("expert_orders", {
+  id: text("id").primaryKey(), accountId: text("account_id").notNull(), consultationId: text("consultation_id"),
+  symbol: text("symbol").notNull(), side: text("side").notNull(), intent: text("intent").notNull(), type: text("type").notNull(),
+  triggerPrice: real("trigger_price"), quantity: real("quantity").notNull(), status: text("status").notNull(),
+  payloadJson: text("payload_json").notNull().default("{}"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), filledAt: text("filled_at"),
+}, (table) => [
+  index("idx_expert_orders_account_status").on(table.accountId, table.status),
+  uniqueIndex("uq_expert_orders_account_consultation").on(table.accountId, table.consultationId),
+]);
+
+export const expertTrades = sqliteTable("expert_trades", {
+  id: text("id").primaryKey(), accountId: text("account_id").notNull(), orderId: text("order_id").notNull(), symbol: text("symbol").notNull(),
+  price: real("price").notNull(), quantity: real("quantity").notNull(), fee: real("fee").notNull().default(0),
+  realizedPnl: real("realized_pnl").notNull().default(0), reason: text("reason").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_expert_trades_account_created").on(table.accountId, table.createdAt)]);
+
+export const expertEquitySnapshots = sqliteTable("expert_equity_snapshots", {
+  id: text("id").primaryKey(), accountId: text("account_id").notNull(), recordedAt: integer("recorded_at").notNull(), equity: real("equity").notNull(),
+}, (table) => [index("idx_expert_equity_account_recorded").on(table.accountId, table.recordedAt)]);
+
+export const reviewTasks = sqliteTable("review_tasks", {
+  id: text("id").primaryKey(), consultationId: text("consultation_id"), tradeId: text("trade_id"), reviewType: text("review_type").notNull(),
+  status: text("status").notNull(), dueAt: text("due_at"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_review_tasks_status_due").on(table.status, table.dueAt)]);
+
+export const reviewReports = sqliteTable("review_reports", {
+  id: text("id").primaryKey(), taskId: text("task_id").notNull(), expertId: text("expert_id").notNull(),
+  judgmentScore: integer("judgment_score").notNull(), executionScore: integer("execution_score").notNull(), outcomeScore: integer("outcome_score").notNull(),
+  attributionJson: text("attribution_json").notNull().default("[]"), candidateExperienceJson: text("candidate_experience_json").notNull().default("{}"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_review_reports_expert_created").on(table.expertId, table.createdAt)]);
 
 export const notificationDeliveries = sqliteTable("notification_deliveries", {
   id: text("id").primaryKey(), channel: text("channel").notNull(), dedupeKey: text("dedupe_key").notNull().unique(),

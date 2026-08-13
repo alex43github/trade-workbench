@@ -25,7 +25,7 @@ function decision(expertId: ExpertId, round: "R1" | "R2" | "R3"): DecisionContra
     direction, setupName: copy.setup, contextTimeframe: "1d", executionTimeframe: "4h", validUntil: "2026-08-14T00:00:00.000Z",
     triggerConditions: directional ? ["4H保持在突破区域上方", "1H回踩后重新收强"] : [],
     entryZone: directional ? { low: 116200, high: 117100 } : null,
-    invalidation: directional ? "4H实体重新收回原箱体" : "",
+    invalidation: directional ? "4H实体重新收回原箱体" : "", stopPrice: directional ? 114800 : null,
     targets: directional ? [120800, 124000] : [], managementPlan: directional ? "第一目标减仓，剩余仓位跟随4H结构" : "等待1H与4H右侧确认",
     leverage: directional ? 3 : 1, marginUsdt: directional ? 45 : 0, maxLossUsdt: directional ? 5 : 0, expectedRr: directional ? 2.3 : 0,
     triggerProbability: expertId === "jingxin" ? 42 : 61, winProbabilityGivenTrigger: expertId === "bitlanglang" ? 66 : expertId === "jingxin" ? 54 : 63,
@@ -55,7 +55,7 @@ export const demoConsultation = {
 };
 
 export const demoReviews = [{
-  id: "review-demo-1", expertId: "street", expertName: "街哥", symbol: "ETHUSDT", type: "DAILY", status: "COMPLETED",
+  id: "review-demo-1", mode: "demo", expertId: "street", expertName: "街哥", symbol: "ETHUSDT", type: "DAILY", status: "COMPLETED",
   title: "突破方向正确，但账户入场偏早", summary: "市场判断和结构方向基本正确，模拟账户在1H收线确认前提前进入，导致不必要回撤。",
   judgmentScore: 82, executionScore: 61, outcomeScore: 70,
   attribution: ["方向判断正确", "入场确认不足", "止损位置遵守原计划"],
@@ -74,4 +74,3 @@ export function buildDemoDashboard() {
     latestReview: demoReviews[0],
   };
 }
-

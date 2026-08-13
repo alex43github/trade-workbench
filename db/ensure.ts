@@ -100,6 +100,7 @@ export async function ensureAdvisorySchema() {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS consultations (
       id TEXT PRIMARY KEY NOT NULL, analysis_date TEXT NOT NULL, symbol TEXT NOT NULL,
       status TEXT NOT NULL, market_snapshot_id TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
+      failures_json TEXT DEFAULT '[]' NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, completed_at TEXT
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS expert_opinions (
@@ -164,9 +165,18 @@ export async function ensureAdvisorySchema() {
       started_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, completed_at TEXT
     )`),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_consultations_date_symbol ON consultations(analysis_date, symbol)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_strategy_versions_expert_created ON strategy_versions(expert_id, created_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_market_snapshots_symbol_created ON market_snapshots(symbol, created_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_opinions_consultation_round ON expert_opinions(consultation_id, round)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_accounts_expert_season ON expert_accounts(expert_id, season_id)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_positions_account_symbol ON expert_positions(account_id, symbol)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_orders_account_status ON expert_orders(account_id, status)"),
+    env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uq_expert_orders_account_consultation ON expert_orders(account_id, consultation_id)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_trades_account_created ON expert_trades(account_id, created_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_expert_equity_account_recorded ON expert_equity_snapshots(account_id, recorded_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_review_tasks_status_due ON review_tasks(status, due_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_review_reports_expert_created ON review_reports(expert_id, created_at)"),
   ]);
+  await env.DB.prepare("PRAGMA optimize").run();
   advisoryInitialized = true;
 }

@@ -25,6 +25,7 @@ export type DecisionContract = {
   triggerConditions: string[];
   entryZone: PriceZone | null;
   invalidation: string;
+  stopPrice: number | null;
   targets: number[];
   managementPlan: string;
   leverage: number;
@@ -62,4 +63,3 @@ export type ConsensusDecision = {
   disagreement: boolean;
   opposingEvidence: string[];
 };
-

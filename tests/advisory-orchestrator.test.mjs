@@ -41,7 +41,7 @@ test("orchestrator isolates R1, anonymizes R2 and keeps expert identity in R3", 
       symbol: input.snapshot.symbol, marketRegime: "trend", direction: input.expert.id === "jingxin" ? "NEUTRAL" : "LONG",
       setupName: "test", contextTimeframe: "1d", executionTimeframe: "4h", validUntil: "2026-08-14T00:00:00Z",
       triggerConditions: input.expert.id === "jingxin" ? [] : ["close confirms"], entryZone: input.expert.id === "jingxin" ? null : { low: 100, high: 101 },
-      invalidation: input.expert.id === "jingxin" ? "" : "structure breaks", targets: input.expert.id === "jingxin" ? [] : [104], managementPlan: "manage",
+      invalidation: input.expert.id === "jingxin" ? "" : "structure breaks", stopPrice: input.expert.id === "jingxin" ? null : 98, targets: input.expert.id === "jingxin" ? [] : [104], managementPlan: "manage",
       leverage: input.expert.id === "jingxin" ? 1 : 2, marginUsdt: input.expert.id === "jingxin" ? 0 : 20,
       maxLossUsdt: input.expert.id === "jingxin" ? 0 : 2, expectedRr: input.expert.id === "jingxin" ? 0 : 2,
       triggerProbability: 60, winProbabilityGivenTrigger: 61, evidenceCompleteness: 80,
@@ -73,4 +73,35 @@ test("orchestrator isolates R1, anonymizes R2 and keeps expert identity in R3", 
   });
   assert.equal(repeated.id, result.id);
   assert.equal(inputs.length, 12);
+});
+
+test("orchestrator retries one failed expert without losing a valid three-expert council", async () => {
+  const attempts = new Map();
+  const runner = async (input) => {
+    const key = `${input.round}:${input.expert.id}`;
+    attempts.set(key, (attempts.get(key) ?? 0) + 1);
+    if (input.expert.id === "jingxin") throw new Error("temporary expert failure");
+    return {
+      consultationId: input.consultationId, expertId: input.expert.id, round: input.round,
+      skillVersion: input.expert.skillVersion, snapshotHash: input.snapshot.snapshotHash,
+      symbol: input.snapshot.symbol, marketRegime: "trend", direction: "LONG", setupName: "test",
+      contextTimeframe: "1d", executionTimeframe: "4h", validUntil: "2026-08-14T00:00:00Z",
+      triggerConditions: ["close confirms"], entryZone: { low: 100, high: 101 }, invalidation: "structure breaks", stopPrice: 98, targets: [104], managementPlan: "manage",
+      leverage: 2, marginUsdt: 20, maxLossUsdt: 2, expectedRr: 2,
+      triggerProbability: 60, winProbabilityGivenTrigger: 61, evidenceCompleteness: 80,
+      supportingEvidence: ["support"], refutingEvidence: ["risk"], unknowns: [], noTradeReasons: [], sourceRefs: ["source"],
+      accountAction: { action: "OPEN", reason: "test" },
+    };
+  };
+  const result = await runDailyConsultation({
+    symbol: "BTCUSDT", analysisDate: "2026-08-13", idempotencyKey: "retry-test",
+    snapshotBuilder: async () => ({ symbol: "BTCUSDT", mode: "live", source: "binance", capturedAt: "2026-08-13T00:05:00Z", snapshotHash: "hash", timeframes: { "1d": [], "4h": [], "1h": [] } }),
+    expertRunner: runner, repository: { get: async () => undefined, save: async () => {} },
+  });
+  assert.equal(result.consensus.validOpinions, 3);
+  assert.equal(result.consensus.strength, "MEDIUM_STRONG");
+  assert.equal(result.failures.length, 3);
+  assert.equal(attempts.get("R1:jingxin"), 3);
+  assert.equal(attempts.get("R2:jingxin"), undefined);
+  assert.equal(attempts.get("R3:jingxin"), undefined);
 });

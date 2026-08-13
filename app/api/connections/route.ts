@@ -51,7 +51,7 @@ export async function GET() {
     },
     openai: {
       configured: Boolean(process.env.OPENAI_API_KEY),
-      model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+      model: process.env.OPENAI_MODEL || "gpt-5",
       message: process.env.OPENAI_API_KEY ? "AI 计划复核与专家运行器已启用" : "计划复核使用本地纪律规则；四专家实时会诊不可用",
     },
     advisory: {

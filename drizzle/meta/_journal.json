@@ -15,6 +15,20 @@
       "when": 1785853104719,
       "tag": "0001_curvy_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786594733244,
+      "tag": "0002_tiresome_the_fallen",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786601656401,
+      "tag": "0003_perfect_spencer_smythe",
+      "breakpoints": true
     }
   ]
 }

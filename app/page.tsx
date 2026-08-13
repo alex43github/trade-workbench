@@ -1,15 +1,15 @@
 import { AdvisoryShell } from "./components/AdvisoryShell";
 import { MetricCard } from "./components/MetricCard";
 import { StatusBadge } from "./components/StatusBadge";
-import { buildDemoDashboard } from "@/lib/advisory/demo";
+import { getDashboardSnapshot } from "@/lib/advisory/store";
 import styles from "./advisory.module.css";
 
 function money(value: number) { return `${value.toFixed(2)} USDT`; }
 
-export default function AdvisoryDashboard() {
-  const data = buildDemoDashboard();
+export default async function AdvisoryDashboard() {
+  const data = await getDashboardSnapshot();
   return <AdvisoryShell active="/" title="AI 交易驾驶舱" eyebrow="DAILY MARKET COUNCIL / UTC CLOSE">
-    <section className={styles.notice}><b>DEMO</b><p>{data.warning}</p><a href="/settings">配置真实专家运行器 →</a></section>
+    <section className={styles.notice}><b>{data.mode === "demo" ? "DEMO" : "LIVE"}</b><p>{data.warning}</p><a href="/settings">查看数据连接 →</a></section>
     <section className={styles.heroGrid}>
       <article className={styles.heroCard}>
         <span className={styles.kicker}>TODAY&apos;S COUNCIL</span><h2>四套体系独立判断，<br />再让证据彼此交锋。</h2>
@@ -17,8 +17,8 @@ export default function AdvisoryDashboard() {
         <div className={styles.heroActions}><a href="/consultations">查看今日会诊</a><a className={styles.secondary} href="/arena">进入模拟竞赛</a></div>
       </article>
       <article className={styles.opportunity}>
-        <div><StatusBadge tone="good">3/4 中强一致</StatusBadge><StatusBadge>演示计划</StatusBadge></div>
-        <small>TOP OPPORTUNITY</small><h3>BTC · 条件型做多</h3><p>入场区 <b>{data.topOpportunity.entryZone}</b></p>
+        <div><StatusBadge tone="good">{data.topOpportunity.strength} 一致</StatusBadge><StatusBadge>{data.topOpportunity.demo ? "演示计划" : "正式会诊"}</StatusBadge></div>
+        <small>TOP OPPORTUNITY</small><h3>{data.topOpportunity.symbol.replace("USDT", "")} · {data.topOpportunity.direction === "LONG" ? "条件型做多" : data.topOpportunity.direction === "SHORT" ? "条件型做空" : "等待"}</h3><p>入场区 <b>{data.topOpportunity.entryZone}</b></p>
         <dl><div><dt>失效</dt><dd>{data.topOpportunity.invalidation}</dd></div><div><dt>目标</dt><dd>{data.topOpportunity.targets.join(" / ")}</dd></div></dl>
         <a href="/consultations">查看证据与最强反方 →</a>
       </article>
@@ -36,6 +36,6 @@ export default function AdvisoryDashboard() {
       <div className={styles.section}><div className={styles.sectionHead}><div><small>EXPERTS</small><h2>四位专家</h2></div></div><div className={styles.expertList}>{data.experts.map((expert) => <article key={expert.id}><span style={{ background: expert.accent }}>{expert.shortName}</span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><div className={styles.expertSignal}><b>{expert.latestDirection === "NEUTRAL" ? "等待" : expert.latestDirection === "LONG" ? "偏多" : "偏空"}</b><small>P(win|触发) {expert.confidence}%</small></div></article>)}</div></div>
       <div className={styles.section}><div className={styles.sectionHead}><div><small>PAPER ARENA</small><h2>正式模拟账户</h2></div><a href="/arena">完整竞赛 →</a></div><div className={styles.accountList}>{data.accounts.map((account) => <article key={account.id}><div><strong>{account.expertName}</strong><small>500 USDT · 最高10x · 不续资</small></div><b className={account.equity >= 500 ? styles.positive : styles.negative}>{money(account.equity)}</b></article>)}</div></div>
     </section>
-    <section className={styles.section}><div className={styles.sectionHead}><div><small>REVIEW LOOP</small><h2>最近复盘</h2></div><a href="/reviews">进入复盘中心 →</a></div><article className={styles.reviewStrip}><StatusBadge tone="warn">候选经验 · 草稿</StatusBadge><div><strong>{data.latestReview.title}</strong><p>{data.latestReview.summary}</p></div><div className={styles.scoreGroup}><span>判断 {data.latestReview.judgmentScore}</span><span>执行 {data.latestReview.executionScore}</span><span>结果 {data.latestReview.outcomeScore}</span></div></article></section>
+    <section className={styles.section}><div className={styles.sectionHead}><div><small>REVIEW LOOP</small><h2>最近复盘</h2></div><a href="/reviews">进入复盘中心 →</a></div><article className={styles.reviewStrip}><StatusBadge tone="warn">演示复盘 · 草稿</StatusBadge><div><strong>{data.latestReview.title}</strong><p>{data.latestReview.summary}</p></div><div className={styles.scoreGroup}><span>判断 {data.latestReview.judgmentScore}</span><span>执行 {data.latestReview.executionScore}</span><span>结果 {data.latestReview.outcomeScore}</span></div></article></section>
   </AdvisoryShell>;
 }

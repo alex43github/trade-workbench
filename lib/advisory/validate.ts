@@ -36,9 +36,11 @@ export function validateDecision(value: unknown): ValidationResult {
   if (item.direction !== "NEUTRAL") {
     if (!isStringArray(item.triggerConditions) || item.triggerConditions.length === 0) errors.push("directional plan requires trigger conditions");
     if (!item.invalidation?.trim()) errors.push("directional plan requires invalidation");
+    if (typeof item.stopPrice !== "number" || !Number.isFinite(item.stopPrice) || item.stopPrice <= 0) errors.push("directional plan requires a numeric stop price");
     if (!item.entryZone || !Number.isFinite(item.entryZone.low) || !Number.isFinite(item.entryZone.high) || item.entryZone.low > item.entryZone.high) errors.push("directional plan requires a valid entry zone");
     if (!Array.isArray(item.targets) || item.targets.length === 0 || item.targets.some((target) => !Number.isFinite(target))) errors.push("directional plan requires targets");
   }
+  if (item.direction === "NEUTRAL" && item.stopPrice !== null) errors.push("neutral plan stop price must be null");
   if (!item.accountAction || !["OPEN", "HOLD", "CLOSE", "REDUCE"].includes(item.accountAction.action) || !item.accountAction.reason?.trim()) errors.push("valid account action is required");
   return errors.length ? { ok: false, errors } : { ok: true, value: item as DecisionContract };
 }
