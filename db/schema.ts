@@ -146,7 +146,7 @@ export const expertPositions = sqliteTable("expert_positions", {
   quantity: real("quantity").notNull(), entryPrice: real("entry_price").notNull(), leverage: integer("leverage").notNull(),
   isolatedMargin: real("isolated_margin").notNull(), stopPrice: real("stop_price"), targetPrice: real("target_price"),
   openedAt: text("opened_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("idx_expert_positions_account_symbol").on(table.accountId, table.symbol)]);
+}, (table) => [uniqueIndex("uq_expert_positions_account_symbol").on(table.accountId, table.symbol)]);
 
 export const expertOrders = sqliteTable("expert_orders", {
   id: text("id").primaryKey(), accountId: text("account_id").notNull(), consultationId: text("consultation_id"),
@@ -183,7 +183,7 @@ export const reviewReports = sqliteTable("review_reports", {
 
 export const notificationDeliveries = sqliteTable("notification_deliveries", {
   id: text("id").primaryKey(), channel: text("channel").notNull(), dedupeKey: text("dedupe_key").notNull().unique(),
-  status: text("status").notNull(), attempts: integer("attempts").notNull().default(0), error: text("error"), payloadJson: text("payload_json").notNull().default("{}"),
+  status: text("status").notNull(), attempts: integer("attempts").notNull().default(0), error: text("error"), payloadJson: text("payload_json").notNull().default("{}"), leaseToken: text("lease_token"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

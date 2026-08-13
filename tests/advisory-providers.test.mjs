@@ -42,3 +42,13 @@ test("provider failures classify manual-switch conditions", () => {
   assert.equal(classifyProviderError(402, "insufficient balance"), "QUOTA");
   assert.equal(classifyProviderError(503, "unavailable"), "TRANSIENT");
 });
+
+test("DeepSeek JSON mode explicitly requests json and caps output tokens", async () => {
+  const bodies = [];
+  await invokeStructuredModel(request, {
+    provider: "deepseek", env: { DEEPSEEK_API_KEY: "secret" },
+    fetcher: async (_url, init) => { bodies.push(JSON.parse(String(init.body))); return Response.json({ model: "deepseek-chat", choices: [{ message: { content: "{}" } }] }); },
+  });
+  assert.match(bodies[0].messages.map((item) => item.content).join(" ").toLowerCase(), /json/);
+  assert.equal(bodies[0].max_tokens, 4096);
+});

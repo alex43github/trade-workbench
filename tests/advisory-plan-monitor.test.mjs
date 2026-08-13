@@ -22,3 +22,8 @@ test("declared maximum loss must cover stop distance and both side fees", () => 
   assert.equal(rejected.ok, false);
   assert.ok(rejected.requiredLossUsdt > 20);
 });
+
+test("protective stop must be on the loss side of entry", () => {
+  assert.equal(validateStopRisk({ direction: "LONG", entryPrice: 100, stopPrice: 101, quantity: 1, maxLossUsdt: 5 }).ok, false);
+  assert.equal(validateStopRisk({ direction: "SHORT", entryPrice: 100, stopPrice: 99, quantity: 1, maxLossUsdt: 5 }).ok, false);
+});

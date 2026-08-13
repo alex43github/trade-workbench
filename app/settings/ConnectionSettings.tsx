@@ -11,7 +11,7 @@ type ConnectionStatus = {
   publicMarket: { connected: boolean; latencyMs: number; message: string };
   binancePrivate: { configured: boolean; connected: boolean; message: string };
   openai: { configured: boolean; model: string; message: string };
-  ai: { activeProvider: string; configured: boolean; model: string; message: string; providers: Array<{ id: string; name: string; configured: boolean; model: string }> };
+  ai: { activeProvider: string; configured: boolean; model: string; message: string; providers: Array<{ id: string; name: string; configured: boolean; model: string }>; alerts: Array<{ id: string; title: string; message: string; createdAt: string }>; resumableCount: number; operatorUnlocked: boolean };
   squareMonitor: { configured: boolean; message: string };
   safety: { secretsExposedToBrowser: boolean; realOrderRouteEnabled: boolean; mode: "live-paper" | "demo-paper" };
 };
@@ -31,6 +31,9 @@ export default function ConnectionSettings() {
   const [error, setError] = useState("");
   const [browserMarket, setBrowserMarket] = useState<{ connected: boolean; latencyMs: number; message: string } | null>(null);
   const [switchingProvider, setSwitchingProvider] = useState("");
+  const [resuming, setResuming] = useState(false);
+  const [operatorToken, setOperatorToken] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
 
   const switchProvider = async (provider: string) => {
     setSwitchingProvider(provider); setError("");
@@ -40,6 +43,27 @@ export default function ConnectionSettings() {
       await refresh();
     } catch { setError("模型供应商切换失败；密钥仍只在服务端配置。"); }
     finally { setSwitchingProvider(""); }
+  };
+
+  const resumeConsultations = async () => {
+    setResuming(true); setError("");
+    try {
+      const response = await fetch("/api/advisory/resume", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+      await refresh();
+    } catch (reason) { setError(reason instanceof Error ? `继续会诊失败：${reason.message}` : "继续会诊失败"); }
+    finally { setResuming(false); }
+  };
+
+  const unlockOperator = async () => {
+    setUnlocking(true); setError("");
+    try {
+      const response = await fetch("/api/advisory/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: operatorToken }) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setOperatorToken(""); await refresh();
+    } catch { setError("管理操作解锁失败，请检查 ADVISORY_JOB_TOKEN。"); }
+    finally { setUnlocking(false); }
   };
 
   const refresh = useCallback(async () => {
@@ -106,6 +130,7 @@ export default function ConnectionSettings() {
         </section>
 
         {error && <p className={styles.error}>{error}</p>}
+        {Boolean(status?.ai.alerts.length) && <section className={styles.providerAlert} role="alert"><div><strong>{status?.ai.alerts[0].title}</strong><p>{status?.ai.alerts[0].message}</p><small>已暂停且没有自动切换；已完成的专家轮次不会重算。</small></div><button disabled={resuming || switchingProvider !== "" || !status?.ai.configured || !status?.ai.operatorUnlocked} onClick={() => void resumeConsultations()}>{resuming ? "正在继续…" : `继续暂停会诊 (${status?.ai.resumableCount ?? 0})`}</button></section>}
 
         <section className={styles.grid} aria-live="polite">
           <article className={styles.card}>
@@ -124,7 +149,8 @@ export default function ConnectionSettings() {
             <div className={styles.cardHead}><div className={styles.icon}>AI</div><StateBadge ok={Boolean(status?.openai.configured)} pending={loading && !status} /></div>
             <h3>全局 AI 模型供应商</h3><p>{status?.ai.message || "正在检查服务端环境…"}</p>
             <dl><div><dt>当前模型</dt><dd>{status?.ai.model || "—"}</dd></div><div><dt>切换方式</dt><dd>故障提醒后手动</dd></div></dl>
-            <div className={styles.providerGrid}>{status?.ai.providers.map((provider) => <button key={provider.id} disabled={Boolean(switchingProvider)} className={status.ai.activeProvider === provider.id ? styles.providerActive : ""} onClick={() => void switchProvider(provider.id)}><b>{provider.name}</b><small>{provider.model}</small><span>{provider.configured ? status.ai.activeProvider === provider.id ? "当前使用" : "切换" : "未配置"}</span></button>)}</div>
+            {!status?.ai.operatorUnlocked && <div className={styles.operatorUnlock}><input type="password" autoComplete="current-password" value={operatorToken} onChange={(event) => setOperatorToken(event.target.value)} placeholder="管理令牌 ADVISORY_JOB_TOKEN" /><button disabled={!operatorToken || unlocking} onClick={() => void unlockOperator()}>{unlocking ? "验证中" : "解锁切换"}</button></div>}
+            <div className={styles.providerGrid}>{status?.ai.providers.map((provider) => <button key={provider.id} disabled={Boolean(switchingProvider) || !provider.configured || !status.ai.operatorUnlocked} className={status.ai.activeProvider === provider.id ? styles.providerActive : ""} onClick={() => void switchProvider(provider.id)}><b>{provider.name}</b><small>{provider.model}</small><span>{provider.configured ? status.ai.activeProvider === provider.id ? "当前使用" : status.ai.operatorUnlocked ? "切换" : "需解锁" : "未配置"}</span></button>)}</div>
           </article>
 
           <article className={styles.card}>

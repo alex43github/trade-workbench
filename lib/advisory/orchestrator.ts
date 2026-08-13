@@ -35,7 +35,10 @@ export async function runDailyConsultation(options: {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try { return await options.expertRunner(input); }
       catch (error) {
-        if (error instanceof ModelProviderError && error.requiresManualSwitch) throw error;
+        if (error instanceof ModelProviderError && error.requiresManualSwitch && (!["TRANSIENT", "TIMEOUT"].includes(error.code) || attempt === 3)) throw error;
+        if (error instanceof ModelProviderError && error.code === "INVALID_OUTPUT" && attempt === 3) {
+          throw new ModelProviderError(error.provider, "TRANSIENT", `three invalid structured responses: ${error.message}`, error.status);
+        }
         lastError = error instanceof Error ? error.message : "expert failed";
       }
     }
@@ -49,12 +52,17 @@ export async function runDailyConsultation(options: {
     if (value && options.repository.saveOpinion) await options.repository.saveOpinion(options.idempotencyKey, value);
     return value;
   }
-  const r1 = (await Promise.all(EXPERTS.map((expert) => checkpoint({ consultationId, expert, round: "R1", snapshot })))).filter((item): item is DecisionContract => item !== null);
-  const r2 = (await Promise.all(EXPERTS.filter((expert) => r1.some((item) => item.expertId === expert.id)).map((expert) => {
+  async function runSerial(inputs: ExpertRunnerInput[]) {
+    const values: DecisionContract[] = [];
+    for (const input of inputs) { const value = await checkpoint(input); if (value) values.push(value); }
+    return values;
+  }
+  const r1 = await runSerial(EXPERTS.map((expert) => ({ consultationId, expert, round: "R1", snapshot })));
+  const r2 = await runSerial(EXPERTS.filter((expert) => r1.some((item) => item.expertId === expert.id)).map((expert) => {
     const peers = r1.filter((item) => item.expertId !== expert.id).map((item, index) => ({ alias: `Expert ${String.fromCharCode(65 + index)}`, direction: item.direction, supportingEvidence: item.supportingEvidence, refutingEvidence: item.refutingEvidence }));
-    return checkpoint({ consultationId, expert, round: "R2", snapshot, peerArguments: peers, previousDecision: r1.find((item) => item.expertId === expert.id) });
-  }))).filter((item): item is DecisionContract => item !== null);
-  const r3 = (await Promise.all(EXPERTS.filter((expert) => r2.some((item) => item.expertId === expert.id)).map((expert) => checkpoint({ consultationId, expert, round: "R3", snapshot, previousDecision: r2.find((item) => item.expertId === expert.id) })))).filter((item): item is DecisionContract => item !== null);
+    return { consultationId, expert, round: "R2" as const, snapshot, peerArguments: peers, previousDecision: r1.find((item) => item.expertId === expert.id) };
+  }));
+  const r3 = await runSerial(EXPERTS.filter((expert) => r2.some((item) => item.expertId === expert.id)).map((expert) => ({ consultationId, expert, round: "R3", snapshot, previousDecision: r2.find((item) => item.expertId === expert.id) })));
   for (const expert of EXPERTS) {
     if (!r1.some((item) => item.expertId === expert.id)) {
       failures.push({ expertId: expert.id, round: "R2", error: "skipped because R1 failed" }, { expertId: expert.id, round: "R3", error: "skipped because R1 failed" });

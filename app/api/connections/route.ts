@@ -4,6 +4,8 @@ import { providerStatus } from "@/lib/advisory/model-gateway";
 import { getActiveProvider } from "@/lib/advisory/provider-settings";
 import { ensureAdvisorySchema } from "@/db/ensure";
 import { getD1 } from "@/db";
+import { loadOpenProviderAlerts, resumableSymbolsFromAlerts } from "@/lib/advisory/provider-alerts";
+import { hasOperatorSession } from "@/lib/advisory/operator-session";
 
 const BINANCE_TIME_URL = "https://fapi.binance.com/fapi/v1/time";
 
@@ -31,7 +33,7 @@ async function probePublicMarket() {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const binanceConfigured = Boolean(
     (process.env.BINANCE_FUTURES_API_KEY || process.env.BINANCE_API_KEY) &&
     (process.env.BINANCE_FUTURES_API_SECRET || process.env.BINANCE_SECRET_KEY),
@@ -46,10 +48,16 @@ export async function GET() {
     : null;
   const providerSummary = providerStatus();
   let activeProvider = providerSummary.active;
-  try { await ensureAdvisorySchema(); activeProvider = await getActiveProvider(await getD1()); } catch { /* status endpoint remains available without D1 */ }
+  let providerAlerts: Awaited<ReturnType<typeof loadOpenProviderAlerts>> = [];
+  try {
+    await ensureAdvisorySchema();
+    const db = await getD1();
+    activeProvider = await getActiveProvider(db);
+    providerAlerts = await loadOpenProviderAlerts(db);
+  } catch { /* status endpoint remains available without D1 */ }
   const activeConfig = providerSummary.providers.find((item) => item.id === activeProvider) ?? providerSummary.providers[0];
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     updatedAt: new Date().toISOString(),
     publicMarket,
     binancePrivate: {
@@ -61,6 +69,9 @@ export async function GET() {
       activeProvider, configured: activeConfig.configured, model: activeConfig.model,
       message: activeConfig.configured ? `${activeConfig.name} 已选为全局模型供应商` : `${activeConfig.name} 尚未配置密钥，专家会诊将暂停`,
       providers: providerSummary.providers,
+      alerts: providerAlerts.map((item) => ({ id: item.id, title: item.title, message: item.message, createdAt: item.created_at })),
+      resumableCount: resumableSymbolsFromAlerts(providerAlerts).length,
+      operatorUnlocked: await hasOperatorSession(request, process.env.ADVISORY_JOB_TOKEN),
     },
     openai: { configured: activeConfig.configured, model: activeConfig.model, message: `${activeConfig.name} · 全局手动切换` },
     advisory: {
@@ -83,4 +94,5 @@ export async function GET() {
       mode: publicMarket.connected ? "live-paper" : "demo-paper",
     },
   }, { headers: { "cache-control": "no-store" } });
+  return response;
 }

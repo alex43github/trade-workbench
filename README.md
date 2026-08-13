@@ -44,6 +44,8 @@ BARK_BASE_URL=https://api.day.app/你的设备Key
 
 `/radar` 复用 `binance-square-monitor` 的 `/api/leaderboard`，展示热议币、看空但抗跌的币和空头拥挤评分。高分只表示“强烈建议立即研究”，不会自动调用专家、模拟开仓或真实下单。
 
+`POST /api/advisory/maintenance` 是统一定时维护入口：扫描币安广场强空头拥挤信号，并重试失败的 Bark 通知。它仅接受 `ADVISORY_JOB_TOKEN` Bearer 认证，不会调用真实下单。
+
 ### 触发每日会诊
 
 受保护端点 `POST /api/advisory/run` 默认依次分析四个核心币，也可以在请求体中指定单个核心币。生产定时器建议在 Binance UTC 日线收盘后约 5 分钟触发，并按币种拆分调用，降低单次任务超时风险。

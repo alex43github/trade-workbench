@@ -1,0 +1,1 @@
+ALTER TABLE `notification_deliveries` ADD `lease_token` text;

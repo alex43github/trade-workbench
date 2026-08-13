@@ -1,7 +1,7 @@
 import { MAX_LEVERAGE } from "./config.ts";
 import type { ConsultationResult } from "./orchestrator.ts";
 import { validateAccountAction } from "./accounts.ts";
-import { validateStopRisk } from "./plan-monitor.ts";
+import { evaluateMachineTrigger, validateStopRisk } from "./plan-monitor.ts";
 
 const TAKER_FEE_RATE = 0.0004;
 
@@ -101,15 +101,20 @@ export async function applyFormalPaperActions(db: D1Database, result: Consultati
       continue;
     }
     if (positions.length) { outcomes.push({ expertId: decision.expertId, status: "REJECTED", reason: "one position per symbol" }); continue; }
-    const trigger = evaluateOpenTrigger(decision, price, result.snapshot.capturedAt);
-    if (!trigger.ok) {
-      if (trigger.reason === "entry zone not reached" && decision.machineTrigger) {
+    const triggerBars = decision.machineTrigger ? result.snapshot.timeframes[decision.machineTrigger.timeframe] : [];
+    const machine = decision.machineTrigger ? evaluateMachineTrigger({
+      triggerType: decision.machineTrigger.type, entryZone: decision.entryZone,
+      triggerPrice: decision.machineTrigger.price, validUntil: decision.validUntil,
+      direction: decision.direction as "LONG" | "SHORT",
+    }, { previousClose: triggerBars.at(-2)?.close ?? price, close: triggerBars.at(-1)?.close ?? price, now: result.snapshot.capturedAt }) : null;
+    if (!machine || machine.status !== "TRIGGERED") {
+      if (machine?.status === "PENDING" && decision.machineTrigger) {
         await db.prepare(`INSERT OR IGNORE INTO pending_paper_plans
           (id, account_id, consultation_id, expert_id, symbol, status, valid_until, decision_json)
           VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?)`)
           .bind(crypto.randomUUID(), account.id, result.id, decision.expertId, result.symbol, decision.validUntil, JSON.stringify(decision)).run();
         outcomes.push({ expertId: decision.expertId, status: "WAITING_TRIGGER", reason: "pending plan persisted" });
-      } else outcomes.push({ expertId: decision.expertId, status: "REJECTED", reason: trigger.reason });
+      } else outcomes.push({ expertId: decision.expertId, status: "REJECTED", reason: machine?.reason ?? "machine trigger missing" });
       continue;
     }
     const fill = calculatePaperOpen({ price, leverage: decision.leverage, marginUsdt: decision.marginUsdt, cashBalance: account.cash_balance });

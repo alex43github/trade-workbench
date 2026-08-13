@@ -9,7 +9,7 @@ export async function claimJobRun(db: D1Database, input: { type: string; key: st
   await db.prepare(`UPDATE job_runs SET status = 'RUNNING', stage = ?, lease_token = ?, error = NULL,
     started_at = CURRENT_TIMESTAMP, completed_at = NULL
     WHERE idempotency_key = ? AND (
-      status = 'FAILED' OR (status = 'RUNNING' AND started_at < datetime('now', '-30 minutes'))
+      status = 'FAILED' OR (status = 'RUNNING' AND started_at < datetime('now', '-3 hours'))
     )`).bind(input.stage, token, input.key).run();
   const row = await db.prepare("SELECT status, lease_token FROM job_runs WHERE idempotency_key = ? LIMIT 1")
     .bind(input.key).first<{ status: "RUNNING" | "COMPLETED" | "FAILED"; lease_token: string | null }>();

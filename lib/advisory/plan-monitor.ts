@@ -13,8 +13,9 @@ export function evaluateMachineTrigger(plan: TriggerPlan, market: { previousClos
 }
 
 export function validateStopRisk(input: { direction: "LONG" | "SHORT"; entryPrice: number; stopPrice: number; quantity: number; maxLossUsdt: number }) {
+  const protectiveSide = input.direction === "LONG" ? input.stopPrice < input.entryPrice : input.stopPrice > input.entryPrice;
   const distanceLoss = Math.abs(input.entryPrice - input.stopPrice) * input.quantity;
   const fees = (input.entryPrice + input.stopPrice) * input.quantity * TAKER_FEE_RATE;
   const requiredLossUsdt = distanceLoss + fees;
-  return { ok: Number.isFinite(requiredLossUsdt) && requiredLossUsdt <= input.maxLossUsdt, requiredLossUsdt };
+  return { ok: protectiveSide && Number.isFinite(requiredLossUsdt) && requiredLossUsdt <= input.maxLossUsdt, requiredLossUsdt };
 }

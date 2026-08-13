@@ -7,10 +7,11 @@ import { runPostConsensus } from "./post-consensus.ts";
 import { claimJobRun, completeJobRun, failJobRun } from "./jobs.ts";
 import { getActiveProvider } from "./provider-settings.ts";
 import { ModelProviderError } from "./model-gateway.ts";
+import { recordProviderFailureAlert } from "./provider-alerts.ts";
 
 export function dailyConsultationKey(analysisDate: string, symbol: string) { return `daily:${analysisDate}:${symbol}`; }
 
-export async function runDailyAdvisoryJob(db: D1Database, symbols: readonly string[] = CORE_SYMBOLS) {
+export async function runDailyAdvisoryJob(db: D1Database, symbols: readonly string[] = CORE_SYMBOLS, resumeJobKeys: Readonly<Record<string, string>> = {}) {
   const repository = createD1ConsultationRepository(db);
   const activeProvider = await getActiveProvider(db);
   const results: Array<{ symbol: string; analysisDate?: string; status: "COMPLETED" | "FAILED" | "IN_PROGRESS" | "PAUSED_PROVIDER_ERROR"; result?: ConsultationResult; effects?: unknown; error?: string }> = [];
@@ -18,9 +19,11 @@ export async function runDailyAdvisoryJob(db: D1Database, symbols: readonly stri
     let jobKey: string | undefined;
     let leaseToken: string | undefined;
     try {
-      const snapshot = await buildClosedMarketSnapshot(symbol);
-      const analysisDate = marketAnalysisDate(snapshot);
-      jobKey = dailyConsultationKey(analysisDate, symbol);
+      const resumeKey = resumeJobKeys[symbol];
+      const frozen = resumeKey ? await repository.getProgress?.(resumeKey) : undefined;
+      const snapshot = frozen?.snapshot ?? await buildClosedMarketSnapshot(symbol);
+      const analysisDate = frozen?.analysisDate ?? marketAnalysisDate(snapshot);
+      jobKey = resumeKey ?? dailyConsultationKey(analysisDate, symbol);
       const claim = await claimJobRun(db, { type: "DAILY_CONSULTATION", key: jobKey, stage: "expert_council" });
       leaseToken = claim.token;
       if (!claim.acquired) {
@@ -41,9 +44,7 @@ export async function runDailyAdvisoryJob(db: D1Database, symbols: readonly stri
     } catch (error) {
       if (jobKey && leaseToken) await failJobRun(db, jobKey, leaseToken, error, "consultation_failed");
       if (error instanceof ModelProviderError && error.requiresManualSwitch) {
-        await db.prepare(`INSERT INTO system_alerts (id, type, severity, title, message, context_json)
-          VALUES (?, 'MODEL_PROVIDER', 'HIGH', '模型供应商需要手动切换', ?, ?)`)
-          .bind(crypto.randomUUID(), error.message, JSON.stringify({ provider: error.provider, code: error.code, symbol })).run();
+        await recordProviderFailureAlert(db, { error, symbol, jobKey });
         results.push({ symbol, status: "PAUSED_PROVIDER_ERROR", error: error.message });
       } else results.push({ symbol, status: "FAILED", error: error instanceof Error ? error.message : "daily job failed" });
     }

@@ -11,7 +11,7 @@ export class ModelProviderError extends Error {
   constructor(provider: ModelProviderId, code: ProviderErrorCode, message: string, status?: number) {
     super(message); this.name = "ModelProviderError"; this.provider = provider; this.code = code; this.status = status;
   }
-  get requiresManualSwitch() { return ["AUTH", "QUOTA", "RATE_LIMIT", "TIMEOUT", "UNCONFIGURED"].includes(this.code); }
+  get requiresManualSwitch() { return ["AUTH", "QUOTA", "RATE_LIMIT", "TIMEOUT", "TRANSIENT", "UNCONFIGURED"].includes(this.code); }
 }
 
 export function classifyProviderError(status: number, body = ""): ProviderErrorCode {
@@ -73,7 +73,7 @@ export async function invokeStructuredModel(request: StructuredModelRequest, opt
     body = { model: config.model, max_tokens: 4096, system: request.system, messages: [{ role: "user", content: request.user }], tools: [{ name: request.name, description: "Return the requested structured decision", input_schema: request.schema }], tool_choice: { type: "tool", name: request.name } };
   } else if (config.protocol === "chat_completions") {
     headers = { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" };
-    body = { model: config.model, messages: [{ role: "system", content: request.system }, { role: "user", content: request.user }], response_format: { type: "json_object" }, stream: false };
+    body = { model: config.model, max_tokens: 4096, messages: [{ role: "system", content: `${request.system}\nReturn exactly one valid json object that follows the requested schema.` }, { role: "user", content: `${request.user}\nOutput json only.` }], response_format: { type: "json_object" }, stream: false };
   } else {
     headers = { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" };
     body = { model: config.model, store: false, input: [{ role: "developer", content: request.system }, { role: "user", content: request.user }], text: { format: { type: "json_schema", name: request.name, strict: true, schema: request.schema } } };
