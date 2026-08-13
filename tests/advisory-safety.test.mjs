@@ -33,12 +33,13 @@ test("formal account guard rejects unsafe actions without mutating the opinion",
   const account = { cashBalance: 500, usedMargin: 470, status: "ACTIVE" };
   const tooMuchLeverage = validateAccountAction({ action: "OPEN", leverage: 11, marginUsdt: 20, maxLossUsdt: 5 }, account, "live");
   assert.equal(tooMuchLeverage.ok, false);
-  const insufficient = validateAccountAction({ action: "OPEN", leverage: 3, marginUsdt: 40, maxLossUsdt: 5 }, account, "live");
+  const insufficient = validateAccountAction({ action: "OPEN", leverage: 3, marginUsdt: 510, maxLossUsdt: 5 }, account, "live");
   assert.equal(insufficient.ok, false);
   const demo = validateAccountAction({ action: "OPEN", leverage: 3, marginUsdt: 20, maxLossUsdt: 5 }, account, "demo");
   assert.equal(demo.ok, false);
   assert.deepEqual(opinion, { id: "op-1", direction: "LONG" });
   assert.equal(validateAccountAction({ action: "HOLD", leverage: 1, marginUsdt: 0, maxLossUsdt: 0 }, account, "live").ok, true);
+  assert.equal(validateAccountAction({ action: "OPEN", leverage: 3, marginUsdt: 400, maxLossUsdt: 5 }, account, "live").ok, true);
 });
 
 test("a neutral opinion can never be translated into an opening side", () => {

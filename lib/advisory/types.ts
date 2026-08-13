@@ -41,6 +41,8 @@ export type DecisionContract = {
   noTradeReasons: string[];
   sourceRefs: string[];
   accountAction: AccountAction;
+  modelProvider?: "openai" | "anthropic" | "deepseek" | "opencode_go";
+  modelName?: string;
 };
 
 export type ConsensusStrength =

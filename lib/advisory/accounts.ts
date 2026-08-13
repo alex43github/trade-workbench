@@ -10,9 +10,9 @@ export function validateAccountAction(action: AccountActionInput, account: Accou
   if (!Number.isInteger(action.leverage) || action.leverage < 1 || action.leverage > MAX_LEVERAGE) reasons.push("leverage must be an integer from 1 to 10");
   if (!Number.isFinite(action.marginUsdt) || action.marginUsdt < 0) reasons.push("margin must be non-negative");
   if (!Number.isFinite(action.maxLossUsdt) || action.maxLossUsdt < 0) reasons.push("max loss must be non-negative");
-  const available = Math.max(0, account.cashBalance - account.usedMargin);
+  // cashBalance is free cash: isolated margin is deducted when a position opens.
+  const available = Math.max(0, account.cashBalance);
   if (action.action === "OPEN" && action.marginUsdt > available) reasons.push("insufficient isolated margin");
   if (action.action === "OPEN" && action.marginUsdt <= 0) reasons.push("open action requires positive margin");
   return reasons.length ? { ok: false as const, reasons } : { ok: true as const, availableMargin: available };
 }
-

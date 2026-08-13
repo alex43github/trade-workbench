@@ -5,12 +5,15 @@ import { runDailyConsultation, type ConsultationResult } from "./orchestrator.ts
 import { createD1ConsultationRepository } from "./persistence.ts";
 import { runPostConsensus } from "./post-consensus.ts";
 import { claimJobRun, completeJobRun, failJobRun } from "./jobs.ts";
+import { getActiveProvider } from "./provider-settings.ts";
+import { ModelProviderError } from "./model-gateway.ts";
 
 export function dailyConsultationKey(analysisDate: string, symbol: string) { return `daily:${analysisDate}:${symbol}`; }
 
 export async function runDailyAdvisoryJob(db: D1Database, symbols: readonly string[] = CORE_SYMBOLS) {
   const repository = createD1ConsultationRepository(db);
-  const results: Array<{ symbol: string; analysisDate?: string; status: "COMPLETED" | "FAILED" | "IN_PROGRESS"; result?: ConsultationResult; effects?: unknown; error?: string }> = [];
+  const activeProvider = await getActiveProvider(db);
+  const results: Array<{ symbol: string; analysisDate?: string; status: "COMPLETED" | "FAILED" | "IN_PROGRESS" | "PAUSED_PROVIDER_ERROR"; result?: ConsultationResult; effects?: unknown; error?: string }> = [];
   for (const symbol of symbols) {
     let jobKey: string | undefined;
     let leaseToken: string | undefined;
@@ -30,16 +33,21 @@ export async function runDailyAdvisoryJob(db: D1Database, symbols: readonly stri
       }
       const result = await runDailyConsultation({
         symbol, analysisDate, idempotencyKey: jobKey,
-        snapshotBuilder: async () => snapshot, expertRunner: runExpertRound, repository,
+        snapshotBuilder: async () => snapshot, expertRunner: (input) => runExpertRound(input, { provider: activeProvider }), repository,
       });
       await completeJobRun(db, jobKey, leaseToken!, "consultation_saved");
       const effects = await runPostConsensus(db, result);
       results.push({ symbol, analysisDate, status: "COMPLETED", result, effects });
     } catch (error) {
       if (jobKey && leaseToken) await failJobRun(db, jobKey, leaseToken, error, "consultation_failed");
-      results.push({ symbol, status: "FAILED", error: error instanceof Error ? error.message : "daily job failed" });
+      if (error instanceof ModelProviderError && error.requiresManualSwitch) {
+        await db.prepare(`INSERT INTO system_alerts (id, type, severity, title, message, context_json)
+          VALUES (?, 'MODEL_PROVIDER', 'HIGH', '模型供应商需要手动切换', ?, ?)`)
+          .bind(crypto.randomUUID(), error.message, JSON.stringify({ provider: error.provider, code: error.code, symbol })).run();
+        results.push({ symbol, status: "PAUSED_PROVIDER_ERROR", error: error.message });
+      } else results.push({ symbol, status: "FAILED", error: error instanceof Error ? error.message : "daily job failed" });
     }
   }
   const dates = [...new Set(results.map((item) => item.analysisDate).filter(Boolean))];
-  return { analysisDate: dates.length === 1 ? dates[0] : "market-derived", completed: results.filter((item) => item.status === "COMPLETED").length, failed: results.filter((item) => item.status === "FAILED").length, inProgress: results.filter((item) => item.status === "IN_PROGRESS").length, results, realOrderRouteEnabled: false };
+  return { analysisDate: dates.length === 1 ? dates[0] : "market-derived", activeProvider, completed: results.filter((item) => item.status === "COMPLETED").length, failed: results.filter((item) => item.status === "FAILED").length, paused: results.filter((item) => item.status === "PAUSED_PROVIDER_ERROR").length, inProgress: results.filter((item) => item.status === "IN_PROGRESS").length, results, realOrderRouteEnabled: false };
 }

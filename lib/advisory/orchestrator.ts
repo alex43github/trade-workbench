@@ -3,6 +3,7 @@ import { buildConsensus } from "./consensus.ts";
 import type { ExpertRunnerInput } from "./expert-runner.ts";
 import type { DecisionContract } from "./types.ts";
 import type { MarketSnapshot } from "./market.ts";
+import { ModelProviderError } from "./model-gateway.ts";
 
 export type ConsultationFailure = { expertId: string; round: "R1" | "R2" | "R3"; error: string };
 export type ConsultationResult = { id: string; analysisDate: string; symbol: string; mode: MarketSnapshot["mode"]; snapshotHash: string; snapshot: MarketSnapshot; opinions: DecisionContract[]; failures: ConsultationFailure[]; consensus: ReturnType<typeof buildConsensus> };
@@ -23,7 +24,10 @@ export async function runDailyConsultation(options: {
     let lastError = "expert failed";
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try { return await options.expertRunner(input); }
-      catch (error) { lastError = error instanceof Error ? error.message : "expert failed"; }
+      catch (error) {
+        if (error instanceof ModelProviderError && error.requiresManualSwitch) throw error;
+        lastError = error instanceof Error ? error.message : "expert failed";
+      }
     }
     failures.push({ expertId: input.expert.id, round: input.round, error: lastError });
     return null;

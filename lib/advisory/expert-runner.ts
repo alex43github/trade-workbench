@@ -52,5 +52,5 @@ export async function runExpertRound(input: ExpertRunnerInput, runtime: { provid
   if (!validated.value.sourceRefs.length || validated.value.sourceRefs.some((ref) => !SOURCE_REF_PATTERNS[input.expert.id].test(ref) || !ALLOWED_SOURCE_REFS[input.expert.id].includes(ref))) {
     throw new Error("invalid expert decision: source reference namespace mismatch");
   }
-  return validated.value;
+  return { ...validated.value, modelProvider: result.provider, modelName: result.model };
 }
