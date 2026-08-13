@@ -32,8 +32,6 @@ export default function ConnectionSettings() {
   const [browserMarket, setBrowserMarket] = useState<{ connected: boolean; latencyMs: number; message: string } | null>(null);
   const [switchingProvider, setSwitchingProvider] = useState("");
   const [resuming, setResuming] = useState(false);
-  const [operatorToken, setOperatorToken] = useState("");
-  const [unlocking, setUnlocking] = useState(false);
 
   const switchProvider = async (provider: string) => {
     setSwitchingProvider(provider); setError("");
@@ -54,16 +52,6 @@ export default function ConnectionSettings() {
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? `继续会诊失败：${reason.message}` : "继续会诊失败"); }
     finally { setResuming(false); }
-  };
-
-  const unlockOperator = async () => {
-    setUnlocking(true); setError("");
-    try {
-      const response = await fetch("/api/advisory/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: operatorToken }) });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      setOperatorToken(""); await refresh();
-    } catch { setError("管理操作解锁失败，请检查 ADVISORY_JOB_TOKEN。"); }
-    finally { setUnlocking(false); }
   };
 
   const refresh = useCallback(async () => {
@@ -149,8 +137,8 @@ export default function ConnectionSettings() {
             <div className={styles.cardHead}><div className={styles.icon}>AI</div><StateBadge ok={Boolean(status?.openai.configured)} pending={loading && !status} /></div>
             <h3>全局 AI 模型供应商</h3><p>{status?.ai.message || "正在检查服务端环境…"}</p>
             <dl><div><dt>当前模型</dt><dd>{status?.ai.model || "—"}</dd></div><div><dt>切换方式</dt><dd>故障提醒后手动</dd></div></dl>
-            {!status?.ai.operatorUnlocked && <div className={styles.operatorUnlock}><input type="password" autoComplete="current-password" value={operatorToken} onChange={(event) => setOperatorToken(event.target.value)} placeholder="管理令牌 ADVISORY_JOB_TOKEN" /><button disabled={!operatorToken || unlocking} onClick={() => void unlockOperator()}>{unlocking ? "验证中" : "解锁切换"}</button></div>}
-            <div className={styles.providerGrid}>{status?.ai.providers.map((provider) => <button key={provider.id} disabled={Boolean(switchingProvider) || !provider.configured || !status.ai.operatorUnlocked} className={status.ai.activeProvider === provider.id ? styles.providerActive : ""} onClick={() => void switchProvider(provider.id)}><b>{provider.name}</b><small>{provider.model}</small><span>{provider.configured ? status.ai.activeProvider === provider.id ? "当前使用" : status.ai.operatorUnlocked ? "切换" : "需解锁" : "未配置"}</span></button>)}</div>
+            {!status?.ai.operatorUnlocked && <p className={styles.operatorNote}>管理操作需要由服务端建立安全会话；网页不接收管理令牌或任何 API 密钥。</p>}
+            <div className={styles.providerGrid}>{status?.ai.providers.map((provider) => <button key={provider.id} disabled={Boolean(switchingProvider) || !provider.configured || !status.ai.operatorUnlocked} className={status.ai.activeProvider === provider.id ? styles.providerActive : ""} onClick={() => void switchProvider(provider.id)}><b>{provider.name}</b><small>{provider.model}</small><span>{provider.configured ? status.ai.activeProvider === provider.id ? "当前使用" : status.ai.operatorUnlocked ? "切换" : "需服务端授权" : "未配置"}</span></button>)}</div>
           </article>
 
           <article className={styles.card}>
