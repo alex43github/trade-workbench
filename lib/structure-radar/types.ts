@@ -8,6 +8,7 @@ export type SignalState =
   | "CONFIRMED"
   | "ADD_CANDIDATE"
   | "TAKE_PROFIT_WATCH"
+  | "EXPIRED"
   | "INVALIDATED";
 
 export type ClosedBar = {
@@ -41,4 +42,3 @@ export type StructureCandidate = {
   score: number;
   anchorHash: string;
 };
-
