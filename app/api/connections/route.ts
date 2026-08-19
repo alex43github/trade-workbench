@@ -6,10 +6,22 @@ import { ensureAdvisorySchema } from "@/db/ensure";
 import { getD1 } from "@/db";
 import { loadOpenProviderAlerts, resumableSymbolsFromAlerts } from "@/lib/advisory/provider-alerts";
 import { hasOperatorSession } from "@/lib/advisory/operator-session";
+import { getServerCredential } from "@/lib/server-credentials";
+import { getGatewayConfig, probeGateway } from "@/lib/binance-gateway";
 
 const BINANCE_TIME_URL = "https://fapi.binance.com/fapi/v1/time";
 
 async function probePublicMarket() {
+  const gateway = getGatewayConfig();
+  if (gateway.configured) {
+    const result = await probeGateway();
+    return {
+      connected: result.connected,
+      latencyMs: result.latencyMs,
+      message: result.message,
+      viaGateway: true,
+    };
+  }
   const startedAt = Date.now();
   try {
     const response = await fetch(BINANCE_TIME_URL, {
@@ -34,10 +46,14 @@ async function probePublicMarket() {
 }
 
 export async function GET(request: Request) {
-  const binanceConfigured = Boolean(
-    (process.env.BINANCE_FUTURES_API_KEY || process.env.BINANCE_API_KEY) &&
-    (process.env.BINANCE_FUTURES_API_SECRET || process.env.BINANCE_SECRET_KEY),
-  );
+  const [binanceKey, binanceSecret, openaiKey] = await Promise.all([
+    getServerCredential("BINANCE_FUTURES_API_KEY"),
+    getServerCredential("BINANCE_FUTURES_API_SECRET"),
+    getServerCredential("OPENAI_API_KEY"),
+  ]);
+  const gateway = getGatewayConfig();
+  const binanceConfigured = gateway.configured || Boolean((binanceKey || process.env.BINANCE_API_KEY) && (binanceSecret || process.env.BINANCE_SECRET_KEY));
+  const gatewayStatus = await probeGateway();
 
   const [publicMarket, accountResponse] = await Promise.all([
     probePublicMarket(),
@@ -46,7 +62,7 @@ export async function GET(request: Request) {
   const account = accountResponse
     ? await accountResponse.json() as { connected?: boolean; reason?: string }
     : null;
-  const providerSummary = providerStatus();
+  const providerSummary = providerStatus({ ...process.env, OPENAI_API_KEY: openaiKey });
   let activeProvider = providerSummary.active;
   let providerAlerts: Awaited<ReturnType<typeof loadOpenProviderAlerts>> = [];
   try {
@@ -60,6 +76,11 @@ export async function GET(request: Request) {
   const response = NextResponse.json({
     updatedAt: new Date().toISOString(),
     publicMarket,
+    gateway: {
+      configured: gatewayStatus.configured,
+      connected: gatewayStatus.connected,
+      message: gatewayStatus.message,
+    },
     binancePrivate: {
       configured: binanceConfigured,
       connected: Boolean(account?.connected),
@@ -91,7 +112,7 @@ export async function GET(request: Request) {
     safety: {
       secretsExposedToBrowser: false,
       realOrderRouteEnabled: false,
-      mode: publicMarket.connected ? "live-paper" : "demo-paper",
+      mode: (publicMarket.connected || gatewayStatus.connected) ? "live-paper" : "demo-paper",
     },
   }, { headers: { "cache-control": "no-store" } });
   return response;
