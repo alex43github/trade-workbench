@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerCredential } from "@/lib/server-credentials";
+import { getGatewayConfig, gatewayJson } from "@/lib/binance-gateway";
 
 const API_BASE = "https://fapi.binance.com";
 const CONDITIONAL_TYPES = new Set([
@@ -30,7 +32,12 @@ type BinanceAccount = {
   availableBalance: string;
   totalUnrealizedProfit: string;
   assets: BinanceAsset[];
-  positions: BinancePosition[];
+};
+
+type BinancePositionRisk = BinancePosition & {
+  unRealizedProfit: string;
+  notional: string;
+  isolatedWallet?: string;
 };
 
 type BinanceOrder = {
@@ -86,22 +93,35 @@ async function signedGet<T>(path: string, apiKey: string, secret: string, timest
 }
 
 export async function GET() {
-  const apiKey = process.env.BINANCE_FUTURES_API_KEY || process.env.BINANCE_API_KEY;
-  const secret = process.env.BINANCE_FUTURES_API_SECRET || process.env.BINANCE_SECRET_KEY;
-  if (!apiKey || !secret) {
+  const gateway = getGatewayConfig();
+  const apiKey = await getServerCredential("BINANCE_FUTURES_API_KEY") || process.env.BINANCE_API_KEY;
+  const secret = await getServerCredential("BINANCE_FUTURES_API_SECRET") || process.env.BINANCE_SECRET_KEY;
+  if (!gateway.configured && (!apiKey || !secret)) {
     return NextResponse.json(disconnected(), { headers: { "cache-control": "no-store" } });
   }
 
   try {
-    const timeResponse = await fetch(`${API_BASE}/fapi/v1/time`, { cache: "no-store", signal: AbortSignal.timeout(5_000) });
-    if (!timeResponse.ok) throw new Error("币安时间同步失败");
-    const { serverTime } = await timeResponse.json() as { serverTime: number };
-    const [account, orders] = await Promise.all([
-      signedGet<BinanceAccount>("/fapi/v3/account", apiKey, secret, serverTime),
-      signedGet<BinanceOrder[]>("/fapi/v1/openOrders", apiKey, secret, serverTime),
-    ]);
+    let account: BinanceAccount;
+    let positionRisk: BinancePositionRisk[];
+    let orders: BinanceOrder[];
+    if (gateway.configured) {
+      [account, positionRisk, orders] = await Promise.all([
+        gatewayJson<BinanceAccount>("/fapi/v3/account"),
+        gatewayJson<BinancePositionRisk[]>("/fapi/v2/positionRisk"),
+        gatewayJson<BinanceOrder[]>("/fapi/v1/openOrders"),
+      ]);
+    } else {
+      const timeResponse = await fetch(`${API_BASE}/fapi/v1/time`, { cache: "no-store", signal: AbortSignal.timeout(5_000) });
+      if (!timeResponse.ok) throw new Error("币安时间同步失败");
+      const { serverTime } = await timeResponse.json() as { serverTime: number };
+      [account, positionRisk, orders] = await Promise.all([
+        signedGet<BinanceAccount>("/fapi/v3/account", apiKey, secret, serverTime),
+        signedGet<BinancePositionRisk[]>("/fapi/v2/positionRisk", apiKey, secret, serverTime),
+        signedGet<BinanceOrder[]>("/fapi/v1/openOrders", apiKey, secret, serverTime),
+      ]);
+    }
 
-    const positions = account.positions
+    const positions = positionRisk
       .filter((position) => Math.abs(Number(position.positionAmt)) > 0)
       .map((position) => ({
         symbol: position.symbol,
@@ -110,7 +130,7 @@ export async function GET() {
         entryPrice: Number(position.entryPrice),
         breakEvenPrice: Number(position.breakEvenPrice || position.entryPrice),
         markPrice: Number(position.markPrice || 0),
-        unrealizedPnl: Number(position.unrealizedProfit),
+        unrealizedPnl: Number(position.unRealizedProfit),
         liquidationPrice: Number(position.liquidationPrice),
         leverage: Number(position.leverage),
         marginType: position.marginType,
