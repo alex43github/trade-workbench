@@ -6,6 +6,7 @@ import { URL } from "node:url";
 
 const VERSION = "1.0.0";
 const PORT = Number(process.env.BINANCE_GATEWAY_PORT || 8788);
+const LISTEN_HOST = "127.0.0.1";
 const TOKEN = process.env.BINANCE_GATEWAY_TOKEN || "";
 const API_KEY = process.env.BINANCE_GATEWAY_API_KEY || process.env.BINANCE_FUTURES_API_KEY || "";
 const API_SECRET = process.env.BINANCE_GATEWAY_API_SECRET || process.env.BINANCE_FUTURES_API_SECRET || "";
@@ -71,8 +72,6 @@ function isAuthorized(req) {
 }
 
 function clientIp(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (forwarded) return String(forwarded).split(",")[0].trim();
   return req.socket?.remoteAddress || "unknown";
 }
 
@@ -90,6 +89,10 @@ function isSignedPath(pathname) {
 
 function isTradingPath(pathname) {
   return TRADING_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isAllowedBinancePath(pathname) {
+  return pathname.startsWith("/fapi/") || pathname.startsWith("/futures/data/");
 }
 
 function hmacHex(secret, payload) {
@@ -211,7 +214,7 @@ function handle(req, res) {
   if (ALLOWED_CLIENT_IP && ip !== ALLOWED_CLIENT_IP) return finish(403) || json(res, 403, { ok: false, message: "客户端 IP 不在白名单" });
 
   if (url.pathname === "/health") {
-    json(res, 200, { ok: true, service: "binance-gateway", version: VERSION, publicIp: PUBLIC_IP || "(未设置)", tradingEnabled: TRADING_ENABLED });
+    json(res, 200, { ok: true });
     return finish(200);
   }
 
@@ -240,8 +243,9 @@ function handle(req, res) {
   if (url.pathname.startsWith(BINANCE_PATH_PREFIX)) {
     if (!isAuthorized(req)) return finish(401) || json(res, 401, { ok: false, message: "未授权" });
     const binancePath = url.pathname.slice(BINANCE_PATH_PREFIX.length);
-    if (!binancePath.startsWith("/fapi/")) return finish(404) || json(res, 404, { ok: false, message: "仅支持 Binance Futures 路径" });
+    if (!isAllowedBinancePath(binancePath)) return finish(404) || json(res, 404, { ok: false, message: "仅支持 Binance Futures 路径" });
     if (isTradingPath(binancePath) && !TRADING_ENABLED) return finish(403) || json(res, 403, { ok: false, message: "交易通道已关闭（BINANCE_GATEWAY_TRADING=false）" });
+    if (binancePath.startsWith("/futures/data/") && req.method !== "GET") return finish(405) || json(res, 405, { ok: false, message: "futures data 仅开放只读 GET" });
     if (!TRADING_ENABLED && req.method !== "GET") return finish(403) || json(res, 403, { ok: false, message: "当前仅开放只读通道（GET）" });
     if (!["GET", "POST"].includes(req.method)) return finish(405) || json(res, 405, { ok: false, message: "仅支持 GET/POST" });
 
@@ -291,8 +295,8 @@ if (!API_KEY || !API_SECRET) {
 }
 
 const server = http.createServer(handle);
-server.listen(PORT, "0.0.0.0", () => {
-  log({ level: "info", message: `binance-gateway v${VERSION} 已监听 0.0.0.0:${PORT}`, tradingEnabled: TRADING_ENABLED });
+server.listen(PORT, LISTEN_HOST, () => {
+  log({ level: "info", message: `binance-gateway v${VERSION} 已监听 ${LISTEN_HOST}:${PORT}`, tradingEnabled: TRADING_ENABLED });
 });
 
 function shutdown(signal) {

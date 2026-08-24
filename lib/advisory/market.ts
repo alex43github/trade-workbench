@@ -43,9 +43,13 @@ export async function buildClosedMarketSnapshot(symbolInput: string, options: { 
   for (const timeframe of ["1d", "4h", "1h"] as const) {
     const url = new URL("https://fapi.binance.com/fapi/v1/klines");
     url.searchParams.set("symbol", symbol); url.searchParams.set("interval", timeframe); url.searchParams.set("limit", String(limit));
-    const response = await fetcher(url, { headers: { accept: "application/json", "user-agent": "advisory-lab/0.1" }, signal: AbortSignal.timeout(8_000) });
-    if (!response.ok) throw new Error(`binance_${response.status}`);
-    const payload = await response.json();
+    const payload = options.fetcher
+      ? await (async () => {
+        const response = await fetcher(url, { headers: { accept: "application/json", "user-agent": "advisory-lab/0.1" }, signal: AbortSignal.timeout(8_000) });
+        if (!response.ok) throw new Error(`binance_${response.status}`);
+        return response.json();
+      })()
+      : (await binancePublicJson<unknown>(`${url.pathname}${url.search}`, { signal: AbortSignal.timeout(8_000) })).data;
     if (!Array.isArray(payload)) throw new Error("invalid kline payload");
     const closed = payload.map(bar).filter((item): item is ClosedBar => item !== null && item.closeTime < now).sort((a, b) => a.openTime - b.openTime);
     if (closed.length < 60) throw new Error(`insufficient closed ${timeframe} bars`);
@@ -54,3 +58,4 @@ export async function buildClosedMarketSnapshot(symbolInput: string, options: { 
   const canonical = JSON.stringify({ symbol, timeframes });
   return { symbol, mode: "live", source: "binance", capturedAt: new Date(now).toISOString(), snapshotHash: await sha256(canonical), timeframes };
 }
+import { binancePublicJson } from "../binance-public.ts";

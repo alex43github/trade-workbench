@@ -1,3 +1,5 @@
+import { BinancePublicError, binancePublicJson } from "@/lib/binance-public";
+
 type Kline = {
   time: number;
   open: number;
@@ -71,13 +73,8 @@ export async function GET(request: Request) {
     endpoint.searchParams.set("symbol", symbol);
     endpoint.searchParams.set("interval", interval);
     endpoint.searchParams.set("limit", String(limit));
-    const response = await fetch(endpoint, {
-      headers: { accept: "application/json", "user-agent": "streetlight-radar/0.3" },
-      signal: AbortSignal.timeout(7_000),
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error(`binance_${response.status}`);
-    const payload: unknown = await response.json();
+    const result = await binancePublicJson<unknown>(`${endpoint.pathname}${endpoint.search}`, { signal: AbortSignal.timeout(7_000) });
+    const payload = result.data;
     if (!Array.isArray(payload)) throw new Error("invalid_kline_payload");
     const now = Date.now();
     const bars = payload
@@ -90,13 +87,15 @@ export async function GET(request: Request) {
       .filter((bar) => bar.time > 0 && bar.close > 0)
       .sort((a, b) => a.time - b.time);
     if (bars.length < 30) throw new Error("insufficient_klines");
-    return Response.json({ mode: "live", symbol, interval, updatedAt: new Date().toISOString(), bars }, {
+    return Response.json({ mode: "live", source: result.source, symbol, interval, updatedAt: new Date().toISOString(), bars }, {
       headers: { "cache-control": "public, max-age=5, s-maxage=15" },
     });
-  } catch {
+  } catch (error) {
+    const publicError = error instanceof BinancePublicError ? error : null;
     return Response.json({
-      mode: "demo", symbol, interval, updatedAt: new Date().toISOString(),
-      warning: "Binance行情暂不可用，当前为明确标记的演示K线。",
+      mode: "demo", source: publicError?.source ?? "direct", symbol, interval, updatedAt: new Date().toISOString(),
+      warning: publicError?.message ?? "Binance行情暂不可用，当前为明确标记的演示K线。",
+      hint: publicError?.hint ?? "请检查 Binance 网络出口。",
       bars: demoBars(symbol, interval, limit),
     }, { headers: { "cache-control": "no-store" } });
   }

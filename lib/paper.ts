@@ -1,5 +1,8 @@
-import { getD1 } from "../db";
-import { ensurePaperSchema, ensureTradeKnowledgeSchema } from "../db/ensure";
+import { getD1 } from "../db/index.ts";
+import { ensureAdvisorySchema, ensurePaperSchema, ensureTradeKnowledgeSchema } from "../db/ensure.ts";
+import { calculateOrderSizing } from "./trade/order-sizing.ts";
+import { notifyTradeEvent } from "./notifications/bark.ts";
+import { binancePublicJson } from "./binance-public.ts";
 
 const TAKER_FEE_RATE = 0.0004;
 const DEFAULT_LEVERAGE = 3;
@@ -42,9 +45,7 @@ async function markPrice(symbol: string) {
     try {
       const url = new URL(`https://fapi.binance.com${path}`);
       url.searchParams.set("symbol", symbol);
-      const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(7_000) });
-      if (!response.ok) continue;
-      const payload = await response.json() as { markPrice?: string; price?: string };
+      const payload = (await binancePublicJson<{ markPrice?: string; price?: string }>(`${url.pathname}${url.search}`, { signal: AbortSignal.timeout(7_000) })).data;
       const value = Number(payload.markPrice ?? payload.price);
       if (Number.isFinite(value) && value > 0) return value;
     } catch { /* try the secondary Binance public price endpoint */ }
@@ -125,7 +126,7 @@ async function closeAtPrice(position: PaperPositionRow, percent: number, price: 
     );
   }
   await d1.batch(statements);
-  return { quantity, price, realizedPnl, fee, fullyClosed: remaining <= 0 };
+  return { orderId, tradeId, side: closeSide, reason, quantity, price, realizedPnl, fee, fullyClosed: remaining <= 0 };
 }
 
 type ClientQuote = { symbol: string; price: number; live: boolean } | null;
@@ -141,21 +142,43 @@ function normalizeClientQuote(input?: { symbol?: unknown; quotedPrice?: unknown;
 
 async function processConditionalOrders(clientQuote: ClientQuote) {
   const { positions } = await getRows();
-  await Promise.all(positions.map(async (position) => {
+  const results = await Promise.all(positions.map(async (position) => {
     let price: number;
     if (clientQuote?.symbol === position.symbol) price = clientQuote.price;
-    else try { price = await markPrice(position.symbol); } catch { return; }
+    else try { price = await markPrice(position.symbol); } catch { return null; }
     const stopHit = position.stop_price !== null && (position.side === "LONG" ? price <= position.stop_price : price >= position.stop_price);
     const targetHit = position.target_price !== null && (position.side === "LONG" ? price >= position.target_price : price <= position.target_price);
-    if (stopHit) await closeAtPrice(position, 100, price, "STOP_TRIGGERED");
-    else if (targetHit) await closeAtPrice(position, 100, price, "TAKE_PROFIT_TRIGGERED");
+    if (stopHit) return { symbol: position.symbol, positionSide: position.side, ...(await closeAtPrice(position, 100, price, "STOP_TRIGGERED")) };
+    if (targetHit) return { symbol: position.symbol, positionSide: position.side, ...(await closeAtPrice(position, 100, price, "TAKE_PROFIT_TRIGGERED")) };
+    return null;
   }));
+  return results.filter((result): result is NonNullable<typeof result> => Boolean(result));
 }
 
 export async function getPaperSnapshot(input?: { symbol?: unknown; quotedPrice?: unknown; quoteMode?: unknown }) {
   await ensurePaperSchema();
   const clientQuote = normalizeClientQuote(input);
-  await processConditionalOrders(clientQuote);
+  const triggered = await processConditionalOrders(clientQuote);
+  if (triggered.length) {
+    try {
+      await ensureAdvisorySchema();
+      const db = await getD1();
+      for (const close of triggered) {
+        const reason = String(close.reason || "");
+        await notifyTradeEvent({ db, event: {
+          source: "paper",
+          eventId: close.tradeId,
+          kind: reason.startsWith("STOP_") ? "STOP_LOSS" : "TAKE_PROFIT",
+          symbol: close.symbol,
+          side: close.side,
+          price: close.price,
+          quantity: close.quantity,
+          pnl: close.realizedPnl,
+          reason,
+        } });
+      }
+    } catch { /* A Bark outage must not interrupt the simulated execution loop. */ }
+  }
   const { d1, account, positions, orders, trades } = await getRows();
   const marks = new Map<string, { price: number; live: boolean }>();
   await Promise.all(positions.map(async (position) => {
@@ -171,6 +194,7 @@ export async function getPaperSnapshot(input?: { symbol?: unknown; quotedPrice?:
       entryPrice: position.entry_price, markPrice: mark, unrealizedPnl: pnlFor(position, mark, position.quantity),
       leverage: position.leverage, entries: position.entries, stopPrice: position.stop_price,
       targetPrice: position.target_price, strategyScore: position.strategy_score, openedAt: position.opened_at, quoteLive: quote.live,
+      occupiedMargin: round(position.entry_price * position.quantity / position.leverage),
     };
   });
   const unrealizedPnl = round(normalizedPositions.reduce((sum, item) => sum + item.unrealizedPnl, 0));
@@ -220,9 +244,10 @@ export async function openPaperPosition(input: {
   const usedMargin = positions.reduce((sum, item) => sum + item.entry_price * item.quantity / item.leverage, 0);
   const available = Math.max(0, account.cash_balance - usedMargin);
   const sizeValue = Number(input.sizeValue);
-  const notional = input.sizeMode === "percent" ? available * sizeValue / 100 : sizeValue;
-  if (!Number.isFinite(notional) || notional < 10) throw new Error("每次模拟下单至少10 USDT");
-  if (notional / DEFAULT_LEVERAGE > available) throw new Error("模拟账户可用保证金不足");
+  const sizing = calculateOrderSizing({ sizeMode: String(input.sizeMode) as "fixed_margin" | "available_pct" | "fixed" | "percent", sizeValue, availableMargin: available, leverage: DEFAULT_LEVERAGE });
+  const { marginUsdt, notional } = sizing;
+  if (!Number.isFinite(marginUsdt) || marginUsdt < 10) throw new Error("每次模拟下单至少10 USDT保证金");
+  if (marginUsdt > available) throw new Error("模拟账户可用保证金不足");
   const quantity = round(notional / price);
   if (quantity <= 0) throw new Error("模拟下单数量无效");
   const fee = round(notional * TAKER_FEE_RATE);
@@ -254,7 +279,7 @@ export async function openPaperPosition(input: {
     ...(quote.source === "demo_quote" ? ["本次使用明确标记的演示报价，只用于测试流程。"] : []),
     ...(quote.source === "browser_live_quote" ? ["服务端标记价暂不可用，本次采用页面收到的实时公开报价。"] : []),
   ];
-  return { symbol, side, price, priceSource: quote.source, quantity, notional: round(notional), fee, entries: (existing?.entries ?? 0) + 1, warning: warnings.join(" ") || null };
+  return { orderId, symbol, side, price, priceSource: quote.source, quantity, marginUsdt: round(marginUsdt), leverage: DEFAULT_LEVERAGE, notional: round(notional), fee, entries: (existing?.entries ?? 0) + 1, warning: warnings.join(" ") || null };
 }
 
 export async function closePaperPosition(input: { symbol: unknown; percent: unknown; reason?: unknown; quotedPrice?: unknown; quoteMode?: unknown }) {
@@ -266,7 +291,7 @@ export async function closePaperPosition(input: { symbol: unknown; percent: unkn
   const percent = Number(input.percent);
   if (![25, 50, 100].includes(percent)) throw new Error("模拟减仓比例只支持25%、50%或100%");
   const quote = await executionPrice(symbol, input.quotedPrice, input.quoteMode);
-  return { ...(await closeAtPrice(position, percent, quote.price, String(input.reason || "MANUAL_CLOSE").slice(0, 40))), priceSource: quote.source };
+  return { symbol, positionSide: position.side, ...(await closeAtPrice(position, percent, quote.price, String(input.reason || "MANUAL_CLOSE").slice(0, 40))), priceSource: quote.source };
 }
 
 export async function cancelPaperOrder(id: unknown) {

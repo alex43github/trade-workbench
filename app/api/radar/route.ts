@@ -1,4 +1,8 @@
 import { scoreShortCrowding } from "@/lib/radar/short-crowding";
+import { fetchAsterOi } from "@/lib/radar/aster-public";
+import { calculateTop10Concentration } from "@/lib/radar/chip-concentration";
+import { fetchOnchainTop10 } from "@/lib/radar/onchain-holders";
+import { binancePublicJson } from "@/lib/binance-public";
 
 type PlainObject = Record<string, unknown>;
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
@@ -35,7 +39,6 @@ type RadarCoin = {
   takerRatio: number;
   retailLsr: number;
   asterOi1h: number | null;
-  asterWhaleDelta: number | null;
   top10Pct: number | null;
   top1Pct: number | null;
   cexPct: number | null;
@@ -63,6 +66,7 @@ type RadarBase = Omit<RadarCoin, "score" | "participation" | "setupTags" | "verd
 
 const BINANCE_FUTURES = "https://fapi.binance.com";
 const BINANCE_FUTURES_DATA = "https://fapi.binance.com/futures/data";
+const asterSnapshots = new Map<string, { symbol: string; openInterest: number; capturedAt: string }>();
 
 const demoCoins: RadarBase[] = [
   {
@@ -70,7 +74,7 @@ const demoCoins: RadarBase[] = [
     change4h: 6.25, change24h: 11.7, volume24h: 894_000_000, heatScore: 91, heatChange: 48,
     mentionCount: 186, crowdMood: "SHORT_CROWD", shortCallRatio: 64, trappedRatio: 18,
     resilienceScore: 82, oi15m: 3.7, oi1h: 8.6, oi4h: 15.2, fundingRate: 0.0187,
-    takerRatio: 1.21, retailLsr: 0.78, asterOi1h: 6.4, asterWhaleDelta: 8.1,
+    takerRatio: 1.21, retailLsr: 0.78, asterOi1h: 6.4,
     top10Pct: 58.4, top1Pct: 18.6, cexPct: 12.4, quietWalletPct: 3.2, chipStage: "拉升中",
     chainAnomaly: 63, chainSignal: "净流出CEX", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
   },
@@ -79,7 +83,7 @@ const demoCoins: RadarBase[] = [
     change4h: 8.61, change24h: 19.4, volume24h: 322_000_000, heatScore: 86, heatChange: 63,
     mentionCount: 143, crowdMood: "TRAPPED", shortCallRatio: 38, trappedRatio: 47,
     resilienceScore: 69, oi15m: 2.2, oi1h: 5.8, oi4h: 12.7, fundingRate: 0.0321,
-    takerRatio: 1.09, retailLsr: 1.22, asterOi1h: 2.1, asterWhaleDelta: null,
+    takerRatio: 1.09, retailLsr: 1.22, asterOi1h: 2.1,
     top10Pct: 44.8, top1Pct: 9.4, cexPct: 18.2, quietWalletPct: 6.1, chipStage: "横盘整理",
     chainAnomaly: 41, chainSignal: "中性", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
   },
@@ -88,7 +92,7 @@ const demoCoins: RadarBase[] = [
     change4h: 27.8, change24h: 58.6, volume24h: 76_000_000, heatScore: 95, heatChange: 112,
     mentionCount: 214, crowdMood: "CHASE_LONG", shortCallRatio: 11, trappedRatio: 8,
     resilienceScore: 91, oi15m: 9.6, oi1h: 24.1, oi4h: 46.8, fundingRate: 0.087,
-    takerRatio: 2.07, retailLsr: 1.92, asterOi1h: 16.5, asterWhaleDelta: 12.3,
+    takerRatio: 2.07, retailLsr: 1.92, asterOi1h: 16.5,
     top10Pct: 82.6, top1Pct: 61.4, cexPct: 34.7, quietWalletPct: 12.6, chipStage: "派发预警",
     chainAnomaly: 88, chainSignal: "CEX大额充值", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
   },
@@ -97,7 +101,7 @@ const demoCoins: RadarBase[] = [
     change4h: 2.73, change24h: 5.2, volume24h: 3_820_000_000, heatScore: 72, heatChange: 18,
     mentionCount: 96, crowdMood: "MIXED", shortCallRatio: 36, trappedRatio: 19,
     resilienceScore: 61, oi15m: 0.8, oi1h: 2.4, oi4h: 5.1, fundingRate: 0.0098,
-    takerRatio: 1.04, retailLsr: 1.14, asterOi1h: 1.3, asterWhaleDelta: 0.8,
+    takerRatio: 1.04, retailLsr: 1.14, asterOi1h: 1.3,
     top10Pct: 31.2, top1Pct: 7.3, cexPct: 22.4, quietWalletPct: 1.1, chipStage: "横盘整理",
     chainAnomaly: 28, chainSignal: "中性", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
   },
@@ -106,7 +110,7 @@ const demoCoins: RadarBase[] = [
     change4h: 4.16, change24h: 8.9, volume24h: 119_000_000, heatScore: 76, heatChange: 35,
     mentionCount: 105, crowdMood: "SHORT_CROWD", shortCallRatio: 58, trappedRatio: 21,
     resilienceScore: 43, oi15m: -1.9, oi1h: -3.4, oi4h: 2.2, fundingRate: 0.0144,
-    takerRatio: 0.82, retailLsr: 0.74, asterOi1h: -1.6, asterWhaleDelta: -2.4,
+    takerRatio: 0.82, retailLsr: 0.74, asterOi1h: -1.6,
     top10Pct: 39.5, top1Pct: 11.2, cexPct: 25.1, quietWalletPct: 2.4, chipStage: "派发中",
     chainAnomaly: 71, chainSignal: "大户转入CEX", coverage: { square: "demo", binanceOi: "demo", aster: "demo", chips: "demo", chain: "demo" },
   },
@@ -224,7 +228,7 @@ function analyze(base: RadarBase): RadarCoin {
       reasons.push(`Aster 1h OI增加 ${base.asterOi1h.toFixed(1)}%，跨市场持仓同步`);
     }
   } else {
-    risks.push("Aster全市场OI和大户持仓仍待接入，不计入当前评分");
+    risks.push("Aster OI暂无上一时点快照，本轮不计算跨市场增仓");
   }
 
   if (base.coverage.chips !== "pending" && base.top10Pct !== null) {
@@ -234,7 +238,6 @@ function analyze(base: RadarBase): RadarCoin {
       reasons.push(`Top10持仓 ${base.top10Pct.toFixed(1)}%，具备控盘特征但未达到极端阈值`);
     }
     if (/吸筹|拉升/.test(base.chipStage)) score += 4;
-    if ((base.quietWalletPct ?? 0) >= 8) risks.push(`Quiet钱包占比 ${base.quietWalletPct?.toFixed(1)}%，存在潜在集中抛压`);
   } else {
     risks.push("筹码快照待接入，尚未排除交易所、LP和锁仓地址");
   }
@@ -257,7 +260,7 @@ function analyze(base: RadarBase): RadarCoin {
   if (Math.abs(base.fundingRate) >= 0.08) risks.push(`资金费率 ${base.fundingRate.toFixed(3)}%，方向成本极端`);
   if (base.retailLsr >= 1.8) risks.push(`散户多空比 ${base.retailLsr.toFixed(2)}，追多过度拥挤`);
   if (base.takerRatio >= 1.9) risks.push(`主动买卖比 ${base.takerRatio.toFixed(2)}，短线买盘可能透支`);
-  if ((base.top1Pct ?? 0) > 60 || (base.top10Pct ?? 0) > 85) risks.push("筹码过度集中，单一地址或集群具备砸盘能力");
+  if ((base.top10Pct ?? 0) > 85) risks.push("排除交易所后的Top10筹码过度集中，少数地址集群具备砸盘能力");
   if (/派发预警|派发中/.test(base.chipStage)) risks.push(`筹码阶段为“${base.chipStage}”`);
 
   const hardVeto = risks.some((risk) => /触发|极端|过度集中|派发中|CEX大额充值/.test(risk));
@@ -337,7 +340,17 @@ function normalizeRow(item: unknown): RadarBase | null {
   const shortCallRatio = number(firstValue([heat, row], ["short_call_ratio", "shortCallRatio", "bearish_ratio", "short_ratio"]));
   const trappedRatio = number(firstValue([heat, row], ["trapped_ratio", "trappedRatio", "loss_complaint_ratio", "holding_bag_ratio"]));
   const oi1hRaw = firstValue(sources, ["oi_change_1h", "oi1h", "open_interest_change_1h"]);
-  const top10Pct = nullableNumber(firstValue([chip, row], ["top10_pct", "top10Pct", "top_10_percentage", "operator_pct"]));
+  const rawHolders = firstValue([row, chip], ["holders", "top_holders", "topHolders", "holder_list"]);
+  const concentration = Array.isArray(rawHolders) ? calculateTop10Concentration(rawHolders.map((holder) => {
+    const item = object(holder);
+    return {
+      address: string(firstValue([item], ["address", "holder", "wallet", "id"])),
+      balance: number(firstValue([item], ["balance", "amount", "value", "quantity"])),
+      label: string(firstValue([item], ["label", "name", "entity", "annotation"])),
+      category: string(firstValue([item], ["category", "type", "entity_type"])),
+    };
+  })) : null;
+  const top10Pct = concentration?.status === "live" ? concentration.top10Pct : nullableNumber(firstValue([chip, row], ["top10_excluding_exchanges_pct", "top10FilteredPct", "top10_filtered_pct"]));
   const chainAnomaly = nullableNumber(firstValue([chain, row], ["anomaly_score", "chainAnomaly", "risk_score"]));
   const asterOi1h = nullableNumber(firstValue([aster, row], ["oi_change_1h", "oi1h", "open_interest_change_1h"]));
 
@@ -369,7 +382,6 @@ function normalizeRow(item: unknown): RadarBase | null {
     takerRatio: number(firstValue(sources, ["taker_ratio", "takerRatio", "buy_sell_ratio"]), 1),
     retailLsr: number(firstValue(sources, ["global_lsr", "retail_lsr", "long_short_ratio", "lsr"]), 1),
     asterOi1h,
-    asterWhaleDelta: nullableNumber(firstValue([aster, row], ["whale_delta", "whaleDelta", "large_position_change"])),
     top10Pct,
     top1Pct: nullableNumber(firstValue([chip, row], ["top1_pct", "top1Pct", "top_holder_pct"])),
     cexPct: nullableNumber(firstValue([chip, row], ["cex_pct", "cexPct", "cex_pool_pct"])),
@@ -381,13 +393,17 @@ function normalizeRow(item: unknown): RadarBase | null {
       square: "live",
       binanceOi: oi1hRaw === undefined ? "pending" : "live",
       aster: asterOi1h === null ? "pending" : "live",
-      chips: top10Pct === null ? "pending" : "live",
+    chips: top10Pct === null ? "pending" : "live",
       chain: chainAnomaly === null ? "pending" : "live",
     },
   };
 }
 
 async function fetchJson(url: string, timeout = 6_000): Promise<unknown> {
+  const endpoint = new URL(url);
+  if (endpoint.origin === BINANCE_FUTURES) {
+    return (await binancePublicJson(`${endpoint.pathname}${endpoint.search}`, { signal: AbortSignal.timeout(timeout) })).data;
+  }
   const response = await fetch(url, {
     headers: { accept: "application/json", "user-agent": "streetlight-radar/0.2" },
     signal: AbortSignal.timeout(timeout),
@@ -441,7 +457,7 @@ async function fetchLiveMarketCoin(ticker: PlainObject, fundingMap: Map<string, 
     oi15m, oi1h, oi4h,
     fundingRate: percentFunding(fundingMap.get(symbol) ?? 0),
     takerRatio, retailLsr,
-    asterOi1h: null, asterWhaleDelta: null,
+    asterOi1h: null,
     top10Pct: null, top1Pct: null, cexPct: null, quietWalletPct: null, chipStage: "待接入",
     chainAnomaly: null, chainSignal: "待接入",
     coverage: {
@@ -450,6 +466,30 @@ async function fetchLiveMarketCoin(ticker: PlainObject, fundingMap: Map<string, 
       aster: "pending", chips: "pending", chain: "pending",
     },
   };
+}
+
+async function enrichReferenceSources(bases: RadarBase[]) {
+  for (const base of bases) {
+    try {
+      const observation = await fetchAsterOi(base.symbol, { previous: asterSnapshots.get(base.symbol) ?? null, timeoutMs: 2_500 });
+      asterSnapshots.set(base.symbol, { symbol: base.symbol, openInterest: observation.openInterest, capturedAt: new Date().toISOString() });
+      if (observation.changePct !== null) { base.asterOi1h = observation.changePct; base.coverage.aster = "live"; }
+    } catch {
+      // Aster is an optional reference source; never block market rendering.
+    }
+  }
+  let tokenMap: Record<string, { chain?: string; address?: string }> = {};
+  try { tokenMap = JSON.parse(process.env.ONCHAIN_TOKEN_MAP_JSON ?? "{}"); } catch { tokenMap = {}; }
+  for (const base of bases) {
+    const token = tokenMap[base.symbol] ?? tokenMap[base.displayName];
+    if (!token?.address) continue;
+    try {
+      const concentration = await fetchOnchainTop10(token.chain ?? "ethereum", token.address);
+      if (concentration.status === "live") { base.top10Pct = concentration.top10Pct; base.coverage.chips = "live"; }
+    } catch {
+      // Missing provider credentials or a throttled provider remains explicitly pending.
+    }
+  }
 }
 
 async function buildLiveMarketFallback(): Promise<RadarCoin[]> {
@@ -481,6 +521,7 @@ async function buildLiveMarketFallback(): Promise<RadarCoin[]> {
     })
     .slice(0, 8);
   const bases = await Promise.all(candidates.map((ticker) => fetchLiveMarketCoin(ticker, fundingMap)));
+  await enrichReferenceSources(bases);
   return bases.map(analyze).sort((a, b) => b.score - a.score);
 }
 
@@ -490,9 +531,11 @@ export async function GET() {
   if (baseUrl) {
     try {
       const payload = await fetchJson(`${baseUrl}/api/leaderboard`, 7_000);
-      const coins = extractRows(payload)
+      const bases = extractRows(payload)
         .map(normalizeRow)
-        .filter((coin): coin is RadarBase => Boolean(coin))
+        .filter((coin): coin is RadarBase => Boolean(coin));
+      await enrichReferenceSources(bases);
+      const coins = bases
         .map(analyze)
         .sort((a, b) => b.score - a.score);
       if (coins.length) {
@@ -517,7 +560,7 @@ export async function GET() {
       return Response.json({
         mode: "hybrid",
         updatedAt: new Date().toISOString(),
-        sourceStatus: `Binance Futures实时行情 · ${coins.length} 个高波动合约 · 广场/筹码/Aster待接入`,
+        sourceStatus: `Binance Futures实时行情 · ${coins.length} 个高波动合约 · Aster OI与链上Top10按可用快照显示`,
         coins,
       }, { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
     }
