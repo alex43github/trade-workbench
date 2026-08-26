@@ -155,7 +155,7 @@ function fingerprint(request: TvScreenerRequest): string {
 
 function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalized === "localhost" || normalized === "::1") return true;
+  if (normalized === "::1") return true;
 
   const octets = normalized.split(".");
   if (octets.length !== 4 || octets[0] !== "127") return false;
@@ -214,7 +214,10 @@ function normalizeString(value: unknown): string | null {
 }
 
 function normalizeValue(value: unknown, warnings: string[], label: string): number | string | null {
-  if (value === null) return null;
+  if (value === null) {
+    warnings.push(`${label} is null`);
+    return null;
+  }
   if (typeof value === "number") {
     if (Number.isFinite(value)) return value;
     warnings.push(`${label} is unavailable`);
@@ -225,29 +228,44 @@ function normalizeValue(value: unknown, warnings: string[], label: string): numb
   return null;
 }
 
-function normalizeValues(value: unknown, warnings: string[]): Record<string, number | string | null> {
-  if (!isRecord(value)) return {};
+function hasOwn(record: UnknownRecord, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function normalizeValues(
+  value: unknown,
+  fields: TvScreenerField[],
+  warnings: string[],
+): Record<string, number | string | null> {
+  const rawValues = isRecord(value) ? value : {};
   const values: Record<string, number | string | null> = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (!ALLOWED_FIELDS.has(key)) continue;
-    values[key] = normalizeValue(item, warnings, `field ${key}`);
+  for (const field of fields) {
+    if (!hasOwn(rawValues, field)) {
+      values[field] = null;
+      warnings.push(`field ${field} is missing`);
+      continue;
+    }
+    values[field] = normalizeValue(rawValues[field], warnings, `field ${field}`);
   }
   return values;
 }
 
 function normalizeIntervalValues(
   value: unknown,
+  intervals: TvScreenerInterval[],
+  fields: TvScreenerField[],
   warnings: string[],
 ): Record<string, Record<string, number | null>> {
-  if (!isRecord(value)) return {};
+  const rawIntervals = isRecord(value) ? value : {};
   const intervalValues: Record<string, Record<string, number | null>> = {};
-  for (const [interval, rawValues] of Object.entries(value)) {
-    if (!ALLOWED_INTERVALS.has(interval) || !isRecord(rawValues)) continue;
+  for (const interval of intervals) {
+    const rawValues = hasOwn(rawIntervals, interval) && isRecord(rawIntervals[interval]) ? rawIntervals[interval] : {};
     const values: Record<string, number | null> = {};
-    for (const [field, item] of Object.entries(rawValues)) {
-      if (!ALLOWED_FIELDS.has(field)) continue;
+    for (const field of fields) {
+      const item = hasOwn(rawValues, field) ? rawValues[field] : null;
       if (item === null) {
         values[field] = null;
+        warnings.push(`${interval}/${field} is ${hasOwn(rawValues, field) ? "null" : "missing"}`);
       } else if (typeof item === "number" && Number.isFinite(item)) {
         values[field] = item;
       } else {
@@ -260,36 +278,45 @@ function normalizeIntervalValues(
   return intervalValues;
 }
 
-function normalizeRow(value: unknown): TvScreenerRow {
+function normalizeRow(value: unknown, request: TvScreenerRequest): TvScreenerRow {
   if (!isRecord(value) || typeof value.tvSymbol !== "string" || value.tvSymbol.length === 0) {
     throw new Error("sidecar returned an invalid row");
   }
 
   const warnings = normalizeWarnings(value.warnings);
+  const binanceSymbol = normalizeString(value.binanceSymbol);
+  if (binanceSymbol === null) warnings.push("binance symbol mapping unavailable");
   const row: TvScreenerRow = {
     tvSymbol: value.tvSymbol.slice(0, MAX_WARNING_LENGTH),
     exchange: normalizeString(value.exchange),
     rawSymbol: normalizeString(value.rawSymbol),
-    binanceSymbol: normalizeString(value.binanceSymbol),
-    values: normalizeValues(value.values, warnings),
-    intervalValues: normalizeIntervalValues(value.intervalValues, warnings),
+    binanceSymbol,
+    values: normalizeValues(value.values, request.fields, warnings),
+    intervalValues: normalizeIntervalValues(value.intervalValues, request.intervals, request.fields, warnings),
     warnings,
   };
   return row;
 }
 
 function normalizeCoverage(value: unknown, warnings: string[], rows: TvScreenerRow[]): TvScreenerCoverage {
-  if (value === undefined) return warnings.length > 0 || rows.some((row) => row.warnings.length > 0) ? "partial" : "live";
+  const hasWarnings = warnings.length > 0 || rows.some((row) => row.warnings.length > 0);
+  if (value === undefined) return hasWarnings ? "partial" : "live";
   if (typeof value !== "string" || !COVERAGES.has(value)) throw new Error("sidecar returned an invalid coverage");
+  if (value === "live" && hasWarnings) return "partial";
   return value as TvScreenerCoverage;
 }
 
-function normalizeResponse(payload: unknown, requestId: string, fetchedAt: string): TvScreenerResponse {
+function normalizeResponse(
+  payload: unknown,
+  request: TvScreenerRequest,
+  requestId: string,
+  fetchedAt: string,
+): TvScreenerResponse {
   if (!isRecord(payload) || !Array.isArray(payload.rows) || payload.rows.length > MAX_ROWS) {
     throw new Error("sidecar returned an invalid response");
   }
 
-  const rows = payload.rows.map(normalizeRow);
+  const rows = payload.rows.map((row) => normalizeRow(row, request));
   const warnings = normalizeWarnings(payload.warnings);
   return {
     source: "tradingview-screener",
@@ -380,7 +407,7 @@ async function loadResponse(
   const fetchedAt = new Date(Date.now()).toISOString();
   try {
     const payload = await requestSidecar(request);
-    const response = normalizeResponse(payload, requestId, fetchedAt);
+    const response = normalizeResponse(payload, request, requestId, fetchedAt);
     if (response.coverage === "live" || response.coverage === "partial") {
       cache.set(fingerprint(request), { response, cachedAt: Date.now() });
     }

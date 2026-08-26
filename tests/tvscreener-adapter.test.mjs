@@ -36,6 +36,7 @@ function sidecarResponse(overrides = {}) {
         intervalValues: {
           "15": {
             PRICE: 100,
+            CHANGE_PERCENT: 2.5,
             RSI_14: 61,
           },
         },
@@ -254,4 +255,151 @@ test("rejects a non-loopback base URL without making a sidecar request", async (
     assert.equal(result.coverage, "unavailable");
     assert.match(result.warnings.join(" "), /loopback|URL|sidecar/i);
   }));
+});
+
+test("does not treat named localhost as an allowed loopback URL", async () => {
+  let callCount = 0;
+  await withEnv("http://localhost:8899", () => withFetch(async () => {
+    callCount += 1;
+    return jsonResponse(sidecarResponse());
+  }, async () => {
+    const result = await screenWithTvScreener(request({ symbols: ["BINANCE:LOCALHOSTUSDT"] }));
+
+    assert.equal(callCount, 0);
+    assert.equal(result.coverage, "unavailable");
+    assert.match(result.warnings.join(" "), /loopback|URL|sidecar/i);
+  }));
+});
+
+test("materializes requested fields and intervals with null warnings and mapping warnings", async () => {
+  const fields = ["PRICE", "CHANGE_PERCENT", "RSI_14", "MACD_12_26"];
+  const intervals = ["15", "60"];
+  await withEnv("http://127.0.0.1:8899", () => withFetch(async () => jsonResponse({
+    coverage: "live",
+    rows: [{
+      tvSymbol: "BINANCE:SPARSEUSDT",
+      exchange: "BINANCE",
+      rawSymbol: "SPARSEUSDT",
+      values: {
+        PRICE: 101,
+        CHANGE_PERCENT: null,
+        RSI_14: Number.NaN,
+      },
+      intervalValues: {
+        "15": {
+          PRICE: 101,
+          CHANGE_PERCENT: null,
+          RSI_14: Number.POSITIVE_INFINITY,
+        },
+      },
+      warnings: [],
+    }],
+    warnings: [],
+  }), async () => {
+    const result = await screenWithTvScreener(request({
+      symbols: ["BINANCE:SPARSEUSDT"],
+      fields,
+      intervals,
+    }));
+    const row = result.rows[0];
+    const warnings = row.warnings.join(" ");
+
+    assert.equal(result.coverage, "partial");
+    assert.deepEqual(row.values, {
+      PRICE: 101,
+      CHANGE_PERCENT: null,
+      RSI_14: null,
+      MACD_12_26: null,
+    });
+    assert.deepEqual(row.intervalValues, {
+      "15": {
+        PRICE: 101,
+        CHANGE_PERCENT: null,
+        RSI_14: null,
+        MACD_12_26: null,
+      },
+      "60": {
+        PRICE: null,
+        CHANGE_PERCENT: null,
+        RSI_14: null,
+        MACD_12_26: null,
+      },
+    });
+    for (const field of fields) assert.match(warnings, new RegExp(field));
+    assert.match(warnings, /mapping|binance/i);
+    assert.equal(row.binanceSymbol, null);
+  }));
+});
+
+test("rejects a sidecar response with more than 25 rows as unavailable", async () => {
+  const rows = Array.from({ length: 26 }, (_, index) => ({
+    ...sidecarResponse().rows[0],
+    tvSymbol: `BINANCE:OVERFLOW${index}USDT`,
+  }));
+  await withEnv("http://127.0.0.1:8899", () => withFetch(async () => jsonResponse({
+    coverage: "live",
+    rows,
+    warnings: [],
+  }), async () => {
+    const result = await screenWithTvScreener(request({ symbols: ["BINANCE:OVERFLOWUSDT"] }));
+
+    assert.equal(result.coverage, "unavailable");
+    assert.deepEqual(result.rows, []);
+  }));
+});
+
+test("uses a deterministic 10000ms abort deadline and converts timeout to unavailable", async () => {
+  const originalTimeout = AbortSignal.timeout;
+  const timeoutSignal = new AbortController().signal;
+  let deadline;
+  AbortSignal.timeout = (milliseconds) => {
+    deadline = milliseconds;
+    return timeoutSignal;
+  };
+  try {
+    await withEnv("http://127.0.0.1:8899", () => withFetch(async (_input, init) => {
+      assert.equal(init.signal, timeoutSignal);
+      const error = new Error("deadline reached");
+      error.name = "TimeoutError";
+      throw error;
+    }, async () => {
+      const result = await screenWithTvScreener(request({ symbols: ["BINANCE:TIMEOUTUSDT"] }));
+
+      assert.equal(deadline, 10_000);
+      assert.equal(result.coverage, "unavailable");
+      assert.match(result.warnings.join(" "), /timed out|unavailable/i);
+    }));
+  } finally {
+    AbortSignal.timeout = originalTimeout;
+  }
+});
+
+test("does not let a failed refresh replace the successful cache", async () => {
+  let callCount = 0;
+  await withEnv("http://127.0.0.1:8899", () => withNow(CLOCK_START, (setNow) => withFetch(async () => {
+    callCount += 1;
+    if (callCount === 1) return jsonResponse(sidecarResponse({ rows: [{
+      ...sidecarResponse().rows[0],
+      tvSymbol: "BINANCE:CACHEUSDT",
+      values: { PRICE: 111, CHANGE_PERCENT: 1, RSI_14: 55 },
+    }] }));
+    if (callCount === 2) return jsonResponse({ error: "temporary outage" }, 503);
+    return jsonResponse(sidecarResponse({ rows: [{
+      ...sidecarResponse().rows[0],
+      tvSymbol: "BINANCE:CACHEUSDT",
+      values: { PRICE: 222, CHANGE_PERCENT: 2, RSI_14: 65 },
+    }] }));
+  }, async () => {
+    const live = await screenWithTvScreener(request({ symbols: ["BINANCE:CACHEUSDT"] }));
+    setNow(CLOCK_START + 30_001);
+    const stale = await screenWithTvScreener(request({ symbols: ["BINANCE:CACHEUSDT"] }));
+    const refreshed = await screenWithTvScreener(request({ symbols: ["BINANCE:CACHEUSDT"] }));
+
+    assert.equal(live.coverage, "live");
+    assert.equal(stale.coverage, "stale");
+    assert.equal(stale.rows[0].values.PRICE, 111);
+    assert.equal(refreshed.coverage, "live");
+    assert.equal(refreshed.rows[0].values.PRICE, 222);
+    assert.equal(callCount, 3);
+  })));
 });
