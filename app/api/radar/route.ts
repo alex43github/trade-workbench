@@ -3,6 +3,7 @@ import { fetchAsterOi } from "@/lib/radar/aster-public";
 import { calculateTop10Concentration } from "@/lib/radar/chip-concentration";
 import { fetchOnchainTop10 } from "@/lib/radar/onchain-holders";
 import { binancePublicJson } from "@/lib/binance-public";
+import { loadTvScreenerResearch, unavailableTvScreenerResearch, type TvScreenerResearch } from "./tvscreener/route";
 
 type PlainObject = Record<string, unknown>;
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
@@ -67,6 +68,7 @@ type RadarBase = Omit<RadarCoin, "score" | "participation" | "setupTags" | "verd
 const BINANCE_FUTURES = "https://fapi.binance.com";
 const BINANCE_FUTURES_DATA = "https://fapi.binance.com/futures/data";
 const asterSnapshots = new Map<string, { symbol: string; openInterest: number; capturedAt: string }>();
+const TVSCREENER_RADAR_TIMEOUT_MS = 500;
 
 const demoCoins: RadarBase[] = [
   {
@@ -525,6 +527,25 @@ async function buildLiveMarketFallback(): Promise<RadarCoin[]> {
   return bases.map(analyze).sort((a, b) => b.score - a.score);
 }
 
+async function loadRadarTvScreener(symbols: string[]): Promise<TvScreenerResearch> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      loadTvScreenerResearch(symbols),
+      new Promise<TvScreenerResearch>((resolve) => {
+        timeout = setTimeout(() => resolve(unavailableTvScreenerResearch()), TVSCREENER_RADAR_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+async function withTvScreener<T extends { coins: RadarCoin[] }>(payload: T) {
+  const tvScreener = await loadRadarTvScreener(payload.coins.map((coin) => coin.symbol));
+  return { ...payload, tvScreener };
+}
+
 export async function GET() {
   const baseUrl = process.env.SQUARE_MONITOR_BASE_URL?.replace(/\/$/, "");
 
@@ -542,12 +563,12 @@ export async function GET() {
         const hotCoins = [...coins].sort((a, b) => (b.mentionCount + b.heatChange) - (a.mentionCount + a.heatChange)).slice(0, 10);
         const resilientCoins = coins.filter((item) => item.shortCallRatio >= 65 && (item.change4h >= 0 || (item.relativeBtc4h ?? 0) > 0)).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
         const shortCrowding = coins.filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
-        return Response.json({
+        return Response.json(await withTvScreener({
           mode: "live",
           updatedAt: new Date().toISOString(),
           sourceStatus: `币安广场监控已连接 · ${coins.length} 个有效币种 · 缺失字段不参与评分`,
           coins, hotCoins, resilientCoins, shortCrowding,
-        }, { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
+        }), { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
       }
     } catch {
       // Continue with Binance public market data. The response labels missing sources explicitly.
@@ -557,18 +578,18 @@ export async function GET() {
   try {
     const coins = await buildLiveMarketFallback();
     if (coins.length) {
-      return Response.json({
+      return Response.json(await withTvScreener({
         mode: "hybrid",
         updatedAt: new Date().toISOString(),
         sourceStatus: `Binance Futures实时行情 · ${coins.length} 个高波动合约 · Aster OI与链上Top10按可用快照显示`,
         coins,
-      }, { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
+      }), { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
     }
   } catch {
     // A fully labeled demo keeps the product usable when the public endpoint is regionally unavailable.
   }
 
-  return Response.json({
+  return Response.json(await withTvScreener({
     mode: "demo",
     updatedAt: new Date().toISOString(),
     sourceStatus: baseUrl ? "外部采集暂不可用 · 已切换演示样本" : "尚未连接广场采集服务 · 当前为演示样本",
@@ -576,5 +597,5 @@ export async function GET() {
     hotCoins: demoCoins.map(analyze).sort((a, b) => b.mentionCount - a.mentionCount).slice(0, 10),
     resilientCoins: demoCoins.map(analyze).filter((item) => item.shortCallRatio >= 65),
     shortCrowding: demoCoins.map(analyze).filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")),
-  }, { headers: { "cache-control": "no-store" } });
+  }), { headers: { "cache-control": "no-store" } });
 }
