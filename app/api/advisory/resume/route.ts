@@ -2,11 +2,11 @@ import { ensureAdvisorySchema } from "@/db/ensure";
 import { getD1 } from "@/db";
 import { runDailyAdvisoryJob } from "@/lib/advisory/daily-job";
 import { loadOpenProviderAlerts, resolveProviderAlerts, resumableSymbolsFromAlerts } from "@/lib/advisory/provider-alerts";
-import { isSameOriginMutation } from "@/lib/advisory/same-origin";
-import { hasOperatorSession } from "@/lib/advisory/operator-session";
+import { requireOperatorMutation } from "@/lib/security/operator-guard";
 
 export async function POST(request: Request) {
-  if (!isSameOriginMutation(request) || !await hasOperatorSession(request, process.env.ADVISORY_JOB_TOKEN)) return Response.json({ error: "authenticated operator action required" }, { status: 403 });
+  const denied = await requireOperatorMutation(request);
+  if (denied) return denied;
   await ensureAdvisorySchema();
   const db = await getD1();
   const alerts = await loadOpenProviderAlerts(db);

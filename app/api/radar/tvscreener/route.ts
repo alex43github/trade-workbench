@@ -72,7 +72,7 @@ export async function loadTvScreenerResearch(candidateSymbols?: string[]): Promi
   const symbols = candidateSymbols?.length
     ? candidateSymbols.filter((symbol) => allowedSymbols.has(symbol)).slice(0, MAX_ROWS)
     : [...allowedSymbols].slice(0, MAX_ROWS);
-  if (!symbols.length) return unavailableTvScreenerResearch("No confirmed Binance USDT perpetual symbols are available");
+  if (!symbols.length) return unavailableTvScreenerResearch("No confirmed Binance USDT or USDC perpetual symbols are available");
 
   try {
     const response = await screenWithTvScreener(createScreenRequest(symbols));

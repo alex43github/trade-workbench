@@ -2,6 +2,8 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { ensureTradeKnowledgeSchema } from "../../../db/ensure";
 import { tradeKnowledge } from "../../../db/schema";
+import { requireOperator, requireOperatorMutation } from "../../../lib/security/operator-guard";
+import { isBinanceFuturesSymbol } from "../../../lib/trade/symbols";
 
 const KNOWLEDGE_VERSION = "street-brother-template-v0.1";
 
@@ -29,6 +31,8 @@ function normalized(row: typeof tradeKnowledge.$inferSelect) {
 }
 
 export async function GET(request: Request) {
+  const denied = await requireOperator(request);
+  if (denied) return denied;
   try {
     await ensureTradeKnowledgeSchema();
     const db = await getDb();
@@ -45,13 +49,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireOperatorMutation(request);
+  if (denied) return denied;
   try {
     await ensureTradeKnowledgeSchema();
     const payload = await request.json() as Record<string, unknown>;
     const symbol = String(payload.symbol || "").trim().toUpperCase();
     const side = String(payload.side || "LONG").toUpperCase();
     const phase = String(payload.phase || "pretrade");
-    if (!/^[A-Z0-9]{2,24}USDT$/.test(symbol)) return Response.json({ error: "symbol is required" }, { status: 400 });
+    if (!isBinanceFuturesSymbol(symbol)) return Response.json({ error: "symbol is required" }, { status: 400 });
     if (!["LONG", "SHORT"].includes(side)) return Response.json({ error: "invalid side" }, { status: 400 });
     if (!["pretrade", "closed"].includes(phase)) return Response.json({ error: "invalid phase" }, { status: 400 });
 

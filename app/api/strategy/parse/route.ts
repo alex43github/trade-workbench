@@ -1,3 +1,5 @@
+import { requireOperatorMutation } from "@/lib/security/operator-guard";
+
 type ParsedStrategy = {
   name: string;
   timeframes: string[];
@@ -38,6 +40,8 @@ function matchNumber(text: string, patterns: RegExp[], fallback: number) {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireOperatorMutation(request);
+  if (denied) return denied;
   let text = "";
   try {
     const body = (await request.json()) as { text?: unknown };
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
     normalizedRules: [
       `${strategy.timeframes.join(" / ")} 使用MA${strategy.maLength}`,
       `盘中触及MA或收盘进入上下±${strategy.entryBandPct}%区域时允许买入`,
-      `每次使用${strategy.sizeMode === "fixed_usdt" ? `${strategy.sizeValue} USDT` : `可用资金的${strategy.sizeValue}%`}`,
+      `每次使用${strategy.sizeMode === "fixed_usdt" ? `${strategy.sizeValue} USDT保证金，名义价值按默认杠杆计算` : `可用资金的${strategy.sizeValue}%作为保证金，名义价值按默认杠杆计算`}`,
       `同一轮最多买入${strategy.maxEntries}次，直到发生卖出后才重置`,
       `入场周期首根收盘跌破MA卖出当前持仓${strategy.firstExitPct}%，下一根仍跌破再卖出剩余持仓${strategy.secondExitPct}%`,
     ],

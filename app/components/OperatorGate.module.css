@@ -1,0 +1,69 @@
+.trigger {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 70;
+  border: 1px solid #8067f2;
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: #171925;
+  color: #f0f1f8;
+  box-shadow: 0 12px 30px rgba(4, 2, 18, .22);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.trigger:hover { background: #8067f2; }
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 10, 17, .58);
+  backdrop-filter: blur(6px);
+}
+
+.card {
+  width: min(440px, 100%);
+  padding: 26px;
+  border: 1px solid #dcd9ea;
+  border-radius: 16px;
+  background: #fff;
+  color: #28233d;
+  box-shadow: 0 24px 70px rgba(4, 2, 18, .28);
+}
+
+.eyebrow {
+  color: #7655eb;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .14em;
+}
+
+.card h1 { margin: 9px 0 8px; font-size: 25px; }
+.card p { margin: 0; color: #716d86; font-size: 13px; line-height: 1.65; }
+.form { display: grid; gap: 9px; margin-top: 22px; }
+.form label { color: #28233d; font-size: 13px; font-weight: 650; }
+.form input { box-sizing: border-box; width: 100%; height: 42px; margin-top: 6px; padding: 0 11px; border: 1px solid #dcd9ea; border-radius: 8px; outline: 0; background: #faf9fe; color: #28233d; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.form input:focus { border-color: #7655eb; box-shadow: 0 0 0 3px rgba(118, 85, 235, .14); }
+.submit { min-height: 42px; margin-top: 5px; border: 0; border-radius: 8px; background: #7655eb; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+.submit:disabled { cursor: wait; opacity: .58; }
+.error { margin-top: 10px !important; color: #c63e4d !important; }
+.notice { margin-top: 16px !important; padding-top: 14px; border-top: 1px solid #ece9f4; font-size: 12px !important; }
+.back { display: inline-block; margin-top: 18px; color: #7655eb; font-size: 12px; text-decoration: none; }
+.back:hover { text-decoration: underline; }
+
+@media (prefers-color-scheme: dark) {
+  .card { border-color: #292c3f; background: #12141e; color: #f0f1f8; }
+  .card p, .notice { color: #8f93a6; }
+  .form label { color: #f0f1f8; }
+  .form input { border-color: #292c3f; background: #171925; color: #f0f1f8; }
+  .notice { border-color: #202332; }
+}
+
+@media (max-width: 560px) {
+  .trigger { right: 12px; bottom: 12px; }
+  .card { padding: 20px; }
+}

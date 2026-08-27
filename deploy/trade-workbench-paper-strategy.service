@@ -1,0 +1,18 @@
+[Unit]
+Description=Trade Workbench PAPER strategy scheduler
+After=network-online.target trade-workbench.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=trade-workbench
+Group=trade-workbench
+WorkingDirectory=/opt/trade-workbench
+EnvironmentFile=/etc/trade-workbench/workbench.env
+ExecStart=/usr/bin/node /opt/trade-workbench/services/workbench/paper-strategy-scheduler.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/trade-workbench
+UMask=0077

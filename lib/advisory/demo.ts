@@ -1,8 +1,24 @@
 import { CORE_SYMBOLS, EXPERTS, FORMAL_INITIAL_BALANCE, MAX_LEVERAGE } from "./config.ts";
 import { buildConsensus } from "./consensus.ts";
 import type { DecisionContract, Direction, ExpertId } from "./types.ts";
+import type { MarketSnapshot } from "./market.ts";
 
 const updatedAt = "2026-08-13T00:05:00.000Z";
+
+function demoBars(intervalMs: number, base: number, count = 120) {
+  return Array.from({ length: count }, (_, index) => {
+    const openTime = Date.parse(updatedAt) - (count - index) * intervalMs;
+    const drift = index * 18 + Math.sin(index / 6) * 120;
+    const open = base + drift;
+    const close = open + 35 + Math.sin(index / 3) * 24;
+    return { openTime, closeTime: openTime + intervalMs - 1, open, high: Math.max(open, close) + 42, low: Math.min(open, close) - 38, close, volume: 120 + index * 2 };
+  });
+}
+
+export const demoMarketSnapshot: MarketSnapshot = {
+  symbol: "BTCUSDT", mode: "demo", source: "fixed-demo-snapshot", capturedAt: updatedAt, snapshotHash: "demo-snapshot-not-live",
+  timeframes: { "1d": demoBars(86_400_000, 101_000), "4h": demoBars(14_400_000, 103_000), "1h": demoBars(3_600_000, 104_000) },
+};
 
 const expertDirections: Record<ExpertId, Direction> = {
   ict: "LONG", street: "LONG", jingxin: "NEUTRAL", bitlanglang: "LONG",
@@ -51,6 +67,7 @@ export const demoAccounts = EXPERTS.map((expert, index) => ({
 export const demoConsultation = {
   id: "demo-btc-20260813", symbol: "BTCUSDT", displaySymbol: "BTC", analysisDate: "2026-08-13",
   status: "DEMO", marketMode: "demo", snapshotHash: "demo-snapshot-not-live", updatedAt,
+  snapshot: demoMarketSnapshot,
   marketSummary: "演示会诊：日线保持偏强，4H突破后整理，1H等待回踩确认。此内容只用于展示产品流程。",
   opinions, consensus: buildConsensus(finalOpinions),
 };

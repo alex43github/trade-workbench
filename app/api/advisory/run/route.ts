@@ -2,11 +2,11 @@ import { CORE_SYMBOLS } from "@/lib/advisory/config";
 import { ensureAdvisorySchema } from "@/db/ensure";
 import { getD1 } from "@/db";
 import { runDailyAdvisoryJob } from "@/lib/advisory/daily-job";
+import { requireOperatorOrSchedulerMutation } from "@/lib/security/operator-guard";
 
 export async function POST(request: Request) {
-  const token = process.env.ADVISORY_JOB_TOKEN;
-  const supplied = request.headers.get("authorization");
-  if (!token || supplied !== `Bearer ${token}`) return Response.json({ error: "unauthorized", realOrderRouteEnabled: false }, { status: 401 });
+  const denied = await requireOperatorOrSchedulerMutation(request);
+  if (denied) return denied;
   const body = await request.json().catch(() => ({})) as { symbol?: string; analysisDate?: unknown };
   if (body.analysisDate !== undefined) return Response.json({ error: "analysisDate is derived from the latest closed daily candle", realOrderRouteEnabled: false }, { status: 400 });
   const symbol = body.symbol ? String(body.symbol).toUpperCase() : null;

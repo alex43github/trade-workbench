@@ -14,7 +14,7 @@ function jsonResponse(value, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 }
 
-test("keeps only trading USDT perpetual contracts", async () => {
+test("keeps only trading USDT and USDC perpetual contracts", async () => {
   const fetcher = async () => jsonResponse({ symbols: [
     { symbol: "BTCUSDT", status: "TRADING", contractType: "PERPETUAL", quoteAsset: "USDT", marginAsset: "USDT" },
     { symbol: "ETHUSDT_260925", status: "TRADING", contractType: "CURRENT_QUARTER", quoteAsset: "USDT" },
@@ -22,7 +22,7 @@ test("keeps only trading USDT perpetual contracts", async () => {
     { symbol: "DELISTUSDT", status: "SETTLING", contractType: "PERPETUAL", quoteAsset: "USDT" },
     { symbol: "BTCUSDC", status: "TRADING", contractType: "PERPETUAL", quoteAsset: "USDC" },
   ] });
-  assert.deepEqual((await listUsdtPerpetuals(fetcher)).map((item) => item.symbol), ["BTCUSDT"]);
+  assert.deepEqual((await listUsdtPerpetuals(fetcher)).map((item) => item.symbol), ["BTCUSDC", "BTCUSDT"]);
 });
 
 test("normalizes REST klines and drops the still-open candle", async () => {

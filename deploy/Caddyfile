@@ -1,0 +1,22 @@
+# Replace workbench.example.com with the VPS DNS name before installing.
+workbench.example.com {
+	encode zstd gzip
+
+	# Caddy is the only process that listens on a public interface.
+	reverse_proxy 127.0.0.1:3000
+
+	# Keep certificates and proxy responses out of caches shared by browsers.
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=()"
+	}
+
+	log {
+		output file /var/log/caddy/trade-workbench-access.log
+		format json
+	}
+}

@@ -1,3 +1,5 @@
+import { normalizeBinanceFuturesSymbol } from "@/lib/trade/symbols";
+
 export type PublicMarketBar = {
   time: number;
   open: number;
@@ -17,9 +19,7 @@ function numeric(value: unknown) {
 }
 
 function safeSymbol(value: string) {
-  const symbol = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (!/^[A-Z0-9]{2,20}USDT$/.test(symbol)) throw new Error("invalid_symbol");
-  return symbol;
+  return normalizeBinanceFuturesSymbol(value, "invalid_symbol");
 }
 
 export async function probeBrowserBinance() {
@@ -34,7 +34,7 @@ export async function probeBrowserBinance() {
 export async function fetchBrowserBinanceKlines(symbolValue: string, intervalValue: string, requestedLimit = 300) {
   const symbol = safeSymbol(symbolValue);
   const interval = allowedIntervals.has(intervalValue) ? intervalValue : "15m";
-  const limit = Math.min(500, Math.max(60, Math.round(requestedLimit)));
+  const limit = Math.min(1_000, Math.max(60, Math.round(requestedLimit)));
   const endpoint = new URL(`${BINANCE_FUTURES}/fapi/v1/klines`);
   endpoint.searchParams.set("symbol", symbol);
   endpoint.searchParams.set("interval", interval);

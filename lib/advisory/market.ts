@@ -1,3 +1,5 @@
+import { normalizeBinanceFuturesSymbol } from "../trade/symbols.ts";
+
 export type ClosedBar = { openTime: number; closeTime: number; open: number; high: number; low: number; close: number; volume: number };
 export type MarketSnapshot = {
   symbol: string; mode: "live" | "demo" | "partial"; source: string; capturedAt: string; snapshotHash: string;
@@ -17,9 +19,7 @@ export function marketAnalysisDate(snapshot: MarketSnapshot) {
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 function normalizeSymbol(value: string) {
-  const symbol = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (!/^[A-Z0-9]{2,20}USDT$/.test(symbol)) throw new Error("invalid symbol");
-  return symbol;
+  return normalizeBinanceFuturesSymbol(value, "invalid symbol");
 }
 
 function bar(row: unknown): ClosedBar | null {

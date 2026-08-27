@@ -1,14 +1,14 @@
 # binance-gateway — 币安固定 IP 网关
 
-零依赖 Node 服务。部署在有固定 IP 的 VPS 上，交易网站（Cloudflare Workers）通过它访问
-Binance Futures 私有接口，绕开 Workers 出口 IP 被币安 403 的问题。
+零依赖 Node 服务。与交易网站部署在同一台、带固定公网 IP 的 VPS 上；网站仅通过本机回环地址访问它，
+由网关统一访问 Binance Futures 的公开与只读私有接口。
 
 ## 架构
 
 ```
-浏览器 ──▶ 网站(Cloudflare) ──▶ 本网关(VPS 固定 IP) ──▶ fapi.binance.com
-                                 │
-                                 └─ 持有 Binance API Key/Secret，负责签名
+浏览器 ──▶ HTTPS 网站 ──▶ 本机网关(127.0.0.1:8788) ──▶ fapi.binance.com
+                                      │                    ↑
+                                      └─ 仅 VPS 固定 IP 出口 ┘
 ```
 
 ## 一键安装（VPS）
@@ -48,11 +48,48 @@ curl -s -H "Authorization: Bearer <token>" http://127.0.0.1:8788/api/status
 ## 网站侧配置（环境变量）
 
 ```
-BINANCE_GATEWAY_BASE_URL=http://你的VPS固定IP:8788
+BINANCE_GATEWAY_BASE_URL=http://127.0.0.1:8788
 BINANCE_GATEWAY_TOKEN=与网关 .env 相同
 ```
 
-配置后，网站的账户/连接接口优先走网关。
+网站和网关必须在同一台 VPS；**不要**把 `8788` 暴露到公网，也不要填写 VPS 公网 IP。配置后，
+账户、币种搜索、K 线、雷达扫描和连接诊断都会优先走网关。只有 VPS 的公网 IPv4 需要添加到 Binance API 白名单。
+
+## 手机推送通知（Bark，可选）
+
+网关服务上线/下线时通过 [Bark](https://github.com/Finb/Bark) 推送到手机，不在电脑旁也能
+第一时间知道 VPS/网关状态变化。
+
+1. iPhone 安装 Bark App，打开后复制你的推送密钥（形如 `xxxxxxxxxxxxxxxx`）。
+2. 在 VPS 上编辑 `/opt/binance-gateway/.env`：
+
+   ```bash
+   sudo nano /opt/binance-gateway/.env
+   ```
+
+   填入：
+
+   ```bash
+   BARK_API_KEY=你的推送密钥
+   # 自建 Bark 服务器时才需要改，默认官方 https://api.day.app
+   BARK_BASE_URL=https://api.day.app
+   ```
+
+3. 重启服务验证（会先收到一条"下线"，再收到一条"上线"）：
+
+   ```bash
+   sudo systemctl restart binance-gateway
+   ```
+
+工作原理：
+
+- `notify.sh` 挂在 systemd 的 `ExecStartPost` / `ExecStopPost`，服务正常启动/停止时立即推送。
+- 安装脚本会额外启用一个每 5 分钟的健康看门狗（`binance-gateway-watchdog.timer`），
+  node 进程假死、开机后服务启动失败等 ExecStopPost 触发不到的场景，也会在状态翻转时推送。
+- **整机断电**时 VPS 本身无法发出"下线"通知（机器都没了，谁也发不出去）；恢复供电开机后
+  会自动推送"上线"。如需断电即时告警，需要额外的外部监控（另一台机器定时访问
+  `http://VPS_IP:8788/health` 并推送）。
+- 未配置 `BARK_API_KEY` 时所有通知静默跳过；Bark 需要 VPS 能访问外网 HTTPS 443。
 
 ## 端点
 
@@ -66,7 +103,7 @@ BINANCE_GATEWAY_TOKEN=与网关 .env 相同
 
 - 默认只读：`BINANCE_GATEWAY_TRADING=false` 时，下单/杠杆/保证金路径一律 403。
 - token 至少 16 位；缺失时服务拒绝启动。
-- 建议 `BINANCE_GATEWAY_ALLOWED_CLIENT_IP` 只放行 Cloudflare Workers 出口段或你的 IP。
+- 同机部署时 `BINANCE_GATEWAY_ALLOWED_CLIENT_IP` 留空即可；服务仅监听回环地址，公网防火墙无需开放 8788。
 - 日志只记录方法/路径/状态码/耗时，不记录签名、token、密钥。
 - 开真实交易前，请先只读跑通，再在非生产/极小资金环境验证。
 

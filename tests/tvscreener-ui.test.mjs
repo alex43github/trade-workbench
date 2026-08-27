@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const radarPath = path.join(root, "app/radar/page.tsx");
+const stylesPath = path.join(root, "app/globals.css");
 const panelPath = path.join(root, "app/trade/AdaptiveStrategyPanel.tsx");
 
 async function source(file) {
@@ -40,6 +41,19 @@ test("TradingView panel exposes provenance, age, symbols, mappings, fields, inte
   assert.match(radar, /240:\s*["']4h|["']240["']\s*:\s*["']4h/);
   assert.match(radar, /1D:\s*["']1d|["']1D["']\s*:\s*["']1d/);
   assert.match(radar, /row\.warnings|data\.warnings/);
+});
+
+test("TradingView panel has dedicated layout styles so labels and values remain readable", async () => {
+  const styles = await source(stylesPath);
+
+  assert.match(styles, /\.radar-terminal \.tv-screener-panel\s*\{/);
+  assert.match(styles, /\.radar-terminal \.tv-screener-meta\s*\{/);
+  assert.match(styles, /\.radar-terminal \.tv-screener-row\s*\{/);
+  assert.match(styles, /\.radar-terminal \.tv-screener-values\s*\{/);
+  assert.match(styles, /\.radar-terminal \.tv-screener-intervals\s*\{/);
+  assert.match(styles, /\.radar-terminal \.tv-screener-warnings\s*\{/);
+  assert.match(styles, /\.tv-screener-values[^{}]*\{[^{}]*display\s*:\s*flex/);
+  assert.match(styles, /\.tv-screener-intervals[^{}]*\{[^{}]*display\s*:\s*grid/);
 });
 
 test("TradingView evidence is visibly advisory and Binance takes precedence", async () => {

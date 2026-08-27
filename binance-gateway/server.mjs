@@ -3,6 +3,7 @@ import http from "node:http";
 import https from "node:https";
 import crypto from "node:crypto";
 import { URL } from "node:url";
+import { validateOrderPayload } from "./order-policy.mjs";
 
 const VERSION = "1.0.0";
 const PORT = Number(process.env.BINANCE_GATEWAY_PORT || 8788);
@@ -20,21 +21,16 @@ const MAX_BODY_BYTES = 1024 * 1024;
 const RATE_WINDOW_MS = 10_000;
 const RATE_MAX = 120;
 
-const SIGNED_PATH_PREFIXES = [
-  "/fapi/v3/account", "/fapi/v2/account", "/fapi/v1/account",
-  "/fapi/v2/positionRisk",
-  "/fapi/v1/openOrders", "/fapi/v1/allOrders", "/fapi/v1/userTrades",
-  "/fapi/v1/income", "/fapi/v1/leverageBracket", "/fapi/v2/leverageBracket",
-  "/fapi/v1/order", "/fapi/v1/batchOrders", "/fapi/v2/order", "/fapi/v2/batchOrders",
-  "/fapi/v1/leverage", "/fapi/v1/marginType", "/fapi/v1/positionMargin",
-  "/fapi/v1/positionSide/dual", "/fapi/v1/multiAssetsMargin",
-  "/fapi/v1/countdownCancelAll", "/fapi/v1/forceOrders",
-  "/fapi/v1/commissionRate", "/fapi/v1/adlQuantile",
-];
-const TRADING_PATH_PREFIXES = [
-  "/fapi/v1/order", "/fapi/v1/batchOrders", "/fapi/v2/order", "/fapi/v2/batchOrders",
-  "/fapi/v1/leverage", "/fapi/v1/marginType", "/fapi/v1/positionMargin",
-  "/fapi/v1/positionSide/dual", "/fapi/v1/multiAssetsMargin", "/fapi/v1/countdownCancelAll",
+const BINANCE_ROUTE_POLICY = [
+  { path: "/fapi/v1/time", methods: ["GET"], signed: false, trading: false },
+  { path: "/fapi/v1/exchangeInfo", methods: ["GET"], signed: false, trading: false },
+  { path: "/fapi/v3/account", methods: ["GET"], signed: true, trading: false },
+  { path: "/fapi/v2/positionRisk", methods: ["GET"], signed: true, trading: false },
+  { path: "/fapi/v1/openOrders", methods: ["GET"], signed: true, trading: false },
+  { path: "/fapi/v1/userTrades", methods: ["GET"], signed: true, trading: false },
+  { path: "/futures/data/openInterestHist", methods: ["GET"], signed: false, trading: false },
+  // 实盘执行器只需要创建和取消订单；绝不允许调杠杆、保证金模式或账户级设置。
+  { path: "/fapi/v1/order", methods: ["GET", "POST", "DELETE"], signed: true, trading: true },
 ];
 
 const rateBuckets = new Map();
@@ -83,17 +79,10 @@ function rateLimited(ip) {
   return bucket.length > RATE_MAX;
 }
 
-function isSignedPath(pathname) {
-  return SIGNED_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+function routePolicy(pathname) {
+  return BINANCE_ROUTE_POLICY.find((policy) => policy.path === pathname) || null;
 }
 
-function isTradingPath(pathname) {
-  return TRADING_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
-function isAllowedBinancePath(pathname) {
-  return pathname.startsWith("/fapi/") || pathname.startsWith("/futures/data/");
-}
 
 function hmacHex(secret, payload) {
   return crypto.createHmac("sha256", secret).update(payload).digest("hex");
@@ -153,12 +142,11 @@ function fetchOutboundIp() {
   });
 }
 
-function forwardBinanceOnce(method, pathname, searchParams, body) {
+function forwardBinanceOnce(method, pathname, searchParams, body, signed) {
   return new Promise((resolve, reject) => {
-    const needsSignature = isSignedPath(pathname);
     const steps = async () => {
       let query = searchParams.toString();
-      if (needsSignature) {
+      if (signed) {
         if (!API_SECRET) throw new Error("缺少 BINANCE_GATEWAY_API_SECRET，无法访问私有接口");
         await ensureTimeSync();
         const signedParams = new URLSearchParams(query);
@@ -194,11 +182,11 @@ function forwardBinanceOnce(method, pathname, searchParams, body) {
   });
 }
 
-async function forwardBinance(method, pathname, searchParams, body) {
-  const first = await forwardBinanceOnce(method, pathname, searchParams, body);
+async function forwardBinance(method, pathname, searchParams, body, signed) {
+  const first = await forwardBinanceOnce(method, pathname, searchParams, body, signed);
   if (first.json && first.json.code === -1021) {
     await ensureTimeSync(true);
-    return forwardBinanceOnce(method, pathname, searchParams, body);
+    return forwardBinanceOnce(method, pathname, searchParams, body, signed);
   }
   return first;
 }
@@ -243,11 +231,10 @@ function handle(req, res) {
   if (url.pathname.startsWith(BINANCE_PATH_PREFIX)) {
     if (!isAuthorized(req)) return finish(401) || json(res, 401, { ok: false, message: "未授权" });
     const binancePath = url.pathname.slice(BINANCE_PATH_PREFIX.length);
-    if (!isAllowedBinancePath(binancePath)) return finish(404) || json(res, 404, { ok: false, message: "仅支持 Binance Futures 路径" });
-    if (isTradingPath(binancePath) && !TRADING_ENABLED) return finish(403) || json(res, 403, { ok: false, message: "交易通道已关闭（BINANCE_GATEWAY_TRADING=false）" });
-    if (binancePath.startsWith("/futures/data/") && req.method !== "GET") return finish(405) || json(res, 405, { ok: false, message: "futures data 仅开放只读 GET" });
-    if (!TRADING_ENABLED && req.method !== "GET") return finish(403) || json(res, 403, { ok: false, message: "当前仅开放只读通道（GET）" });
-    if (!["GET", "POST"].includes(req.method)) return finish(405) || json(res, 405, { ok: false, message: "仅支持 GET/POST" });
+    const policy = routePolicy(binancePath);
+    if (!policy) return finish(404) || json(res, 404, { ok: false, message: "不支持的 Binance 路径" });
+    if (!policy.methods.includes(req.method)) return finish(405) || json(res, 405, { ok: false, message: "该 Binance 路径不支持此方法" });
+    if (policy.trading && !TRADING_ENABLED) return finish(403) || json(res, 403, { ok: false, message: "交易通道已关闭（BINANCE_GATEWAY_TRADING=false）" });
 
     const chunks = [];
     let size = 0;
@@ -258,7 +245,9 @@ function handle(req, res) {
     });
     req.on("end", () => {
       const body = Buffer.concat(chunks).toString("utf8") || null;
-      forwardBinance(req.method, binancePath, url.searchParams, body)
+      const orderValidationError = validateOrderPayload(req.method, binancePath, body);
+      if (orderValidationError) return finish(400) || json(res, 400, { ok: false, message: orderValidationError });
+      forwardBinance(req.method, binancePath, url.searchParams, body, policy.signed)
         .then((result) => {
           if (result.json) {
             json(res, result.status, result.json);

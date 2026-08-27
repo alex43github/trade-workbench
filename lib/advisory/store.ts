@@ -2,11 +2,12 @@ import { ensureAdvisorySchema } from "../../db/ensure.ts";
 import { getD1 } from "../../db/index.ts";
 import { CORE_SYMBOLS, EXPERTS } from "./config.ts";
 import { buildDemoDashboard, demoAccounts, demoConsultation, demoReviews } from "./demo.ts";
+import type { MarketSnapshot } from "./market.ts";
 import type { DecisionContract, Direction } from "./types.ts";
 
 type StoredConsultationRow = {
   id: string; analysis_date: string; symbol: string; status: string; completed_at: string;
-  snapshot_hash: string; source_mode: "live" | "demo" | "partial"; consensus_json: string;
+  snapshot_hash: string; source_mode: "live" | "demo" | "partial"; snapshot_json: string; consensus_json: string;
 };
 type StoredOpinionRow = { decision_json: string };
 type StoredAccountRow = {
@@ -29,7 +30,7 @@ async function advisoryDb(): Promise<D1Database | null> {
 
 async function storedConsultations(db: D1Database, limit = 20) {
   const rows = await db.prepare(`SELECT c.id, c.analysis_date, c.symbol, c.status, c.completed_at,
-    m.snapshot_hash, m.source_mode, d.payload_json AS consensus_json
+    m.snapshot_hash, m.source_mode, m.payload_json AS snapshot_json, d.payload_json AS consensus_json
     FROM consultations c
     JOIN market_snapshots m ON m.id = c.market_snapshot_id
     JOIN consensus_decisions d ON d.consultation_id = c.id
@@ -46,7 +47,7 @@ async function storedConsultations(db: D1Database, limit = 20) {
       id: row.id, symbol: row.symbol, displaySymbol: row.symbol.replace("USDT", ""), analysisDate: row.analysis_date,
       status: row.status, marketMode: row.source_mode, snapshotHash: row.snapshot_hash, updatedAt: row.completed_at,
       marketSummary: `${row.analysis_date} 日线收盘后会诊：${dominant === "LONG" ? "多数偏多" : dominant === "SHORT" ? "多数偏空" : "未形成方向共识"}，请以各专家触发条件和失效条件为准。`,
-      opinions: parsed, consensus: JSON.parse(row.consensus_json),
+      opinions: parsed, consensus: JSON.parse(row.consensus_json), snapshot: JSON.parse(row.snapshot_json) as MarketSnapshot,
     };
   }));
 }

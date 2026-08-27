@@ -4,3 +4,16 @@
 @media(max-width:980px){.shell{grid-template-columns:70px minmax(0,1fr)}.brand{justify-content:center;padding:0}.brand strong,.sidebar nav a:not(.active),.connection span{display:none}.sidebar nav a{text-align:center}.hero{grid-template-columns:1fr}.workspace{grid-template-columns:1fr}.connection{justify-content:center}}
 @media(max-width:680px){.shell{display:block}.sidebar{display:none}.main>header{padding:0 14px}.hero,.safety,.disconnected,.filters,.workspace{margin-left:12px;margin-right:12px}.hero{padding:18px}.hero h2{font-size:28px}.safety{flex-wrap:wrap}.safety strong{margin-left:0}.workspace{grid-template-columns:1fr}.experts{grid-template-columns:1fr}}
 
+/* Keep this standalone tool in the same light purple-white system as Radar. */
+.shell{--bg:#f6f4fb;--panel:#fff;--line:#dedbea;--text:#28233d;--muted:#716d86;--accent:#7655eb;background:radial-gradient(circle at 86% 2%,rgba(118,85,235,.09),transparent 28rem),var(--bg)}
+.sidebar,.main>header{background:rgba(238,234,251,.94)}
+.sidebar nav a:hover,.sidebar nav .active{background:linear-gradient(120deg,#7655eb,#8b6af1);color:#fff}
+.main>header button,.filters button{background:var(--panel);color:var(--muted)}
+.hero{border-color:var(--line);background:linear-gradient(145deg,var(--panel),#faf9fe);box-shadow:0 14px 36px rgba(35,26,78,.05)}
+.hero p,.patterns b,.detailHead small,.detailHead a,.detail h4,.experts em,.list>button>strong{color:var(--accent)}
+.patterns article,.list,.detail{border-color:var(--line);background:var(--panel);box-shadow:0 14px 36px rgba(35,26,78,.05)}
+.safety{border-color:var(--line);background:var(--panel)}
+.disconnected{border-color:#edc47e;background:#fff7e9;color:#9d681a}
+.filters .selected{border-color:var(--accent);background:var(--accent);color:#fff}
+.list>button:hover,.list .signalSelected{border-color:#b8a8ff;background:#f0ecff}
+.geometry div{background:#faf9fe}.experts article{border-color:var(--line);background:#faf9fe}.experts p{color:var(--muted)}

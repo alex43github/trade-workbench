@@ -4,6 +4,7 @@ export type PaperPosition = {
   id: string; symbol: string; side: "LONG" | "SHORT"; quantity: number; entryPrice: number; markPrice: number;
   unrealizedPnl: number; leverage: number; entries: number; stopPrice: number | null; targetPrice: number | null;
   strategyScore: number; openedAt: string; quoteLive?: boolean;
+  occupiedMargin: number;
 };
 
 export type PaperOrder = {

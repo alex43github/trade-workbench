@@ -1,0 +1,10 @@
+.control { position: relative; z-index: 60; }
+.button { border: 1px solid var(--line, var(--rt-line, #dedbea)); border-radius: 8px; padding: 7px 9px; background: var(--panel2, var(--panel-2, var(--rt-panel, #fff))); color: var(--muted, var(--rt-muted, #716d86)); font-size: 11px; cursor: pointer; }
+.button:hover { border-color: var(--purple, var(--rt-purple, #8067f2)); color: var(--purple, var(--rt-purple, #8067f2)); }
+.popover { position: absolute; top: 39px; right: 0; display: grid; grid-template-columns: 1fr auto; gap: 9px; width: 230px; padding: 13px; border: 1px solid var(--line, var(--rt-line, #dedbea)); border-radius: 10px; background: var(--panel, var(--rt-panel, #fff)); color: var(--text, var(--rt-text, #28233d)); box-shadow: 0 18px 45px rgba(35, 26, 78, .16); }
+.popover strong { font-size: 13px; }
+.popover output { color: var(--purple, var(--rt-purple, #8067f2)); font: 12px var(--font-geist-mono); }
+.popover input { grid-column: 1 / -1; width: 100%; accent-color: var(--purple, var(--rt-purple, #8067f2)); }
+.presets { display: flex; grid-column: 1 / -1; gap: 5px; }
+.presets button { flex: 1; border: 1px solid var(--line, var(--rt-line, #dedbea)); border-radius: 6px; padding: 6px 4px; background: var(--panel2, var(--panel-2, var(--rt-panel2, #faf9fe))); color: var(--muted, var(--rt-muted, #716d86)); font-size: 11px; cursor: pointer; }
+.presets button:hover { border-color: var(--purple, var(--rt-purple, #8067f2)); color: var(--purple, var(--rt-purple, #8067f2)); }

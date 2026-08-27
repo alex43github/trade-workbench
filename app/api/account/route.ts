@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { getServerCredential } from "@/lib/server-credentials";
 import { getGatewayConfig, gatewayJson } from "@/lib/binance-gateway";
+import { resolveOccupiedMargin } from "@/lib/trade/position-analysis";
+import { getOrCreateManualOrderAlias } from "@/lib/trade/order-alias";
+import { requireOperator } from "@/lib/security/operator-guard";
 
-const API_BASE = "https://fapi.binance.com";
 const CONDITIONAL_TYPES = new Set([
   "STOP", "STOP_MARKET", "TAKE_PROFIT", "TAKE_PROFIT_MARKET", "TRAILING_STOP_MARKET",
 ]);
@@ -25,6 +26,10 @@ type BinancePosition = {
   leverage: string;
   marginType: string;
   positionSide: string;
+  initialMargin?: string;
+  positionInitialMargin?: string;
+  isolatedMargin?: string;
+  notional?: string;
 };
 
 type BinanceAccount = {
@@ -32,6 +37,7 @@ type BinanceAccount = {
   availableBalance: string;
   totalUnrealizedProfit: string;
   assets: BinanceAsset[];
+  positions?: BinancePosition[];
 };
 
 type BinancePositionRisk = BinancePosition & {
@@ -51,9 +57,21 @@ type BinanceOrder = {
   origQty: string;
   executedQty: string;
   reduceOnly: boolean;
+  clientOrderId?: string;
   positionSide: string;
   time: number;
   updateTime: number;
+};
+
+type BinanceUserTrade = {
+  id: number | string;
+  orderId: number | string;
+  symbol: string;
+  side: "BUY" | "SELL";
+  price: string;
+  qty: string;
+  time: number;
+  positionSide?: string;
 };
 
 function disconnected(reason = "尚未配置币安只读 API") {
@@ -65,61 +83,35 @@ function disconnected(reason = "尚未配置币安只读 API") {
     positions: [],
     limitOrders: [],
     conditionalOrders: [],
+    fills: [],
   };
 }
 
-async function hmacHex(secret: string, payload: string) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
-  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function signedGet<T>(path: string, apiKey: string, secret: string, timestamp: number) {
-  const query = new URLSearchParams({ timestamp: String(timestamp), recvWindow: "5000" });
-  query.set("signature", await hmacHex(secret, query.toString()));
-  const response = await fetch(`${API_BASE}${path}?${query.toString()}`, {
-    headers: { "X-MBX-APIKEY": apiKey },
-    cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { code?: number; msg?: string };
-    throw new Error(body.msg || `Binance ${response.status}`);
-  }
-  return response.json() as Promise<T>;
-}
-
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await requireOperator(request);
+  if (denied) return denied;
   const gateway = getGatewayConfig();
-  const apiKey = await getServerCredential("BINANCE_FUTURES_API_KEY") || process.env.BINANCE_API_KEY;
-  const secret = await getServerCredential("BINANCE_FUTURES_API_SECRET") || process.env.BINANCE_SECRET_KEY;
-  if (!gateway.configured && (!apiKey || !secret)) {
-    return NextResponse.json(disconnected(), { headers: { "cache-control": "no-store" } });
-  }
+  if (!gateway.configured) return NextResponse.json(disconnected("固定 IP Binance 网关未配置；已安全断开，未直连交易所"), { headers: { "cache-control": "no-store" } });
 
   try {
+    const requestedSymbol = new URL(request.url).searchParams.get("symbol")?.trim().toUpperCase() ?? "";
+    const fillsPath = /^[A-Z0-9]{1,20}$/.test(requestedSymbol)
+      ? `/fapi/v1/userTrades?symbol=${encodeURIComponent(requestedSymbol)}&limit=100`
+      : null;
     let account: BinanceAccount;
     let positionRisk: BinancePositionRisk[];
     let orders: BinanceOrder[];
+    let userTrades: BinanceUserTrade[];
     if (gateway.configured) {
-      [account, positionRisk, orders] = await Promise.all([
+      [account, positionRisk, orders, userTrades] = await Promise.all([
         gatewayJson<BinanceAccount>("/fapi/v3/account"),
         gatewayJson<BinancePositionRisk[]>("/fapi/v2/positionRisk"),
         gatewayJson<BinanceOrder[]>("/fapi/v1/openOrders"),
+        fillsPath
+          ? gatewayJson<BinanceUserTrade[]>(fillsPath).catch(() => [] as BinanceUserTrade[])
+          : Promise.resolve([] as BinanceUserTrade[]),
       ]);
-    } else {
-      const timeResponse = await fetch(`${API_BASE}/fapi/v1/time`, { cache: "no-store", signal: AbortSignal.timeout(5_000) });
-      if (!timeResponse.ok) throw new Error("币安时间同步失败");
-      const { serverTime } = await timeResponse.json() as { serverTime: number };
-      [account, positionRisk, orders] = await Promise.all([
-        signedGet<BinanceAccount>("/fapi/v3/account", apiKey, secret, serverTime),
-        signedGet<BinancePositionRisk[]>("/fapi/v2/positionRisk", apiKey, secret, serverTime),
-        signedGet<BinanceOrder[]>("/fapi/v1/openOrders", apiKey, secret, serverTime),
-      ]);
-    }
+    } else throw new Error("固定 IP Binance 网关未配置");
 
     const positions = positionRisk
       .filter((position) => Math.abs(Number(position.positionAmt)) > 0)
@@ -135,22 +127,49 @@ export async function GET() {
         leverage: Number(position.leverage),
         marginType: position.marginType,
         positionSide: position.positionSide,
+        occupiedMargin: resolveOccupiedMargin({
+          initialMargin: account.positions?.find((item) => item.symbol === position.symbol && item.positionSide === position.positionSide)?.initialMargin,
+          positionInitialMargin: account.positions?.find((item) => item.symbol === position.symbol && item.positionSide === position.positionSide)?.positionInitialMargin,
+          isolatedMargin: position.isolatedMargin,
+        }),
+        notional: Number(position.notional || 0) || null,
       }));
-    const normalizedOrders = orders.map((order) => ({
-      orderId: String(order.orderId),
-      symbol: order.symbol,
-      side: order.side,
-      type: order.type,
-      status: order.status,
-      price: Number(order.price),
-      stopPrice: Number(order.stopPrice),
-      quantity: Number(order.origQty),
-      executedQuantity: Number(order.executedQty),
-      reduceOnly: order.reduceOnly,
-      positionSide: order.positionSide,
-      time: order.time,
-      updateTime: order.updateTime,
-    }));
+    const normalizedOrders = [];
+    for (const order of orders) {
+      const projectOrderId = order.clientOrderId?.match(/^(tele|web)\d{4,}$/i)?.[0].toLowerCase();
+      const websiteOrderId = projectOrderId ?? await getOrCreateManualOrderAlias({
+        externalOrderId: String(order.orderId), clientOrderId: order.clientOrderId, symbol: order.symbol,
+      });
+      normalizedOrders.push({
+        orderId: String(order.orderId), websiteOrderId,
+        symbol: order.symbol,
+        side: order.side,
+        type: order.type,
+        status: order.status,
+        price: Number(order.price),
+        stopPrice: Number(order.stopPrice),
+        quantity: Number(order.origQty),
+        executedQuantity: Number(order.executedQty),
+        reduceOnly: order.reduceOnly,
+        positionSide: order.positionSide,
+        time: order.time,
+        updateTime: order.updateTime,
+      });
+    }
+    const fills = userTrades
+      .filter((trade) => trade.symbol === requestedSymbol)
+      .map((trade) => ({
+        id: `${trade.symbol}:${trade.id}`,
+        orderId: String(trade.orderId),
+        symbol: trade.symbol,
+        side: trade.side,
+        price: Number(trade.price),
+        quantity: Number(trade.qty),
+        time: Number(trade.time),
+        positionSide: trade.positionSide ?? "BOTH",
+      }))
+      .filter((trade) => Number.isFinite(trade.price) && trade.price > 0 && Number.isFinite(trade.quantity) && trade.quantity > 0)
+      .slice(-100);
 
     return NextResponse.json({
       connected: true,
@@ -164,6 +183,7 @@ export async function GET() {
       positions,
       limitOrders: normalizedOrders.filter((order) => order.type === "LIMIT"),
       conditionalOrders: normalizedOrders.filter((order) => CONDITIONAL_TYPES.has(order.type)),
+      fills,
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "币安只读账户连接失败";

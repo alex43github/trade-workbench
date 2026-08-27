@@ -1,5 +1,47 @@
 import type { MarketBar } from "./TradeChart";
 
+export type TradeFill = {
+  id: string;
+  time: number;
+  price: number;
+  side: "BUY" | "SELL";
+};
+
+export type TradeMarker = {
+  id: string;
+  time: number;
+  position: "atPriceMiddle";
+  price: number;
+  color: string;
+  shape: "circle";
+  size: 2;
+};
+
+export function buildFillMarkers(bars: MarketBar[], fills: TradeFill[]): TradeMarker[] {
+  return fills.flatMap((fill) => {
+    if (!fill.id || !Number.isFinite(fill.time) || !Number.isFinite(fill.price) || fill.price <= 0) return [];
+    const timestamp = fill.time > 10_000_000_000 ? fill.time / 1000 : fill.time;
+    let barIndex = -1;
+    for (let index = bars.length - 1; index >= 0; index -= 1) {
+      if (bars[index].time <= timestamp) { barIndex = index; break; }
+    }
+    if (barIndex < 0) return [];
+    const bar = bars[barIndex];
+    const nextBarTime = bars[barIndex + 1]?.time;
+    if (nextBarTime !== undefined && timestamp >= nextBarTime) return [];
+    if (fill.price < bar.low || fill.price > bar.high) return [];
+    return [{
+      id: fill.id,
+      time: bar.time,
+      position: "atPriceMiddle" as const,
+      price: fill.price,
+      color: fill.side === "BUY" ? "#ef4444" : "#16a34a",
+      shape: "circle" as const,
+      size: 2 as const,
+    }];
+  });
+}
+
 export function calculateMa(bars: MarketBar[], length: number) {
   const result: Array<{ time: number; value: number }> = [];
   let rolling = 0;
@@ -21,6 +63,36 @@ export function calculateEma(bars: MarketBar[], length: number) {
     if (index >= length - 1) result.push({ time: bar.time, value: ema });
   });
   return result;
+}
+
+export function calculateAtr(bars: MarketBar[], length: number) {
+  const safeLength = Math.max(2, Math.floor(length));
+  if (bars.length < safeLength) return [];
+  const trueRanges = bars.map((bar, index) => {
+    const previousClose = bars[index - 1]?.close ?? bar.open;
+    return Math.max(bar.high - bar.low, Math.abs(bar.high - previousClose), Math.abs(bar.low - previousClose));
+  });
+  let atr = trueRanges.slice(0, safeLength).reduce((sum, value) => sum + value, 0) / safeLength;
+  const result = [{ time: bars[safeLength - 1].time, value: atr }];
+  for (let index = safeLength; index < bars.length; index += 1) {
+    atr = ((atr * (safeLength - 1)) + trueRanges[index]) / safeLength;
+    result.push({ time: bars[index].time, value: atr });
+  }
+  return result;
+}
+
+export function formatAtrDistance(price: number, indicator: number, atr: number) {
+  if (![price, indicator, atr].every(Number.isFinite) || atr <= 0) return "ATR 数据不足";
+  const multiple = (price - indicator) / atr;
+  return `${multiple > 0 ? "+" : ""}${multiple.toFixed(2)} ATR`;
+}
+
+export function calculateAtrBand(indicator: number, atr: number, upperMultiplier: number, lowerMultiplier: number) {
+  if (![indicator, atr, upperMultiplier, lowerMultiplier].every(Number.isFinite) || indicator <= 0 || atr <= 0) return null;
+  return {
+    upper: indicator + atr * Math.max(0, upperMultiplier),
+    lower: indicator - atr * Math.max(0, lowerMultiplier),
+  };
 }
 
 export function calculateAnchoredVwap(

@@ -85,6 +85,23 @@ test("交易路径在只读模式下被拒绝", async () => {
   assert.match(body.message, /交易通道已关闭/);
 });
 
+test("网关拒绝任何未明确允许的币安私有变更路径", async () => {
+  const res = await fetch(`${BASE}/api/binance/fapi/v1/leverage?symbol=BTCUSDT&leverage=20`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  assert.equal(res.status, 404);
+  assert.match((await res.json()).message, /不支持/);
+});
+
+test("允许的订单取消路径在只读模式同样保持关闭", async () => {
+  const res = await fetch(`${BASE}/api/binance/fapi/v1/order?symbol=BTCUSDT&orderId=1`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  assert.equal(res.status, 403);
+});
+
 test("公开行情经网关转发", async () => {
   const res = await fetch(`${BASE}/api/binance/fapi/v1/time`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
@@ -97,6 +114,16 @@ test("公开行情经网关转发", async () => {
     assert.equal(res.status, 502);
     assert.equal(body.ok, false);
   }
+});
+
+test("公开合约列表经网关转发", async () => {
+  const res = await fetch(`${BASE}/api/binance/fapi/v1/exchangeInfo`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  const body = await res.json().catch(() => null);
+  assert.ok(body !== null, "网关必须返回可解析 JSON");
+  assert.notEqual(res.status, 404, "exchangeInfo 必须作为只读公开合约列表路径转发");
+  assert.ok([200, 502].includes(res.status));
 });
 
 test("只读网关允许 futures data 公共指标，但不扩大交易权限", async () => {

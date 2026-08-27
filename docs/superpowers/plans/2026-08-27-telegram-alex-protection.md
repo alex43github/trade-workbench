@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **实施状态（2026-08-28）：** 已完成并部署。下方未勾选项保留为最初的实施记录；当前交付以来源隔离保护策略、VPS 调度器和对应测试为准。
+
 **Goal:** 让 Telegram 只展示实盘，并为符合 `alex` 来源条件的手动持仓创建来源隔离的 ROI 止盈、固定止盈、均线止损和支撑阻力止损策略。
 
 **Architecture:** Telegram handler 只负责实盘菜单、白名单私聊、会话状态和一次性确认；来源识别服务通过 `positionRisk + allOrders` 建立可保护的 alex 持仓候选；通用保护策略服务保存来源订单/成交批次和每个保护单的幂等映射。固定价格保护使用 Binance 原生条件单，均线止损由 VPS 常驻调度器按已收盘 K 线逐来源执行。
@@ -235,4 +237,3 @@
 - [ ] **Step 5: Verify VPS health and no order side effect**
 
   Check service status, HTTPS/API health, Telegram webhook, gateway loopback listener, and the live strategy/protection ledger counts before and after deployment. Confirm no new Binance order was submitted by deployment.
-

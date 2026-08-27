@@ -92,7 +92,7 @@ FIELD_COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 _MISSING = object()
-_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]+USDT$")
+_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]+(?:USDT|USDC)$")
 
 
 def _invalid(message: str) -> RequestValidationError:

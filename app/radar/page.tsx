@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTerminalTheme, type ThemeMode } from "../themeStore";
 import FontControl from "../components/FontControl";
+import ManualProgress from "../components/ManualProgress";
 import { useFontScale } from "../uiPreferences";
+import { displayBinanceSymbol } from "@/lib/trade/symbols";
+import { createRadarDiagnostic, type RadarDiagnostic } from "@/lib/radar/scan-diagnostic";
+import { isMultiTimeframeSnapshotFresh, type MultiTimeframeSnapshot } from "@/lib/radar/multitimeframe";
+import { createScanProgress, type RadarScanProgress } from "@/lib/radar/scan-progress";
 
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
 type CrowdMood = "SHORT_CROWD" | "TRAPPED" | "CHASE_LONG" | "MIXED" | "UNKNOWN";
@@ -108,7 +113,9 @@ type Ma30OiResponse = {
   scannedSymbols?: number;
   successfulSymbols?: number;
   failedSymbols?: number;
+  progress?: RadarScanProgress;
   warning?: string;
+  diagnostic?: RadarDiagnostic;
   notifications?: { attempted: number; sent: number; skipped: number; failed: number };
 };
 
@@ -128,11 +135,12 @@ type ReversalArchive = ReversalRow & {
   outcome: { complete: boolean; barsObserved: number; maxFavorablePct: number | null; maxFavorablePrice: number | null } | null;
 };
 
-type ReversalScan = { status: "ready" | "degraded"; scannedAt: string; candidates: ReversalRow[]; warning?: string };
-type ReversalDiagnostic = { code: string; detail: string; occurredAt: string; checks: string[] };
-type ReversalResponse = { status: "ready" | "pending"; scans: Partial<Record<"4h" | "1d", ReversalScan>>; archives: ReversalArchive[]; warning?: string; diagnostic?: ReversalDiagnostic; notifications?: { attempted: number; sent: number; skipped: number; failed: number } };
+type ReversalScan = { status: "ready" | "degraded" | "pending"; scannedAt: string; candidates: ReversalRow[]; progress?: RadarScanProgress; warning?: string };
+type ReversalResponse = { status: "ready" | "degraded" | "pending"; scans: Partial<Record<"4h" | "1d", ReversalScan>>; archives: ReversalArchive[]; warning?: string; diagnostic?: RadarDiagnostic; notifications?: { attempted: number; sent: number; skipped: number; failed: number } };
 
-type Filter = "all" | "squeeze" | "candidate" | "concentrated" | "risk" | "ma30oi" | "reversal";
+type Filter = "all" | "squeeze" | "candidate" | "concentrated" | "risk" | "ma30oi" | "reversal" | "vegas";
+type Ma30Bucket = "all" | "15m" | "1h" | "4h";
+const ma30BucketLabels: Record<Ma30Bucket, string> = { all: "全部候选", "15m": "K 线站上 15 分钟 MA30", "1h": "K 线站上 1 小时 MA30", "4h": "K 线站上 4 小时 MA30" };
 const participationCopy: Record<Participation, { label: string; className: string }> = {
   SQUEEZE: { label: "逼空重点", className: "grade-squeeze" },
   A: { label: "A · 可参与候选", className: "grade-a" },
@@ -231,18 +239,6 @@ function reversalLevelCopy(value: ReversalArchive["reclaimLevel"]) {
   return value === "HIGH" ? "收回前高" : value === "CLOSE" ? "收回前收" : value === "LOW" ? "跌破前低" : "收回前开";
 }
 
-function reversalDiagnostic(status: number | null, message: string): ReversalDiagnostic {
-  const code = status ? `HTTP_${status}` : "NETWORK_ERROR";
-  const checks = status === 401
-    ? ["请通过 http://localhost:3003 进行本机测试，或确认 STREETLIGHT_LOCAL_TEST_MODE 没有设为 false。", "如果你正在通过 VPS 公网域名访问，管理员认证仍会保留，这是预期的安全保护。"]
-    : status === 409
-      ? ["已有扫描正在运行；等待其结束后再重试。", "不要连续重复点击，以免增加数据源请求压力。"]
-      : status && status >= 500
-        ? ["本地扫描服务或上游 Binance 数据源暂不可用。", "稍后重试；若持续失败，请检查 VPS 出网、代理和服务日志。"]
-        : ["检查本地服务是否正在运行，以及 VPS/本机能否访问 Binance Futures。", "确认网络、代理和 DNS 可用后再重试。"];
-  return { code, detail: message || "扫描请求没有返回可用结果", occurredAt: new Date().toISOString(), checks };
-}
-
 function relativeTime(iso: string) {
   const distance = Math.max(0, Date.now() - new Date(iso).getTime());
   const minutes = Math.floor(distance / 60_000);
@@ -287,7 +283,56 @@ function TvScreenerPanel({ data }: { data?: TvScreenerResponse }) {
 }
 
 function ReversalTable({ rows, title }: { rows: ReversalRow[]; title: string }) {
-  return <section className="reversal-direction"><div className="reversal-direction-title"><h4>{title}</h4><span>{rows.length} 个</span></div>{rows.length ? <table className="reversal-table"><thead><tr><th>币种</th><th>周期</th><th>评分</th><th>收回</th><th>影线</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.symbol}-${row.interval}-${row.signalTime}`}><td><a href={`/trade?symbol=${encodeURIComponent(row.symbol)}`}>{row.symbol.replace(/USDT$/, "")}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{row.interval === "1d" ? "日线" : "4H"}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{(row.wickRatio * 100).toFixed(0)}%</td></tr>)}</tbody></table> : <div className="reversal-empty">本轮没有符合条件的已收盘形态。</div>}</section>;
+  return <section className="reversal-direction"><div className="reversal-direction-title"><h4>{title}</h4><span>{rows.length} 个</span></div>{rows.length ? <table className="reversal-table"><thead><tr><th>币种</th><th>周期</th><th>评分</th><th>收回</th><th>影线</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.symbol}-${row.interval}-${row.signalTime}`}><td><a href={`/trade?symbol=${encodeURIComponent(row.symbol)}`}>{displayBinanceSymbol(row.symbol)}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{row.interval === "1d" ? "日线" : "4H"}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{(row.wickRatio * 100).toFixed(0)}%</td></tr>)}</tbody></table> : <div className="reversal-empty">本轮没有符合条件的已收盘形态。</div>}</section>;
+}
+
+function uniqueSymbols(symbols: readonly string[]) {
+  return [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))];
+}
+
+function bucketSymbols(symbols: readonly string[], snapshot: MultiTimeframeSnapshot | null, bucket: Ma30Bucket) {
+  const unique = uniqueSymbols(symbols);
+  if (bucket === "all") return unique;
+  if (!isMultiTimeframeSnapshotFresh(snapshot)) return [];
+  return unique.filter((symbol) => snapshot?.bySymbol[symbol]?.[bucket]?.aboveMa30 === true);
+}
+
+function matchesRadarFilter(coin: RadarCoin, filter: Filter) {
+  return filter === "all"
+    || (filter === "squeeze" && coin.participation === "SQUEEZE")
+    || (filter === "candidate" && ["SQUEEZE", "A", "B"].includes(coin.participation))
+    || (filter === "concentrated" && coin.top10Pct !== null && coin.top10Pct >= 45)
+    || (filter === "risk" && coin.risks.length > 0);
+}
+
+function symbolMatchesQuery(symbol: string, query: string) {
+  return !query || symbol.includes(query);
+}
+
+function createPendingMultiTimeframe(symbols: string[]): MultiTimeframeSnapshot {
+  return { status: "pending", scannedAt: new Date().toISOString(), timezone: "Asia/Shanghai", symbols, bySymbol: {}, vegas: { "1h": [], "4h": [], "1d": [] }, scannedSymbols: 0, successfulSymbols: 0, failedSymbols: 0, progress: createScanProgress(symbols.length), warning: "正在读取 Binance Futures 最新已收盘 K 线" };
+}
+
+function MultiTimeframeBucketBar({ symbols, snapshot, selected, onSelect }: { symbols: string[]; snapshot: MultiTimeframeSnapshot | null; selected: Ma30Bucket; onSelect: (value: Ma30Bucket) => void }) {
+  const fresh = isMultiTimeframeSnapshotFresh(snapshot);
+  const status = !fresh && snapshot?.status === "ready" ? "快照已过期" : snapshot?.status === "ready" ? "已更新" : snapshot?.status === "pending" ? "筛选中" : snapshot?.status === "degraded" ? "数据不足/部分失败" : "等待已收盘数据";
+  return <section className="ma30-bucket-panel" aria-label="已收盘 K 线 MA30 分档">
+    <div className="ma30-bucket-heading"><div><strong>当前窗口后置分档</strong><small>只在原筛选结果内继续筛选，使用最新已收盘 K 线</small></div><span className={`ma30-bucket-status ${snapshot?.status ?? "pending"}`}>{status}</span></div>
+    <div className="ma30-bucket-buttons">
+      {(["all", "15m", "1h", "4h"] as const).map((value) => <button type="button" key={value} className={selected === value ? "active" : ""} aria-pressed={selected === value} onClick={() => onSelect(value)}>{ma30BucketLabels[value]} <b>{value === "all" ? symbols.length : bucketSymbols(symbols, snapshot, value).length}</b></button>)}
+    </div>
+    <small className="ma30-bucket-note">{!fresh && snapshot?.status === "ready" ? "快照已过期，请重新筛选" : snapshot?.warning ?? (symbols.length ? "正在读取 15m、1h、4h 已收盘 K 线" : "当前窗口暂无候选币种")} · 缺失数据不会计入站上 MA30</small>
+  </section>;
+}
+
+function VegasBuckets({ snapshot, bucket, query }: { snapshot: MultiTimeframeSnapshot | null; bucket: Ma30Bucket; query: string }) {
+  return <div className="vegas-bucket-grid">
+    {(["1h", "4h", "1d"] as const).map((interval) => {
+      const matches = bucketSymbols(snapshot?.vegas[interval] ?? [], snapshot, bucket).filter((symbol) => symbolMatchesQuery(symbol, query));
+      const label = interval === "1h" ? "1 小时" : interval === "4h" ? "4 小时" : "1 日";
+      return <section className="vegas-bucket-card" key={interval}><div className="vegas-bucket-card-heading"><div><span>VEGAS {interval.toUpperCase()}</span><h4>{label} Vegas 多头排列</h4></div><strong>{matches.length} 个</strong></div><p>{"最新已收盘 K 线严格满足 MA30 > EMA144 > EMA169 > EMA576 > EMA676"}</p>{matches.length ? <div className="vegas-symbol-list">{matches.map((symbol) => <a key={symbol} href={`/trade?symbol=${encodeURIComponent(symbol)}`}>{displayBinanceSymbol(symbol)}<small>打开合约图表</small></a>)}</div> : <div className="vegas-empty">{snapshot?.status === "pending" ? "正在筛选…" : snapshot?.status === "degraded" ? "数据不足，未将缺失指标计入结果" : "本轮没有满足完整排列的币种"}</div>}</section>;
+    })}
+  </div>;
 }
 
 export default function Home() {
@@ -301,10 +346,21 @@ export default function Home() {
   const [ma30Scanning, setMa30Scanning] = useState(false);
   const [reversal, setReversal] = useState<ReversalResponse | null>(null);
   const [reversalScanning, setReversalScanning] = useState(false);
+  const [multiTimeframe, setMultiTimeframe] = useState<MultiTimeframeSnapshot | null>(null);
+  const [multiTimeframeScanning, setMultiTimeframeScanning] = useState(false);
+  const [ma30Bucket, setMa30Bucket] = useState<Ma30Bucket>("all");
+  const multiTimeframeRequestRef = useRef("");
   // 当前时间只能在浏览器挂载后开始渲染，避免服务端与客户端跨秒时产生水合不一致。
   const [radarNow, setRadarNow] = useState<Date | null>(null);
-  const { themeMode, resolvedTheme, setThemeMode } = useTerminalTheme();
-  const { fontScale } = useFontScale();
+ const { themeMode, resolvedTheme, setThemeMode } = useTerminalTheme();
+ const { fontScale } = useFontScale();
+  const multiTimeframeSymbols = useMemo(() => uniqueSymbols([
+    ...(data?.coins ?? []).map((coin) => coin.symbol),
+    ...(ma30Oi?.candidates ?? []).map((candidate) => candidate.symbol),
+    ...Object.values(reversal?.scans ?? {}).flatMap((scan) => scan?.candidates.map((candidate) => candidate.symbol) ?? []),
+    ...(reversal?.archives ?? []).map((archive) => archive.symbol),
+  ]).slice(0, 100), [data, ma30Oi, reversal]);
+  const multiTimeframeFingerprint = multiTimeframeSymbols.join(",");
 
   async function loadRadar() {
     setLoading(true);
@@ -326,14 +382,89 @@ export default function Home() {
     }
   }
 
-  async function loadMa30Oi() {
+  async function loadMultiTimeframe() {
     try {
-      const response = await fetch("/api/radar/ma30-oi", { cache: "no-store" });
-      if (!response.ok) throw new Error("ma30_oi_unavailable");
-      setMa30Oi((await response.json()) as Ma30OiResponse);
-    } catch {
-      setMa30Oi({ status: "degraded", timezone: "Asia/Shanghai", candidates: [], warning: "筛选快照暂时不可用" });
+      const response = await fetch("/api/radar/multitimeframe", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as Partial<MultiTimeframeSnapshot>;
+      if (!response.ok) throw new Error(payload.warning || "多周期快照暂时不可用");
+      const snapshot = payload as MultiTimeframeSnapshot;
+      setMultiTimeframe(snapshot);
+      return snapshot;
+    } catch (reason) {
+      const warning = reason instanceof Error ? reason.message : "多周期快照暂时不可用";
+      const snapshot = { ...createPendingMultiTimeframe(multiTimeframeSymbols), status: "degraded" as const, warning };
+      setMultiTimeframe(snapshot);
+      return snapshot;
     }
+  }
+
+  async function pollMultiTimeframeScan() {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      const response = await fetch("/api/radar/multitimeframe", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as Partial<MultiTimeframeSnapshot>;
+      if (!response.ok) {
+        const warning = payload.warning || "多周期扫描状态暂时不可用";
+        setMultiTimeframe((current) => ({ ...(current ?? createPendingMultiTimeframe(multiTimeframeSymbols)), status: "degraded", warning }));
+        return;
+      }
+      setMultiTimeframe(payload as MultiTimeframeSnapshot);
+      if (payload.status !== "pending") return;
+    }
+    setMultiTimeframe((current) => ({ ...(current ?? createPendingMultiTimeframe(multiTimeframeSymbols)), status: "degraded", warning: "扫描超过 10 分钟仍未完成，请稍后查看快照" }));
+  }
+
+  async function runMultiTimeframeNow(symbols = multiTimeframeSymbols) {
+    if (multiTimeframeScanning || !symbols.length) return;
+    setMultiTimeframeScanning(true);
+    setMultiTimeframe(createPendingMultiTimeframe(symbols));
+    try {
+      const response = await fetch("/api/radar/multitimeframe", { method: "POST", headers: { "content-type": "application/json", "x-radar-manual": "1" }, body: JSON.stringify({ symbols }) });
+      const payload = await response.json().catch(() => ({})) as Partial<MultiTimeframeSnapshot>;
+      if (!response.ok) {
+        setMultiTimeframe({ ...createPendingMultiTimeframe(symbols), status: "degraded", warning: payload.warning || "多周期筛选暂时不可用" });
+        return;
+      }
+      setMultiTimeframe(payload as MultiTimeframeSnapshot);
+      if (payload.status === "pending") await pollMultiTimeframeScan();
+    } catch (reason) {
+      setMultiTimeframe({ ...createPendingMultiTimeframe(symbols), status: "degraded", warning: reason instanceof Error ? reason.message : "多周期筛选失败" });
+    } finally {
+      setMultiTimeframeScanning(false);
+    }
+  }
+
+ async function loadMa30Oi() {
+  try {
+     const response = await fetch("/api/radar/ma30-oi", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as Partial<Ma30OiResponse>;
+      if (!response.ok) {
+        const message = payload.warning || "筛选快照暂时不可用";
+        setMa30Oi({ status: "degraded", timezone: "Asia/Shanghai", candidates: [], warning: message, diagnostic: createRadarDiagnostic(response.status, message) });
+        return;
+      }
+      setMa30Oi(payload as Ma30OiResponse);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "筛选快照暂时不可用";
+      setMa30Oi({ status: "degraded", timezone: "Asia/Shanghai", candidates: [], warning: message, diagnostic: createRadarDiagnostic(null, message) });
+    }
+  }
+
+  async function pollMa30OiScan() {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      const response = await fetch("/api/radar/ma30-oi", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as Partial<Ma30OiResponse>;
+      if (!response.ok) {
+        const message = payload.warning || "扫描状态暂时不可用";
+        setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        return;
+      }
+      setMa30Oi(payload as Ma30OiResponse);
+      if (payload.status !== "pending") return;
+    }
+    const message = "扫描超过 10 分钟仍未完成，请稍后查看快照";
+    setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: message, diagnostic: createRadarDiagnostic(408, message) }));
   }
 
   async function runMa30OiNow() {
@@ -342,11 +473,17 @@ export default function Home() {
     setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "pending", warning: "正在低频扫描 Binance Futures，请耐心等待" }));
     try {
       const response = await fetch("/api/radar/ma30-oi", { method: "POST", headers: { "x-radar-manual": "1" } });
-      const payload = await response.json() as Ma30OiResponse;
-      if (!response.ok) throw new Error(payload.warning || "扫描暂时不可用");
+      const payload = await response.json().catch(() => ({})) as Ma30OiResponse;
+      if (!response.ok) {
+        const message = payload.warning || "扫描暂时不可用";
+        setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        return;
+      }
       setMa30Oi(payload);
+      if (payload.status === "pending") await pollMa30OiScan();
     } catch (error) {
-      setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: error instanceof Error ? error.message : "扫描失败" }));
+      const message = error instanceof Error ? error.message : "扫描失败";
+      setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: message, diagnostic: createRadarDiagnostic(null, message) }));
     } finally {
       setMa30Scanning(false);
     }
@@ -355,11 +492,34 @@ export default function Home() {
   async function loadReversal() {
     try {
       const response = await fetch("/api/radar/reversal", { cache: "no-store" });
-      if (!response.ok) throw new Error("reversal_unavailable");
-      setReversal((await response.json()) as ReversalResponse);
-    } catch {
-      setReversal({ status: "pending", scans: {}, archives: [], warning: "破底翻快照暂时不可用" });
+      const payload = await response.json().catch(() => ({})) as Partial<ReversalResponse>;
+      if (!response.ok) {
+        const message = payload.warning || "破底翻快照暂时不可用";
+        setReversal({ status: "pending", scans: {}, archives: [], warning: message, diagnostic: createRadarDiagnostic(response.status, message) });
+        return;
+      }
+      setReversal(payload as ReversalResponse);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "破底翻快照暂时不可用";
+      setReversal({ status: "pending", scans: {}, archives: [], warning: message, diagnostic: createRadarDiagnostic(null, message) });
     }
+  }
+
+  async function pollReversalScan() {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      const response = await fetch("/api/radar/reversal", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as ReversalResponse;
+      if (!response.ok) {
+        const message = payload.warning || "扫描状态暂时不可用";
+        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        return;
+      }
+      setReversal(payload);
+      if (payload.status !== "pending") return;
+    }
+    const message = "扫描超过 10 分钟仍未完成，请稍后查看快照";
+    setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: createRadarDiagnostic(408, message) }));
   }
 
   async function runReversalNow() {
@@ -371,13 +531,14 @@ export default function Home() {
       const payload = await response.json().catch(() => ({})) as ReversalResponse & { error?: string };
       if (!response.ok) {
         const message = payload.warning || payload.error || "破底翻筛选暂时不可用";
-        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: reversalDiagnostic(response.status, message) }));
+        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
         return;
       }
       setReversal(payload);
+      if (payload.status === "pending") await pollReversalScan();
     } catch (error) {
       const message = error instanceof Error ? error.message : "破底翻筛选失败";
-      setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: reversalDiagnostic(null, message) }));
+      setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: createRadarDiagnostic(null, message) }));
     } finally {
       setReversalScanning(false);
     }
@@ -410,28 +571,42 @@ export default function Home() {
     };
   }, []);
 
-  useEffect(() => {
-    setRadarNow(new Date());
-    const timer = window.setInterval(() => setRadarNow(new Date()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
+ useEffect(() => {
+   const initialTimer = window.setTimeout(() => setRadarNow(new Date()), 0);
+   const timer = window.setInterval(() => setRadarNow(new Date()), 1_000);
+   return () => {
+     window.clearTimeout(initialTimer);
+     window.clearInterval(timer);
+   };
+ }, []);
 
-  const filteredCoins = useMemo(() => {
-    const normalizedQuery = query.trim().toUpperCase();
-    return (data?.coins ?? []).filter((coin) => {
-      const matchesQuery =
-        !normalizedQuery ||
-        coin.symbol.includes(normalizedQuery) ||
-        coin.displayName.toUpperCase().includes(normalizedQuery);
-      const matchesFilter =
-        filter === "all" ||
-        (filter === "squeeze" && coin.participation === "SQUEEZE") ||
-        (filter === "candidate" && ["SQUEEZE", "A", "B"].includes(coin.participation)) ||
-        (filter === "concentrated" && coin.top10Pct !== null && coin.top10Pct >= 45) ||
-        (filter === "risk" && coin.risks.length > 0);
-      return matchesQuery && matchesFilter;
-    });
-  }, [data, filter, query]);
+  useEffect(() => {
+    if (!multiTimeframeFingerprint) return;
+    const timer = window.setTimeout(() => {
+      if (multiTimeframeRequestRef.current === multiTimeframeFingerprint) return;
+      multiTimeframeRequestRef.current = multiTimeframeFingerprint;
+      void loadMultiTimeframe().then((snapshot) => {
+        const savedFingerprint = uniqueSymbols(snapshot?.symbols ?? []).join(",");
+        if (savedFingerprint !== multiTimeframeFingerprint || !isMultiTimeframeSnapshotFresh(snapshot)) {
+          void runMultiTimeframeNow(multiTimeframeSymbols);
+        } else if (snapshot?.status === "pending") {
+          setMultiTimeframeScanning(true);
+          void pollMultiTimeframeScan().finally(() => setMultiTimeframeScanning(false));
+        }
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+    // The fingerprint is the deliberate trigger; the callbacks capture the matching candidate set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiTimeframeFingerprint]);
+
+ const normalizedQuery = query.trim().toUpperCase();
+  const baseRadarCoins = useMemo(() => (data?.coins ?? []).filter((coin) => matchesRadarFilter(coin, filter)), [data, filter]);
+  const filteredCoins = useMemo(() => baseRadarCoins.filter((coin) => {
+    const matchesQuery = !normalizedQuery || coin.symbol.includes(normalizedQuery) || coin.displayName.toUpperCase().includes(normalizedQuery);
+    const matchesBucket = ma30Bucket === "all" || bucketSymbols([coin.symbol], multiTimeframe, ma30Bucket).length > 0;
+    return matchesQuery && matchesBucket;
+  }), [baseRadarCoins, normalizedQuery, ma30Bucket, multiTimeframe]);
 
   const selectedCoin =
     data?.coins.find((coin) => coin.symbol === selectedSymbol) ?? data?.coins[0] ?? null;
@@ -439,9 +614,20 @@ export default function Home() {
   const candidateCount =
     data?.coins.filter((coin) => ["SQUEEZE", "A", "B"].includes(coin.participation)).length ?? 0;
   const avoidCount = data?.coins.filter((coin) => coin.participation === "AVOID").length ?? 0;
-  const reversalCandidates = Object.values(reversal?.scans ?? {}).flatMap((scan) => scan?.candidates ?? []);
-  const longReversalCandidates = reversalCandidates.filter((candidate) => candidate.direction === "LONG");
-  const shortReversalCandidates = reversalCandidates.filter((candidate) => candidate.direction === "SHORT");
+ const reversalCandidates = Object.values(reversal?.scans ?? {}).flatMap((scan) => scan?.candidates ?? []);
+  const baseWindowSymbols = filter === "ma30oi"
+    ? uniqueSymbols((ma30Oi?.candidates ?? []).map((candidate) => candidate.symbol))
+    : filter === "reversal"
+      ? uniqueSymbols(reversalCandidates.map((candidate) => candidate.symbol))
+      : filter === "vegas"
+        ? uniqueSymbols((multiTimeframe?.vegas["1h"] ?? []).concat(multiTimeframe?.vegas["4h"] ?? [], multiTimeframe?.vegas["1d"] ?? []))
+        : baseRadarCoins.map((coin) => coin.symbol);
+  const bucketedReversalCandidates = reversalCandidates.filter((candidate) => bucketSymbols([candidate.symbol], multiTimeframe, ma30Bucket).length > 0 && symbolMatchesQuery(candidate.symbol, normalizedQuery));
+  const bucketedMa30OiCandidates = (ma30Oi?.candidates ?? []).filter((candidate) => bucketSymbols([candidate.symbol], multiTimeframe, ma30Bucket).length > 0 && symbolMatchesQuery(candidate.symbol, normalizedQuery));
+  const reversalProgresses = (["4h", "1d"] as const).flatMap((interval) => {
+    const progress = reversal?.scans[interval]?.progress;
+    return progress ? [{ label: interval === "4h" ? "4H" : "日线", progress }] : [];
+  });
 
   return (
     <main className="app-shell radar-terminal" data-theme={resolvedTheme} style={{ "--site-font-scale": fontScale } as React.CSSProperties}>
@@ -515,8 +701,7 @@ export default function Home() {
           <div className="toolbar">
             <div className="filter-tabs" role="tablist" aria-label="筛选热门币">
               {([
-                ["all", "综合榜"], ["squeeze", "逼空重点"], ["candidate", "候选"],
-                ["concentrated", "筹码集中"], ["risk", "风险检查"], ["ma30oi", "MA30 × OI 增仓"], ["reversal", "破底翻（4H/日线）"],
+                ["all", "综合榜"], ["squeeze", "逼空重点"], ["candidate", "候选"], ["concentrated", "筹码集中"], ["risk", "风险检查"], ["ma30oi", "MA30 × OI 增仓"], ["reversal", "破底翻（4H/日线）"], ["vegas", "Vegas 强势"],
               ] as const).map(([value, label]) => (
                 <button key={value} role="tab" aria-selected={filter === value}
                   className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>
@@ -526,21 +711,33 @@ export default function Home() {
             </div>
             <label className="search-box"><span>⌕</span><input value={query}
               onChange={(event) => setQuery(event.target.value)} placeholder="搜索币种" aria-label="搜索币种" /></label>
-          </div>
+         </div>
+          <MultiTimeframeBucketBar symbols={baseWindowSymbols} snapshot={multiTimeframe} selected={ma30Bucket} onSelect={setMa30Bucket} />
+          <ManualProgress active={multiTimeframeScanning} progress={multiTimeframe?.progress} label="正在读取 15m、1h、4h、1d 已收盘 K 线" estimate="数十秒至数分钟，取决于当前候选数量和网络" />
 
-          {filter === "reversal" ? (
+         {filter === "reversal" ? (
             <div className="reversal-panel">
-              <div className="reversal-heading"><div><p className="section-kicker">BREAKDOWN REVERSAL ARCHIVE</p><h3>破底翻双向列表</h3><p>只使用已收盘 K 线。以 08/20 为例，日线比较 08/19 与 08/18：08/19 跌破 08/18 低点后，收盘收回 08/18 开盘；若 08/18 为阳线，再收回前收或前高则权重更高。</p></div><div className="reversal-actions"><span className={`reversal-status ${reversal?.diagnostic ? "degraded" : reversal?.status ?? "pending"}`}>{reversalScanning ? "筛选中" : reversal?.diagnostic ? "连接失败" : reversal?.status === "ready" ? "已归档" : "待执行"}</span><button type="button" onClick={() => void runReversalNow()} disabled={reversalScanning}>{reversalScanning ? "正在筛选…" : "立即筛选"}</button></div></div>
-              <div className="reversal-meta"><span>4H：每 4 小时收盘扫描</span><span>日线：每天 08:00 扫描</span><span>归档：{reversal?.archives.length ?? 0} 条</span><span>Bark：新增候选时提醒</span></div>
+              <div className="reversal-heading"><div><p className="section-kicker">BREAKDOWN REVERSAL ARCHIVE</p><h3>破底翻双向列表</h3><p>只使用已收盘 K 线。以 08/20 为例，日线比较 08/19 与 08/18：08/19 跌破 08/18 低点后，收盘收回 08/18 开盘；若 08/18 为阳线，再收回前收或前高则权重更高。</p></div><div className="reversal-actions"><span className={`reversal-status ${reversal?.diagnostic ? "degraded" : reversal?.status ?? "pending"}`}>{reversalScanning ? "筛选中" : reversal?.diagnostic ? "连接失败" : reversal?.status === "ready" ? "已归档" : reversal?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runReversalNow()} disabled={reversalScanning}>{reversalScanning ? "正在筛选…" : "立即筛选"}</button></div></div>
+              <ManualProgress active={reversalScanning} progresses={reversalProgresses} label="正在读取 4H 与日线已收盘 K 线" estimate="数十秒至数分钟，取决于币种数量和网络" />
+              <div className="reversal-meta"><span>4H：每 4 小时收盘扫描</span><span>日线：每天 08:00 扫描</span>{reversalProgresses.length > 0 && <span>USDT 永续：{reversalProgresses.map(({ label, progress }) => `${label} ${progress.scannedSymbols}/${progress.totalSymbols}`).join(" · ")} · 命中：{reversalProgresses.reduce((sum, item) => sum + item.progress.matchedSymbols, 0)} · 剩余：{reversalProgresses.reduce((sum, item) => sum + item.progress.remainingSymbols, 0)}</span>}<span>归档：{reversal?.archives.length ?? 0} 条</span><span>Bark：新增候选时提醒</span></div>
               {reversal?.diagnostic && <div className="reversal-diagnostic" role="alert"><strong>扫描诊断 · {reversal.diagnostic.code}</strong><span>发生时间：{formatRadarTime(reversal.diagnostic.occurredAt)}</span><p>原因：{reversal.diagnostic.detail}</p><ul>{reversal.diagnostic.checks.map((check) => <li key={check}>检查项：{check}</li>)}</ul></div>}
-              <div className="reversal-direction-grid"><ReversalTable title="多头 · 破底翻" rows={longReversalCandidates} /><ReversalTable title="空头 · 破顶翻" rows={shortReversalCandidates} /></div>
-              <div className="reversal-archive"><div className="reversal-direction-title"><h4>全部归档 · 13 根 K 线学习结果</h4><span>按信号时间倒序</span></div>{reversal?.archives.length ? <table className="reversal-table archive-table"><thead><tr><th>方向 / 币种</th><th>周期</th><th>信号评分</th><th>收回位置</th><th>13 根后最高有利幅度</th></tr></thead><tbody>{reversal.archives.map((row) => <tr key={row.id}><td><span className={row.direction === "LONG" ? "positive" : "negative"}>{row.direction === "LONG" ? "多" : "空"}</span> <a href={`/trade?symbol=${encodeURIComponent(row.symbol)}`}>{row.symbol.replace(/USDT$/, "")}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{row.interval === "1d" ? "日线" : "4H"}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{row.outcome?.complete && row.outcome.maxFavorablePct !== null ? `${row.outcome.maxFavorablePct.toFixed(2)}%` : `观察中 · ${row.outcome?.barsObserved ?? 0}/13`}</td></tr>)}</tbody></table> : <div className="reversal-empty">扫描完成后，所有命中的多空形态都会在这里归档。</div>}</div>
+              {reversal?.warning && !reversal.diagnostic && <p className="reversal-scan-warning" role="status">{reversal.warning}</p>}
+             <div className="reversal-direction-grid"><ReversalTable title="多头 · 破底翻" rows={bucketedReversalCandidates.filter((candidate) => candidate.direction === "LONG")} /><ReversalTable title="空头 · 破顶翻" rows={bucketedReversalCandidates.filter((candidate) => candidate.direction === "SHORT")} /></div>
+              <div className="reversal-archive"><div className="reversal-direction-title"><h4>全部归档 · 13 根 K 线学习结果</h4><span>按信号时间倒序</span></div>{reversal?.archives.length ? <table className="reversal-table archive-table"><thead><tr><th>方向 / 币种</th><th>周期</th><th>信号评分</th><th>收回位置</th><th>13 根后最高有利幅度</th></tr></thead><tbody>{reversal.archives.map((row) => <tr key={row.id}><td><span className={row.direction === "LONG" ? "positive" : "negative"}>{row.direction === "LONG" ? "多" : "空"}</span> <a href={`/trade?symbol=${encodeURIComponent(row.symbol)}`}>{displayBinanceSymbol(row.symbol)}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{row.interval === "1d" ? "日线" : "4H"}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{row.outcome?.complete && row.outcome.maxFavorablePct !== null ? `${row.outcome.maxFavorablePct.toFixed(2)}%` : `观察中 · ${row.outcome?.barsObserved ?? 0}/13`}</td></tr>)}</tbody></table> : <div className="reversal-empty">扫描完成后，所有命中的多空形态都会在这里归档。</div>}</div>
             </div>
+         ) : filter === "vegas" ? (
+            <div className="vegas-panel"><div className="vegas-heading"><div><p className="section-kicker">VEGAS CHANNEL SCREEN</p><h3>Vegas 多周期强势归档</h3><p>只使用最新已收盘 K 线；每个周期严格满足 MA30 &gt; EMA144 &gt; EMA169 &gt; EMA576 &gt; EMA676。结果仅作研究筛选，不连接交易执行。</p></div><div className="vegas-actions"><span className={`reversal-status ${multiTimeframe?.status === "ready" && !isMultiTimeframeSnapshotFresh(multiTimeframe) ? "degraded" : multiTimeframe?.status ?? "pending"}`}>{multiTimeframeScanning ? "筛选中" : multiTimeframe?.status === "ready" && !isMultiTimeframeSnapshotFresh(multiTimeframe) ? "快照已过期" : multiTimeframe?.status === "ready" ? "已归档" : multiTimeframe?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runMultiTimeframeNow()} disabled={multiTimeframeScanning || !multiTimeframeSymbols.length}>{multiTimeframeScanning ? "正在筛选…" : "立即筛选"}</button></div></div>
+            <div className="vegas-meta"><span>扫描：{multiTimeframe?.scannedAt ? formatRadarTime(multiTimeframe.scannedAt) : "尚未执行"}</span><span>候选：{baseWindowSymbols.length} 个</span>{multiTimeframe?.progress && <span>已扫描：{multiTimeframe.progress.scannedSymbols}/{multiTimeframe.progress.totalSymbols} · 命中：{multiTimeframe.progress.matchedSymbols} · 剩余：{multiTimeframe.progress.remainingSymbols}</span>}<span>完整读取：{multiTimeframe?.successfulSymbols ?? 0}/{multiTimeframe?.scannedSymbols ?? 0}</span></div>
+            {multiTimeframe?.warning && <p className="reversal-scan-warning" role="status">{multiTimeframe.warning}</p>}
+            <VegasBuckets snapshot={multiTimeframe} bucket={ma30Bucket} query={normalizedQuery} />
+          </div>
           ) : filter === "ma30oi" ? (
-            <div className="ma30-oi-panel">
-              <div className="ma30-oi-heading"><div><p className="section-kicker">DAILY FUTURES SCREEN</p><h3>连续站上 MA30 + OI 扩张</h3><p>每天 08:00（Asia/Shanghai）扫描：1H 收盘价连续 7 根在 MA30 上方，且前日 OI 严格高于前 10 日均值。</p></div><div className="ma30-oi-actions"><span className={`ma30-oi-status ${ma30Oi?.status ?? "pending"}`}>{ma30Scanning ? "扫描中" : ma30Oi?.status === "ready" ? "已完成" : ma30Oi?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runMa30OiNow()} disabled={ma30Scanning}>{ma30Scanning ? "正在筛选…" : "立即扫描"}</button></div></div>
-              <div className="ma30-oi-meta"><span>排序：当前 OI 降序</span><span>扫描：{ma30Oi?.scannedAt ? new Date(ma30Oi.scannedAt).toLocaleString("zh-CN", { hour12: false }) : "尚未执行"}</span><span>符合：{ma30Oi?.candidates.length ?? 0}</span>{ma30Oi?.successfulSymbols !== undefined && <span>完整数据：{ma30Oi.successfulSymbols}/{ma30Oi.scannedSymbols ?? 0}</span>}</div>
-              {ma30Oi?.candidates.length ? <div className="ma30-oi-table-wrap"><table className="ma30-oi-table"><thead><tr><th>币种</th><th>当前 OI 数量</th><th>前日 OI</th><th>前 10 日均值</th><th>放大</th><th>连续站上</th></tr></thead><tbody>{ma30Oi.candidates.map((candidate) => <tr key={candidate.symbol}><td><a href={`/trade?symbol=${encodeURIComponent(candidate.symbol)}`}>{candidate.symbol.replace(/USDT$/, "")}</a><small>收盘 {formatPrice(candidate.lastClose)} · MA30 {formatPrice(candidate.ma30)}</small></td><td>{formatOpenInterest(candidate.currentOi)}</td><td>{formatOpenInterest(candidate.previousDayOi)}</td><td>{formatOpenInterest(candidate.priorTenDayOiAverage)}</td><td className="positive">+{candidate.oiExpansionPct.toFixed(2)}%</td><td>{candidate.consecutiveAboveMa} 根</td></tr>)}</tbody></table></div> : <div className="ma30-oi-empty">暂无符合条件的币种。{ma30Oi?.warning ?? "每日 08:00 扫描后显示结果。"}</div>}
+           <div className="ma30-oi-panel">
+              <div className="ma30-oi-heading"><div><p className="section-kicker">DAILY FUTURES SCREEN</p><h3>连续站上 MA30 + OI 扩张</h3><p>每天 08:00（Asia/Shanghai）扫描：1H 收盘价连续 7 根在 MA30 上方，且前日 OI 严格高于前 10 日均值。</p></div><div className="ma30-oi-actions"><span className={`ma30-oi-status ${ma30Oi?.diagnostic ? "degraded" : ma30Oi?.status ?? "pending"}`}>{ma30Scanning ? "扫描中" : ma30Oi?.diagnostic ? "连接失败" : ma30Oi?.status === "ready" ? "已完成" : ma30Oi?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runMa30OiNow()} disabled={ma30Scanning}>{ma30Scanning ? "正在筛选…" : "立即扫描"}</button></div></div>
+              <ManualProgress active={ma30Scanning} progress={ma30Oi?.progress} label="正在读取 Binance Futures 1H K 线与 OI" estimate="数十秒至数分钟，取决于币种数量和网络" />
+              <div className="ma30-oi-meta"><span>排序：当前 OI 降序</span><span>扫描：{ma30Oi?.scannedAt ? new Date(ma30Oi.scannedAt).toLocaleString("zh-CN", { hour12: false }) : "尚未执行"}</span>{ma30Oi?.progress && <span>USDT 永续：{ma30Oi.progress.scannedSymbols}/{ma30Oi.progress.totalSymbols} · 命中：{ma30Oi.progress.matchedSymbols} · 剩余：{ma30Oi.progress.remainingSymbols}</span>}<span>符合：{bucketedMa30OiCandidates.length}</span>{ma30Oi?.successfulSymbols !== undefined && <span>完整数据：{ma30Oi.successfulSymbols}/{ma30Oi.scannedSymbols ?? 0}</span>}</div>
+              {ma30Oi?.diagnostic && <div className="reversal-diagnostic" role="alert"><strong>扫描诊断 · {ma30Oi.diagnostic.code}</strong><span>发生时间：{formatRadarTime(ma30Oi.diagnostic.occurredAt)}</span><p>原因：{ma30Oi.diagnostic.detail}</p><ul>{ma30Oi.diagnostic.checks.map((check) => <li key={check}>检查项：{check}</li>)}</ul></div>}
+              {bucketedMa30OiCandidates.length ? <div className="ma30-oi-table-wrap"><table className="ma30-oi-table"><thead><tr><th>币种</th><th>当前 OI 数量</th><th>前日 OI</th><th>前 10 日均值</th><th>放大</th><th>连续站上</th></tr></thead><tbody>{bucketedMa30OiCandidates.map((candidate) => <tr key={candidate.symbol}><td><a href={`/trade?symbol=${encodeURIComponent(candidate.symbol)}`}>{displayBinanceSymbol(candidate.symbol)}</a><small>收盘 {formatPrice(candidate.lastClose)} · MA30 {formatPrice(candidate.ma30)}</small></td><td>{formatOpenInterest(candidate.currentOi)}</td><td>{formatOpenInterest(candidate.previousDayOi)}</td><td>{formatOpenInterest(candidate.priorTenDayOiAverage)}</td><td className="positive">+{candidate.oiExpansionPct.toFixed(2)}%</td><td>{candidate.consecutiveAboveMa} 根</td></tr>)}</tbody></table></div> : <div className="ma30-oi-empty">暂无符合条件的币种。{ma30Oi?.warning ?? "每日 08:00 扫描后显示结果。"}</div>}
             </div>
           ) : error ? (
             <div className="empty-state"><strong>数据连接失败</strong><span>{error}</span>

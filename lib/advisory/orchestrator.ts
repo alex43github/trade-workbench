@@ -1,7 +1,7 @@
 import { EXPERTS } from "./config.ts";
 import { buildConsensus } from "./consensus.ts";
 import type { ExpertRunnerInput } from "./expert-runner.ts";
-import type { DecisionContract } from "./types.ts";
+import type { DecisionContract, ExpertId } from "./types.ts";
 import type { MarketSnapshot } from "./market.ts";
 import { ModelProviderError } from "./model-gateway.ts";
 
@@ -21,6 +21,7 @@ export async function runDailyConsultation(options: {
   snapshotBuilder: (symbol: string) => Promise<MarketSnapshot>;
   expertRunner: (input: ExpertRunnerInput) => Promise<DecisionContract>;
   repository: ConsultationRepository;
+  expertIds?: readonly ExpertId[];
 }): Promise<ConsultationResult> {
   const existing = await options.repository.get(options.idempotencyKey);
   if (existing) return existing;
@@ -29,6 +30,7 @@ export async function runDailyConsultation(options: {
   const consultationId = progress?.id ?? crypto.randomUUID();
   const failures: ConsultationFailure[] = [...(progress?.failures ?? [])];
   const restored = progress?.opinions ?? [];
+  const selectedExperts = options.expertIds?.length ? EXPERTS.filter((expert) => options.expertIds?.includes(expert.id)) : EXPERTS;
   if (!progress && options.repository.begin) await options.repository.begin(options.idempotencyKey, { id: consultationId, analysisDate: options.analysisDate, symbol: snapshot.symbol, mode: snapshot.mode, snapshotHash: snapshot.snapshotHash, snapshot, opinions: [], failures });
   async function runWithRetry(input: ExpertRunnerInput) {
     let lastError = "expert failed";
@@ -57,13 +59,13 @@ export async function runDailyConsultation(options: {
     for (const input of inputs) { const value = await checkpoint(input); if (value) values.push(value); }
     return values;
   }
-  const r1 = await runSerial(EXPERTS.map((expert) => ({ consultationId, expert, round: "R1", snapshot })));
-  const r2 = await runSerial(EXPERTS.filter((expert) => r1.some((item) => item.expertId === expert.id)).map((expert) => {
+  const r1 = await runSerial(selectedExperts.map((expert) => ({ consultationId, expert, round: "R1", snapshot })));
+  const r2 = await runSerial(selectedExperts.filter((expert) => r1.some((item) => item.expertId === expert.id)).map((expert) => {
     const peers = r1.filter((item) => item.expertId !== expert.id).map((item, index) => ({ alias: `Expert ${String.fromCharCode(65 + index)}`, direction: item.direction, supportingEvidence: item.supportingEvidence, refutingEvidence: item.refutingEvidence }));
     return { consultationId, expert, round: "R2" as const, snapshot, peerArguments: peers, previousDecision: r1.find((item) => item.expertId === expert.id) };
   }));
-  const r3 = await runSerial(EXPERTS.filter((expert) => r2.some((item) => item.expertId === expert.id)).map((expert) => ({ consultationId, expert, round: "R3", snapshot, previousDecision: r2.find((item) => item.expertId === expert.id) })));
-  for (const expert of EXPERTS) {
+  const r3 = await runSerial(selectedExperts.filter((expert) => r2.some((item) => item.expertId === expert.id)).map((expert) => ({ consultationId, expert, round: "R3", snapshot, previousDecision: r2.find((item) => item.expertId === expert.id) })));
+  for (const expert of selectedExperts) {
     if (!r1.some((item) => item.expertId === expert.id)) {
       failures.push({ expertId: expert.id, round: "R2", error: "skipped because R1 failed" }, { expertId: expert.id, round: "R3", error: "skipped because R1 failed" });
     } else if (!r2.some((item) => item.expertId === expert.id)) {

@@ -8,7 +8,7 @@ export type FuturesSymbol = {
   symbol: string;
   status: "TRADING";
   contractType: "PERPETUAL";
-  quoteAsset: "USDT";
+  quoteAsset: "USDT" | "USDC";
   marginAsset: string;
 };
 
@@ -32,16 +32,16 @@ export async function listUsdtPerpetuals(fetcher: PublicFetcher = fetch): Promis
   if (!Array.isArray(symbols)) throw new Error("Binance exchangeInfo symbols are missing");
   return symbols
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-    .filter((item) => item.status === "TRADING" && item.contractType === "PERPETUAL" && item.quoteAsset === "USDT")
+    .filter((item) => item.status === "TRADING" && item.contractType === "PERPETUAL" && (item.quoteAsset === "USDT" || item.quoteAsset === "USDC"))
     .filter((item) => item.underlyingType !== "INDEX")
     .map((item): FuturesSymbol => ({
       symbol: String(item.symbol),
       status: "TRADING" as const,
       contractType: "PERPETUAL" as const,
-      quoteAsset: "USDT" as const,
+      quoteAsset: item.quoteAsset === "USDC" ? "USDC" as const : "USDT" as const,
       marginAsset: String(item.marginAsset ?? "USDT"),
     }))
-    .filter((item) => /^[A-Z0-9]{2,30}USDT$/.test(item.symbol))
+    .filter((item) => /^[A-Z0-9]{2,30}(?:USDT|USDC)$/.test(item.symbol))
     .sort((left, right) => left.symbol.localeCompare(right.symbol));
 }
 

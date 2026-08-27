@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import TradingTerminal from "./TradingTerminal";
+import { normalizeBinanceFuturesSymbol } from "@/lib/trade/symbols";
 
 export const metadata: Metadata = {
   title: "街灯交易台｜自适应策略与操作知识库",
@@ -7,8 +8,8 @@ export const metadata: Metadata = {
 };
 
 function normalizeSymbol(value: string | undefined) {
-  const symbol = (value ?? "BTCUSDT").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return /^[A-Z0-9]{2,20}USDT$/.test(symbol) ? symbol : "BTCUSDT";
+  try { return normalizeBinanceFuturesSymbol(value ?? "BTCUSDT"); }
+  catch { return "BTCUSDT"; }
 }
 
 export default async function TradePage({ searchParams }: { searchParams: Promise<{ symbol?: string }> }) {

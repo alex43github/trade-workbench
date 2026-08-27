@@ -1,7 +1,7 @@
 # tvscreener 只读市场信息源设计规格
 
 日期：2026-08-27
-状态：用户已批准设计，待实施
+状态：已实现并部署到 VPS（2026-08-28）。实现位于 `services/tvscreener/`、`lib/radar/tvscreener.ts`、`app/api/radar/tvscreener/route.ts` 与雷达页面；sidecar 只提供只读研究数据。
 产品性质：市场筛选与 AI 研究辅助；不改变交易执行链路
 
 ## 1. 目标

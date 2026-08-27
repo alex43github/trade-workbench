@@ -1,26 +1,18 @@
 import { BinancePublicError, binancePublicJson } from "@/lib/binance-public";
-
-type SymbolRow = { symbol?: unknown; status?: unknown; contractType?: unknown; quoteAsset?: unknown; baseAsset?: unknown };
+import { filterTradableFuturesSymbols, type BinanceFuturesSymbolOption } from "@/lib/trade/symbols";
 
 const CORE_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT"];
+type SymbolRow = { symbol?: unknown; baseAsset?: unknown; quoteAsset?: unknown; status?: unknown; contractType?: unknown };
 
 function fallbackSymbols() {
-  return CORE_SYMBOLS.map((symbol) => ({ symbol, displayName: symbol.replace(/USDT$/, "") }));
+  return CORE_SYMBOLS.map((symbol) => ({ symbol, displayName: symbol.replace(/USDT$/, ""), quoteAsset: "USDT" as const, contractType: "PERPETUAL" as const }));
 }
 
 export async function GET(request: Request) {
   const query = new URL(request.url).searchParams.get("q")?.trim().toUpperCase() ?? "";
   try {
     const result = await binancePublicJson<{ symbols?: SymbolRow[] }>("/fapi/v1/exchangeInfo", { signal: AbortSignal.timeout(6_000) });
-    const payload = result.data;
-    const symbols = (payload.symbols ?? [])
-      .filter((row) => row.status === "TRADING" && row.contractType === "PERPETUAL" && row.quoteAsset === "USDT")
-      .map((row) => String(row.symbol ?? "").toUpperCase())
-      .filter(Boolean)
-      .filter((symbol, index, all) => all.indexOf(symbol) === index)
-      .filter((symbol) => !query || symbol.includes(query) || symbol.replace(/USDT$/, "").includes(query))
-      .slice(0, 30)
-      .map((symbol) => ({ symbol, displayName: symbol.replace(/USDT$/, "") }));
+    const symbols: BinanceFuturesSymbolOption[] = filterTradableFuturesSymbols(result.data, query);
     return Response.json({ mode: "live", source: result.source, symbols, updatedAt: new Date().toISOString() }, { headers: { "cache-control": "public, max-age=300" } });
   } catch (error) {
     const symbols = fallbackSymbols().filter((item) => !query || item.symbol.includes(query) || item.displayName.includes(query));

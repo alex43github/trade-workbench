@@ -335,8 +335,8 @@ function normalizeRow(item: unknown): RadarBase | null {
   const sources = [row, market, signal, heat];
   const rawSymbol = string(firstValue(sources, ["symbol", "token", "coin", "asset"])).toUpperCase();
   if (!rawSymbol) return null;
-  const displayName = rawSymbol.replace(/[-_/]?USDT$/i, "");
-  const symbol = rawSymbol.endsWith("USDT") ? rawSymbol.replace(/[-_/]/g, "") : `${rawSymbol.replace(/[-_/]/g, "")}USDT`;
+  const displayName = rawSymbol.replace(/[-_/]?(?:USDT|USDC)$/i, "");
+  const symbol = rawSymbol.endsWith("USDT") || rawSymbol.endsWith("USDC") ? rawSymbol.replace(/[-_/]/g, "") : `${rawSymbol.replace(/[-_/]/g, "")}USDT`;
   const fundingRate = percentFunding(number(firstValue(sources, ["funding_rate", "fundingRate", "funding"])));
   const shortCallRatio = number(firstValue([heat, row], ["short_call_ratio", "shortCallRatio", "bearish_ratio", "short_ratio"]));
   const trappedRatio = number(firstValue([heat, row], ["trapped_ratio", "trappedRatio", "loss_complaint_ratio", "holding_bag_ratio"]));
@@ -448,7 +448,7 @@ async function fetchLiveMarketCoin(ticker: PlainObject, fundingMap: Map<string, 
 
   return {
     symbol,
-    displayName: symbol.replace(/USDT$/, ""),
+    displayName: symbol.replace(/(?:USDT|USDC)$/, ""),
     price: number(ticker.lastPrice),
     change15m, change1h, change4h,
     change24h: number(ticker.priceChangePercent),
@@ -503,7 +503,7 @@ async function buildLiveMarketFallback(): Promise<RadarCoin[]> {
   const tradable = new Set(
     exchangeRows
       .map(object)
-      .filter((row) => row.status === "TRADING" && row.contractType === "PERPETUAL" && row.quoteAsset === "USDT")
+      .filter((row) => row.status === "TRADING" && row.contractType === "PERPETUAL" && (row.quoteAsset === "USDT" || row.quoteAsset === "USDC"))
       .map((row) => string(row.symbol)),
   );
   const fundingMap = new Map(

@@ -40,11 +40,38 @@ BARK_BASE_URL=https://api.day.app/你的设备Key
 
 `BARK_BASE_URL` 可留空；留空时会诊仍会保存，只跳过手机通知。OpenAI 和 Bark 密钥永远只在服务端使用，不写入 D1，也不返回浏览器。
 
+交易页和雷达页也共用这条 Bark 配置：模拟盘买入、卖出、固定止盈/止损，以及币安只读账户检测到持仓新增或消失时会提醒；MA30×OI 和 4H/日线破底翻每轮只提醒新增候选。重复扫描会按事件和信号时间去重，Bark 失败不会阻断扫描或模拟交易。若使用网关风格的单独密钥，也可以设置 `BARK_API_KEY`，并按需设置 `BARK_SERVER_URL`；`BARK_BASE_URL` 优先级更高。
+
 模型供应商可在 `/settings` 全局手动切换。系统支持 OpenAI、Claude、DeepSeek 直连与 OpenCode Go DeepSeek；不会自动跨供应商切换。额度、限流或鉴权失败会暂停会诊并生成告警，切换后继续使用原行情快照，只补齐尚未完成的专家轮次。每份意见保存实际模型供应商和模型名。
 
 `/radar` 复用 `binance-square-monitor` 的 `/api/leaderboard`，展示热议币、看空但抗跌的币和空头拥挤评分。高分只表示“强烈建议立即研究”，不会自动调用专家、模拟开仓或真实下单。
 
-`POST /api/advisory/maintenance` 是统一定时维护入口：扫描币安广场强空头拥挤信号，并重试失败的 Bark 通知。它仅接受 `ADVISORY_JOB_TOKEN` Bearer 认证，不会调用真实下单。
+`POST /api/advisory/maintenance` 是统一定时维护入口：扫描币安广场强空头拥挤信号、生成 MA30/OI 增仓快照，并重试失败的 Bark 通知。它仅接受 `ADVISORY_JOB_TOKEN` Bearer 认证，不会调用真实下单。
+
+建议将该入口设置为北京时间每天 00:00、04:00、08:00、12:00、16:00、20:00（Asia/Shanghai）执行。每次维护都会扫描 4H 破底翻；只有 08:00 扫描 MA30/OI 与日线破底翻。雷达的 `GET /api/radar/ma30-oi` 和 `GET /api/radar/reversal` 会读取最近快照；如果定时器尚未配置或本轮数据不足，页面会明确显示“待执行/数据不足”，不会生成演示候选。
+
+VPS 可使用 `services/workbench/maintenance-scheduler.mjs` 配合 systemd 每分钟唤醒一次；脚本只在上述收盘时刻调用维护接口，并用状态文件防止同一时段重复执行。复制两个 `.example` 文件到 systemd 配置目录后，设置 `WORKBENCH_BASE_URL`、`ADVISORY_JOB_TOKEN` 和 `WORKBENCH_STATE_FILE`，不要把 token 写进前端或仓库。
+
+### VPS 固定 IP、币安网关与升级
+
+上线时请让网站服务和 `binance-gateway` 位于同一台带固定 IPv4 的 VPS。网站环境使用
+`BINANCE_GATEWAY_BASE_URL=http://127.0.0.1:8788` 与同一 `BINANCE_GATEWAY_TOKEN`；端口 `8788` 仅允许回环访问，**不要**对公网开放。启动网关后访问本机 `/api/status` 取得 `outboundIp`，这一个 VPS 公网 IPv4 才是需要填入 Binance API 白名单的地址。
+
+设置页的“部署与升级”不会执行 SSH、shell 或任意命令。若需要从页面发起既定发布流程，给 VPS 的独立部署服务配置以下服务器端变量：
+
+```text
+DEPLOY_WEBHOOK_URL=https://你的受限部署服务/trigger
+DEPLOY_WEBHOOK_TOKEN=至少16位随机值
+APP_VERSION=当前发布版本
+BUILD_ID=当前构建标识
+```
+
+页面只会向该 HTTPS 地址发送固定的 `{"action":"deploy-streetlight"}` 请求；Webhook 本身仍必须验证 Bearer token、限制来源、执行构建健康检查并支持回滚。未配置时升级按钮保持禁用。
+
+```bash
+curl -X POST http://localhost:3000/api/advisory/maintenance \
+  -H "Authorization: Bearer $ADVISORY_JOB_TOKEN"
+```
 
 ### 触发每日会诊
 

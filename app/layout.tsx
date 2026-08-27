@@ -1,17 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import OperatorGate from "./components/OperatorGate";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -24,8 +14,8 @@ export async function generateMetadata(): Promise<Metadata> {
     origin = new URL("http://localhost:3000");
   }
   const socialImage = new URL("/og.png", origin).toString();
-  const title = "交易议会｜多专家 AI 行情咨询与模拟盘";
-  const description = "ICT、街哥、静心与bit浪浪四套体系的结构化会诊、模拟竞赛和可追溯复盘。只提供建议与模拟交易。";
+  const title = "交易议会｜多专家 AI 行情咨询与实盘策略";
+  const description = "ICT、街哥、静心与bit浪浪四套体系的结构化会诊、实盘策略与可追溯复盘。真实订单仅在安全条件和人工最终确认均满足后提交。";
 
   return {
     metadataBase: origin,
@@ -40,7 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+      <body><OperatorGate>{children}</OperatorGate></body>
     </html>
   );
 }

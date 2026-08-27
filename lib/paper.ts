@@ -1,8 +1,12 @@
 import { getD1 } from "../db/index.ts";
 import { ensureAdvisorySchema, ensurePaperSchema, ensureTradeKnowledgeSchema } from "../db/ensure.ts";
 import { calculateOrderSizing } from "./trade/order-sizing.ts";
-import { notifyTradeEvent } from "./notifications/bark.ts";
+import { notifyPaperStrategyEvent, notifyTradeEvent } from "./notifications/bark.ts";
 import { binancePublicJson } from "./binance-public.ts";
+import { getStrategy, type PersistedStrategy } from "./trade/strategies.ts";
+import { runPaperStrategyTick, type PaperClosedCandle, type PaperStrategyTickResult } from "./trade/paper-strategy-executor.ts";
+import { LIVE_CLOSE_PERCENT_OPTIONS } from "./trade/live-position-close.ts";
+import { isBinanceFuturesSymbol } from "./trade/symbols.ts";
 
 const TAKER_FEE_RATE = 0.0004;
 const DEFAULT_LEVERAGE = 3;
@@ -35,7 +39,7 @@ function round(value: number, digits = 8) {
 
 function normalizeSymbol(value: unknown) {
   const symbol = String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (!/^[A-Z0-9]{2,24}USDT$/.test(symbol)) throw new Error("无效的U本位合约代码");
+  if (!isBinanceFuturesSymbol(symbol)) throw new Error("无效的U本位合约代码");
   return symbol;
 }
 
@@ -130,14 +134,69 @@ async function closeAtPrice(position: PaperPositionRow, percent: number, price: 
 }
 
 type ClientQuote = { symbol: string; price: number; live: boolean } | null;
+type PaperSnapshotInput = {
+  symbol?: unknown;
+  quotedPrice?: unknown;
+  quoteMode?: unknown;
+  closedCandle?: {
+    id?: unknown;
+    isNewClosedCandle?: unknown;
+    close?: unknown;
+    ma?: unknown;
+    atr?: unknown;
+    tickSize?: unknown;
+    stepSize?: unknown;
+    timeframe?: unknown;
+    maKind?: unknown;
+    maLength?: unknown;
+    atrLength?: unknown;
+  };
+};
 
-function normalizeClientQuote(input?: { symbol?: unknown; quotedPrice?: unknown; quoteMode?: unknown }): ClientQuote {
+function normalizeClientQuote(input?: PaperSnapshotInput): ClientQuote {
   if (!input || input.quoteMode !== "live") return null;
   try {
     const symbol = normalizeSymbol(input.symbol);
     const price = Number(input.quotedPrice);
     return Number.isFinite(price) && price > 0 ? { symbol, price, live: true } : null;
   } catch { return null; }
+}
+
+function normalizeClosedCandle(input?: PaperSnapshotInput): PaperClosedCandle | null {
+  const candidate = input?.closedCandle;
+  if (!candidate || candidate.isNewClosedCandle !== true) return null;
+  const id = String(candidate.id ?? "").trim();
+  const close = Number(candidate.close);
+  const ma = Number(candidate.ma);
+  const atr = Number(candidate.atr);
+  const tickSize = Number(candidate.tickSize);
+  const stepSize = Number(candidate.stepSize);
+  const timeframe = String(candidate.timeframe ?? "").trim();
+  const maKind = String(candidate.maKind ?? "").trim().toUpperCase();
+  const maLength = Number(candidate.maLength);
+  const atrLength = Number(candidate.atrLength);
+  if (!id
+    || !["5m", "15m", "1h", "4h", "1d"].includes(timeframe)
+    || (maKind !== "SMA" && maKind !== "EMA")
+    || !Number.isSafeInteger(maLength) || maLength <= 0
+    || !Number.isSafeInteger(atrLength) || atrLength <= 0
+    || !Number.isFinite(ma) || !Number.isFinite(atr)
+    || !Number.isFinite(tickSize) || tickSize <= 0
+    || !Number.isFinite(stepSize) || stepSize <= 0) return null;
+  const normalizedClose = Number.isFinite(close) && close > 0 ? close : undefined;
+  return {
+    id,
+    isNewClosedCandle: true,
+    ...(normalizedClose === undefined ? {} : { close: normalizedClose }),
+    timeframe: timeframe as PaperClosedCandle["timeframe"],
+    maKind: maKind as PaperClosedCandle["maKind"],
+    maLength,
+    atrLength,
+    ma,
+    atr,
+    tickSize,
+    stepSize,
+  };
 }
 
 async function processConditionalOrders(clientQuote: ClientQuote) {
@@ -155,14 +214,106 @@ async function processConditionalOrders(clientQuote: ClientQuote) {
   return results.filter((result): result is NonNullable<typeof result> => Boolean(result));
 }
 
-export async function getPaperSnapshot(input?: { symbol?: unknown; quotedPrice?: unknown; quoteMode?: unknown }) {
+function eventPayloadNumber(event: PersistedStrategy["events"][number] | undefined, key: string) {
+  const value = Number(event?.payload[key]);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function eventPayloadId(event: PersistedStrategy["events"][number] | undefined, fallback: string) {
+  const value = event?.payload.sourceExitId;
+  return typeof value === "string" && value ? value : fallback;
+}
+
+async function notifyPaperStrategyTickEvents(db: D1Database, result: PaperStrategyTickResult, markPrice: number) {
+  const strategies = new Map<string, PersistedStrategy | null>();
+  const load = async (strategyId: string) => {
+    if (!strategies.has(strategyId)) strategies.set(strategyId, await getStrategy(strategyId));
+    return strategies.get(strategyId) ?? null;
+  };
+  const deliver = async (event: Parameters<typeof notifyPaperStrategyEvent>[0]["event"]) => {
+    try {
+      await notifyPaperStrategyEvent({ db, event });
+    } catch {
+      // Bark delivery must never block a PAPER snapshot or simulated execution.
+    }
+  };
+
+  for (const filled of result.filledLegs) {
+    const strategy = await load(filled.strategyId);
+    const leg = strategy?.legs.find((candidate) => candidate.id === filled.legId);
+    const lot = strategy?.lots.find((candidate) => candidate.id === filled.lotId);
+    if (!strategy || !leg || !lot) continue;
+    await deliver({
+      kind: "ENTRY_FILLED", eventId: filled.lotId, strategyId: strategy.id, websiteOrderId: leg.websiteOrderId,
+      symbol: strategy.config.symbol, side: strategy.config.side, price: lot.entryPrice, quantity: lot.initialQuantity,
+      reason: "限价入场成交",
+    });
+  }
+
+  for (const exit of result.exitedLots) {
+    const strategy = await load(exit.strategyId);
+    const lot = strategy?.lots.find((candidate) => candidate.id === exit.lotId);
+    const event = [...(strategy?.events ?? [])].reverse().find((candidate) => candidate.lotId === exit.lotId
+      && candidate.type === "LOT_EXIT_RECORDED" && candidate.payload.completedProfitTarget === exit.stage);
+    if (!strategy || !lot || !event) continue;
+    await deliver({
+      kind: "PROFIT_EXIT", eventId: eventPayloadId(event, `${strategy.id}:${lot.id}:profit-${exit.stage}`),
+      strategyId: strategy.id, websiteOrderId: lot.websiteOrderId, symbol: strategy.config.symbol, side: strategy.config.side,
+      price: markPrice, quantity: eventPayloadNumber(event, "quantity"), pnl: eventPayloadNumber(event, "realizedGrossPnl"),
+      reason: `第 ${exit.stage} 档分批止盈`,
+    });
+  }
+
+  for (const exit of result.guardExitedLots) {
+    const strategy = await load(exit.strategyId);
+    const lot = strategy?.lots.find((candidate) => candidate.id === exit.lotId);
+    const event = [...(strategy?.events ?? [])].reverse().find((candidate) => candidate.lotId === exit.lotId
+      && candidate.type === "LOT_EXIT_RECORDED" && String(candidate.payload.sourceExitId ?? "").includes(":guard:"));
+    if (!strategy || !lot || !event) continue;
+    await deliver({
+      kind: "GUARD_STOP", eventId: eventPayloadId(event, `${strategy.id}:${lot.id}:guard:${exit.guard}`),
+      strategyId: strategy.id, websiteOrderId: lot.websiteOrderId, symbol: strategy.config.symbol, side: strategy.config.side,
+      price: markPrice, quantity: eventPayloadNumber(event, "quantity"), pnl: eventPayloadNumber(event, "realizedGrossPnl"),
+      reason: exit.guard === "DYNAMIC_MA" ? "动态均线守卫" : exit.guard === "HORIZONTAL" ? "横向关键位守卫" : "合并守卫",
+    });
+  }
+
+  for (const strategyId of result.expiredStrategyIds) {
+    const strategy = await load(strategyId);
+    if (!strategy) continue;
+    await deliver({
+      kind: "EXPIRED", eventId: `${strategy.id}:expired`, strategyId: strategy.id,
+      symbol: strategy.config.symbol, side: strategy.config.side, reason: "策略有效期 7 天结束，未成交入场腿已撤销",
+    });
+  }
+
+  for (const strategyId of result.canceledStrategyIds) {
+    const strategy = await load(strategyId);
+    if (!strategy) continue;
+    await deliver({
+      kind: "FINAL_CANCEL", eventId: `${strategy.id}:final-cancel`, strategyId: strategy.id,
+      symbol: strategy.config.symbol, side: strategy.config.side, reason: "全部成交批次已退出，未成交入场腿已撤销",
+    });
+  }
+}
+
+export async function getPaperSnapshot(input?: PaperSnapshotInput) {
   await ensurePaperSchema();
   const clientQuote = normalizeClientQuote(input);
+  const closedCandle = normalizeClosedCandle(input);
+  const strategyTick = clientQuote
+    ? await runPaperStrategyTick({
+      symbol: clientQuote.symbol,
+      markPrice: clientQuote.price,
+      ...(closedCandle ? { closedCandle } : {}),
+    })
+    : null;
   const triggered = await processConditionalOrders(clientQuote);
-  if (triggered.length) {
+  if (strategyTick || triggered.length) {
     try {
       await ensureAdvisorySchema();
       const db = await getD1();
+      if (strategyTick && clientQuote) await notifyPaperStrategyTickEvents(db, strategyTick, clientQuote.price);
       for (const close of triggered) {
         const reason = String(close.reason || "");
         await notifyTradeEvent({ db, event: {
@@ -289,7 +440,7 @@ export async function closePaperPosition(input: { symbol: unknown; percent: unkn
   const position = await d1.prepare("SELECT * FROM paper_positions WHERE symbol = ? LIMIT 1").bind(symbol).first<PaperPositionRow>();
   if (!position) throw new Error("没有可平的模拟仓位");
   const percent = Number(input.percent);
-  if (![25, 50, 100].includes(percent)) throw new Error("模拟减仓比例只支持25%、50%或100%");
+  if (!LIVE_CLOSE_PERCENT_OPTIONS.includes(percent as (typeof LIVE_CLOSE_PERCENT_OPTIONS)[number])) throw new Error("模拟减仓比例只能是10%、25%、50%、75%或100%");
   const quote = await executionPrice(symbol, input.quotedPrice, input.quoteMode);
   return { symbol, positionSide: position.side, ...(await closeAtPrice(position, percent, quote.price, String(input.reason || "MANUAL_CLOSE").slice(0, 40))), priceSource: quote.source };
 }

@@ -1,4 +1,5 @@
 import { BinancePublicError, binancePublicJson } from "@/lib/binance-public";
+import { normalizeBinanceFuturesSymbol } from "@/lib/trade/symbols";
 
 type Kline = {
   time: number;
@@ -21,44 +22,8 @@ function number(value: unknown, fallback = 0) {
 }
 
 function normalizeSymbol(value: string | null) {
-  const symbol = (value ?? "BTCUSDT").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return /^[A-Z0-9]{2,20}USDT$/.test(symbol) ? symbol : "BTCUSDT";
-}
-
-function seededRandom(seed: number) {
-  let value = seed >>> 0;
-  return () => {
-    value = (value * 1664525 + 1013904223) >>> 0;
-    return value / 4294967296;
-  };
-}
-
-function demoBars(symbol: string, interval: string, limit: number): Kline[] {
-  const step = intervals.get(interval) ?? 900_000;
-  const seed = [...symbol].reduce((sum, char) => sum + char.charCodeAt(0), step);
-  const random = seededRandom(seed);
-  const anchor = symbol.startsWith("BTC") ? 64_000 : symbol.startsWith("ETH") ? 3_200 : symbol.startsWith("SOL") ? 150 : 25;
-  let close = anchor * (0.92 + random() * 0.16);
-  const end = Math.floor(Date.now() / step) * step;
-  const result: Kline[] = [];
-  for (let index = limit - 1; index >= 0; index -= 1) {
-    const timeMs = end - index * step;
-    const cycle = Math.sin((limit - index) / 17) * 0.003;
-    const drift = 0.00035 + cycle + (random() - 0.5) * 0.012;
-    const open = close;
-    close = Math.max(anchor * 0.2, open * (1 + drift));
-    const spread = Math.abs(drift) + random() * 0.006;
-    result.push({
-      time: Math.floor(timeMs / 1000),
-      open,
-      high: Math.max(open, close) * (1 + spread * 0.45),
-      low: Math.min(open, close) * (1 - spread * 0.45),
-      close,
-      volume: anchor * (1_000 + random() * 12_000),
-      closed: index > 0,
-    });
-  }
-  return result;
+  try { return normalizeBinanceFuturesSymbol(value ?? "BTCUSDT", "币种格式不正确"); }
+  catch { return "BTCUSDT"; }
 }
 
 export async function GET(request: Request) {
@@ -93,10 +58,10 @@ export async function GET(request: Request) {
   } catch (error) {
     const publicError = error instanceof BinancePublicError ? error : null;
     return Response.json({
-      mode: "demo", source: publicError?.source ?? "direct", symbol, interval, updatedAt: new Date().toISOString(),
-      warning: publicError?.message ?? "Binance行情暂不可用，当前为明确标记的演示K线。",
+      mode: "unavailable", source: publicError?.source ?? "direct", symbol, interval, updatedAt: new Date().toISOString(),
+      warning: publicError?.message ?? "Binance 实时行情暂不可用。",
       hint: publicError?.hint ?? "请检查 Binance 网络出口。",
-      bars: demoBars(symbol, interval, limit),
-    }, { headers: { "cache-control": "no-store" } });
+      bars: [],
+    }, { status: 503, headers: { "cache-control": "no-store" } });
   }
 }

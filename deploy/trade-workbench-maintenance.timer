@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Trade Workbench maintenance scheduler every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+RandomizedDelaySec=20
+Unit=trade-workbench-maintenance.service
+
+[Install]
+WantedBy=timers.target

@@ -2,12 +2,12 @@ import { ensureAdvisorySchema } from "@/db/ensure";
 import { getD1 } from "@/db";
 import { GET as getRadar } from "../route";
 import { shouldSendCrowdingAlert } from "@/lib/radar/alerts";
+import { requireScheduler } from "@/lib/security/operator-guard";
 
 type Coin = { symbol: string; displayName: string; shortCallRatio: number; change4h: number; oi1h: number; shortCrowding?: { score: number; level: string; evidence: string[] } };
 
 export async function POST(request: Request) {
-  const token = process.env.ADVISORY_JOB_TOKEN;
-  if (!token || request.headers.get("authorization") !== `Bearer ${token}`) return Response.json({ error: "unauthorized", realOrderRouteEnabled: false }, { status: 401 });
+  if (!requireScheduler(request)) return Response.json({ error: "unauthorized", realOrderRouteEnabled: false }, { status: 401 });
   await ensureAdvisorySchema();
   const db = await getD1();
   const radar = await (await getRadar()).json() as { mode?: string; shortCrowding?: Coin[] };

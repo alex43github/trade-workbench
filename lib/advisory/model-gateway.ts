@@ -1,7 +1,10 @@
 import { isModelProviderId, MODEL_PROVIDER_IDS, resolveProviderConfig, type ModelProviderId, type ProviderEnv } from "./model-providers.ts";
+import { endpointFor, type AiProtocol } from "./channel-config.ts";
 
 export type ProviderErrorCode = "AUTH" | "QUOTA" | "RATE_LIMIT" | "TIMEOUT" | "TRANSIENT" | "INVALID_OUTPUT" | "UNCONFIGURED";
 export type StructuredModelRequest = { system: string; user: string; name: string; schema: Record<string, unknown> };
+export type CompatibleTarget = { id: string; name: string; model: string; protocol: AiProtocol; endpoint: string; apiKey?: string };
+export type ModelFallback = { id: string; name: string; model: string; code: ProviderErrorCode; message: string };
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export class ModelProviderError extends Error {
@@ -60,10 +63,10 @@ export function providerStatus(env: ProviderEnv = process.env) {
   return { active, providers: MODEL_PROVIDER_IDS.map((id) => { const item = resolveProviderConfig(id, env); return { id, name: item.name, configured: item.configured, model: item.model }; }) };
 }
 
-export async function invokeStructuredModel(request: StructuredModelRequest, options: { provider?: ModelProviderId; env?: ProviderEnv; fetcher?: Fetcher; timeoutMs?: number } = {}) {
+export async function invokeStructuredModel(request: StructuredModelRequest, options: { provider?: ModelProviderId; env?: ProviderEnv; fetcher?: Fetcher; timeoutMs?: number; target?: CompatibleTarget } = {}) {
   const env = options.env ?? process.env;
   const provider = options.provider ?? (isModelProviderId(env.AI_PROVIDER) ? env.AI_PROVIDER : "openai");
-  const config = resolveProviderConfig(provider, env);
+  const config = options.target ? { id: provider, name: options.target.name, protocol: options.target.protocol, configured: Boolean(options.target.apiKey), apiKey: options.target.apiKey, model: options.target.model, endpoint: endpointFor(options.target.endpoint, options.target.protocol) } : resolveProviderConfig(provider, env);
   if (!config.apiKey) throw new ModelProviderError(provider, "UNCONFIGURED", `${config.name} API key is not configured`);
   const fetcher = options.fetcher ?? fetch;
   let body: Record<string, unknown>;
@@ -95,4 +98,21 @@ export async function invokeStructuredModel(request: StructuredModelRequest, opt
   if (!text) throw new ModelProviderError(provider, "INVALID_OUTPUT", `${config.name} returned no structured output`);
   try { return { json: JSON.parse(text) as unknown, provider, model: result.model || config.model }; }
   catch { throw new ModelProviderError(provider, "INVALID_OUTPUT", `${config.name} returned invalid JSON`); }
+}
+
+export async function invokeStructuredModelWithFallback(request: StructuredModelRequest, options: { targets: readonly CompatibleTarget[]; provider?: ModelProviderId; env?: ProviderEnv; fetcher?: Fetcher; timeoutMs?: number }) {
+  if (!options.targets.length) throw new ModelProviderError(options.provider ?? "openai", "UNCONFIGURED", "No verified AI model is available for this task");
+  const fallbacks: ModelFallback[] = [];
+  let lastError: ModelProviderError | undefined;
+  for (const target of options.targets) {
+    try {
+      const result = await invokeStructuredModel(request, { provider: options.provider, env: options.env, fetcher: options.fetcher, timeoutMs: options.timeoutMs, target });
+      return { ...result, fallbacks };
+    } catch (error) {
+      if (!(error instanceof ModelProviderError) || !error.requiresManualSwitch) throw error;
+      lastError = error;
+      fallbacks.push({ id: target.id, name: target.name, model: target.model, code: error.code, message: error.message });
+    }
+  }
+  throw lastError ?? new ModelProviderError(options.provider ?? "openai", "UNCONFIGURED", "No verified AI model is available for this task");
 }

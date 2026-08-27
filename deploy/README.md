@@ -1,6 +1,6 @@
 # VPS deployment package
 
-This package deploys one private Trade Workbench VPS. Caddy is the only public listener. The web app listens on `127.0.0.1:3000`; the Binance gateway listens on `127.0.0.1:8788`; neither port is proxied or opened by the firewall. The gateway is permanently configured for read-only operation with `BINANCE_GATEWAY_TRADING=false`.
+This package deploys one private Trade Workbench VPS. Caddy is the only public listener. The web app listens on `127.0.0.1:3000`; the Binance gateway listens on `127.0.0.1:8788`; neither port is proxied or opened by the firewall. Real position closes require both `WORKBENCH_LIVE_TRADING_ENABLED=true` and `BINANCE_GATEWAY_TRADING=true`; both remain false by default.
 
 ## Layout
 
@@ -42,17 +42,17 @@ curl --fail --silent --show-error \
   --data-urlencode "allowed_updates=[\"message\",\"callback_query\"]"
 ```
 
-Then send `/start` to the bot. It accepts only the configured numeric user ID in a private chat; all other messages receive no authorization. The initial Telegram test covers the menu, PAPER/LIVE selection shell, and read-only position/open-order query. It does not enable or send a real order.
+Then send `/start` to the bot. It accepts only the configured numeric user ID in a private chat; all other messages receive no authorization. The Telegram menu exposes only live trading, and every live order still requires the configured server-side switches plus the final confirmation in the bot or website.
 
 Install the units and Caddy configuration, replacing the Caddy hostname first:
 
 ```bash
-sudo install -m 0644 deploy/{trade-workbench,binance-gateway,trade-workbench-maintenance,trade-workbench-paper-strategy}.service /etc/systemd/system/
-sudo install -m 0644 deploy/{trade-workbench-maintenance,trade-workbench-paper-strategy}.timer /etc/systemd/system/
+sudo install -m 0644 deploy/{trade-workbench,binance-gateway,trade-workbench-maintenance,trade-workbench-paper-strategy,trade-workbench-protection-strategy}.service /etc/systemd/system/
+sudo install -m 0644 deploy/{trade-workbench-maintenance,trade-workbench-paper-strategy,trade-workbench-protection-strategy}.timer /etc/systemd/system/
 sudo install -m 0644 deploy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl daemon-reload
-sudo systemctl enable --now binance-gateway.service trade-workbench.service trade-workbench-maintenance.timer trade-workbench-paper-strategy.timer caddy.service
-sudo systemctl status binance-gateway.service trade-workbench.service trade-workbench-maintenance.timer trade-workbench-paper-strategy.timer caddy.service
+sudo systemctl enable --now binance-gateway.service trade-workbench.service trade-workbench-maintenance.timer trade-workbench-paper-strategy.timer trade-workbench-protection-strategy.timer caddy.service
+sudo systemctl status binance-gateway.service trade-workbench.service trade-workbench-maintenance.timer trade-workbench-paper-strategy.timer trade-workbench-protection-strategy.timer caddy.service
 ```
 
 Verify loopback boundaries and public HTTPS:
@@ -109,6 +109,10 @@ position, open-order, or live-mode path depends on it.
 ## PAPER strategy scheduler
 
 `trade-workbench-paper-strategy.timer` invokes the token-protected internal route once a minute through `http://127.0.0.1:3000`. It has no listener of its own. It evaluates only PAPER strategies from public Binance Futures market data, so it keeps refreshing eligible limit entries, simulating fills, applying closed-candle guards, expiring seven-day plans, and issuing configured Bark notifications while every browser is closed. It never sends a real order or uses Binance private credentials.
+
+## Live protection strategy scheduler
+
+`trade-workbench-protection-strategy.timer` invokes the token-protected internal route once a minute through loopback. It evaluates active MA protection strategies using closed Binance Futures candles and, only after the server-side live switches and source-quantity reconciliation pass, submits source-bound reduce-only market exits through the fixed-IP gateway. Fixed-price protection strategies are submitted at the user confirmation step. Unknown or partial gateway results are recorded for reconciliation and are never retried automatically.
 
 Verify it without exposing the scheduler token:
 

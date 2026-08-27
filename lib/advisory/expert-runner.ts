@@ -2,7 +2,7 @@ import type { DecisionContract } from "./types.ts";
 import type { MarketSnapshot } from "./market.ts";
 import { validateDecision } from "./validate.ts";
 import { ALLOWED_SOURCE_REFS, EXPERT_GUIDES, SOURCE_REF_PATTERNS } from "./expert-guides.ts";
-import { invokeStructuredModel } from "./model-gateway.ts";
+import { invokeStructuredModel, invokeStructuredModelWithFallback, type CompatibleTarget } from "./model-gateway.ts";
 import type { ModelProviderId, ProviderEnv } from "./model-providers.ts";
 
 export type ExpertRunnerInput = {
@@ -12,6 +12,7 @@ export type ExpertRunnerInput = {
   snapshot: MarketSnapshot;
   peerArguments?: Array<{ alias: string; direction: DecisionContract["direction"]; supportingEvidence: string[]; refutingEvidence: string[] }>;
   previousDecision?: DecisionContract;
+  accountContext?: unknown;
 };
 
 const schema = {
@@ -38,11 +39,14 @@ export function extractResponseText(result: unknown): string | null {
   return null;
 }
 
-export async function runExpertRound(input: ExpertRunnerInput, runtime: { provider?: ModelProviderId; env?: ProviderEnv; fetcher?: typeof fetch } = {}): Promise<DecisionContract> {
-  const result = await invokeStructuredModel({
+export async function runExpertRound(input: ExpertRunnerInput, runtime: { provider?: ModelProviderId; env?: ProviderEnv; fetcher?: typeof fetch; target?: CompatibleTarget; targets?: readonly CompatibleTarget[] } = {}): Promise<DecisionContract> {
+  const request = {
     system: `你是${input.expert.name}体系的独立研究专家。\n${EXPERT_GUIDES[input.expert.id]}\n只输出条件式研究建议，不承诺收益，不发送真实订单。严格依据输入中的已收盘日线、4H、1H数据。R1不得推测其他专家意见；R2只评价匿名论点；账户决定与市场判断分开。sourceRefs 只能引用上述指南已提供的真实来源，不得编造引用。`,
     user: JSON.stringify(input), name: "expert_decision", schema,
-  }, runtime);
+  };
+  const result = runtime.targets?.length
+    ? await invokeStructuredModelWithFallback(request, { provider: runtime.provider, env: runtime.env, fetcher: runtime.fetcher, targets: runtime.targets })
+    : await invokeStructuredModel(request, runtime);
   const parsed = result.json;
   const validated = validateDecision(parsed);
   if (!validated.ok) throw new Error(`invalid expert decision: ${validated.errors.join(", ")}`);

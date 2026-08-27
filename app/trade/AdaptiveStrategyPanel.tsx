@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { evaluatePlan, knowledgeProfile, type RadarEvidence, type TradeSide } from "./planScoring";
 import StrategyWizard from "./StrategyWizard";
 import styles from "./trade.module.css";
+import { displayBinanceSymbol } from "@/lib/trade/symbols";
 
 type Position = {
   symbol: string; side: "LONG" | "SHORT"; quantity: number; entryPrice: number; markPrice: number;
@@ -13,21 +14,21 @@ type Position = {
 type Props = {
   symbol: string;
   position?: Position;
-  positionSource?: "binance" | "paper";
+  positionSource?: "binance";
   interval: string;
   accountConnected: boolean;
+  liveTradingAvailable: boolean;
   currentPrice: number;
-  marketMode: "live" | "demo";
   maLength: number;
   maValue: number;
   entryAtrUpper: number;
   entryAtrLower: number;
-  paperBalance: number;
-  onPaperChanged: () => void;
+  accountBalance: number;
+  onAccountChanged: () => void;
   onConditionalChanged: () => void;
 };
 
-type AiReview = { action: "ALLOW_PAPER" | "REVISE" | "WAIT"; riskLevel: "LOW" | "MEDIUM" | "HIGH"; verdict: string; reasons: string[]; modifications: string[] };
+type AiReview = { action: "ALLOW_LIVE" | "REVISE" | "WAIT"; riskLevel: "LOW" | "MEDIUM" | "HIGH"; verdict: string; reasons: string[]; modifications: string[] };
 type TvScreenerCoverage = "live" | "partial" | "stale" | "unavailable";
 type TvScreenerRow = {
   tvSymbol: string;
@@ -120,7 +121,7 @@ function buildResearchEvidence(tvScreener?: TvScreenerResponse): ResearchEvidenc
   };
 }
 
-export default function AdaptiveStrategyPanel({ symbol, position, positionSource, interval, accountConnected, currentPrice, marketMode, maLength, maValue, entryAtrUpper, entryAtrLower, paperBalance, onPaperChanged, onConditionalChanged }: Props) {
+export default function AdaptiveStrategyPanel({ symbol, position, positionSource, interval, accountConnected, liveTradingAvailable, currentPrice, maLength, maValue, entryAtrUpper, entryAtrLower, accountBalance, onAccountChanged, onConditionalChanged }: Props) {
   const mode = position ? "position" : "entry";
   const [tab, setTab] = useState<"checklist" | "natural">("checklist");
   const [side, setSide] = useState<TradeSide>("LONG");
@@ -151,8 +152,6 @@ export default function AdaptiveStrategyPanel({ symbol, position, positionSource
   const [reviewState, setReviewState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [aiMode, setAiMode] = useState("");
   const [aiReview, setAiReview] = useState<AiReview | null>(null);
-  const [paperState, setPaperState] = useState<"idle" | "working" | "done" | "error">("idle");
-  const [paperMessage, setPaperMessage] = useState("");
   const [conditionalState, setConditionalState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [conditionalMessage, setConditionalMessage] = useState("");
 
@@ -230,7 +229,7 @@ export default function AdaptiveStrategyPanel({ symbol, position, positionSource
     setReviewState("loading");
     try {
       const researchEvidence = buildResearchEvidence(tvScreener);
-      const response = await fetch("/api/ai/plan-review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbol, mode, side: actualSide, score: score.score, plan: currentPlan(), radar, currentPrice, maLength, maValue, paperBalance, ...(researchEvidence ? { research_evidence: researchEvidence, research_evidence_note: AI_RESEARCH_NOTICE } : {}) }) });
+      const response = await fetch("/api/ai/plan-review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbol, mode, side: actualSide, score: score.score, plan: currentPlan(), radar, currentPrice, maLength, maValue, accountBalance, ...(researchEvidence ? { research_evidence: researchEvidence, research_evidence_note: AI_RESEARCH_NOTICE } : {}) }) });
       const result = await response.json() as { mode?: string; review?: AiReview };
       if (!response.ok || !result.review) throw new Error("review_failed");
       setAiMode(result.mode ?? "rules"); setAiReview(result.review); setReviewState("done");
@@ -243,7 +242,7 @@ export default function AdaptiveStrategyPanel({ symbol, position, positionSource
       const waitingTrigger = isOpenWorkflow ? triggerPrice : stopPrice || targetPrice;
       if (currentPrice <= 0 || waitingTrigger <= 0) throw new Error(isOpenWorkflow ? "请填写等待触发价格" : "请至少填写止损或止盈价格");
       if (!(await saveScore())) throw new Error("操作前评分未能保存");
-      const marginPerOrder = sizeMode === "available_pct" ? paperBalance * sizeValue / 100 : sizeValue;
+      const marginPerOrder = sizeMode === "available_pct" ? accountBalance * sizeValue / 100 : sizeValue;
       const response = await fetch("/api/trade/conditional-orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
         symbol, side: actualSide, intent: isOpenWorkflow ? "OPEN" : "MANAGE", timeframe: actionTimeframe,
         triggerPrice: waitingTrigger, currentPrice, orderCount: isOpenWorkflow ? orderCount : 1,
@@ -257,32 +256,20 @@ export default function AdaptiveStrategyPanel({ symbol, position, positionSource
     } catch (error) { setConditionalMessage(error instanceof Error ? error.message : "等待单保存失败"); setConditionalState("error"); }
   }
 
-  async function closePaper(percent: 25 | 50 | 100) {
-    setPaperState("working"); setPaperMessage("");
-    try {
-      if (positionSource !== "paper") throw new Error("这里不会操作币安真实仓位；请切换到对应模拟仓位");
-      const response = await fetch("/api/paper/close", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbol, percent, reason: "STRATEGY_PANEL", quotedPrice: currentPrice, quoteMode: marketMode }) });
-      const result = await response.json() as { error?: string; close?: { price: number; realizedPnl: number; fullyClosed: boolean } };
-      if (!response.ok) throw new Error(result.error || "模拟平仓失败");
-      setPaperMessage(`模拟${percent === 100 ? "平仓" : `减仓${percent}%`}完成，已实现 ${result.close?.realizedPnl.toFixed(2) ?? "—"} USDT`);
-      setPaperState("done"); onPaperChanged(); window.dispatchEvent(new CustomEvent("trade-knowledge-updated"));
-    } catch (error) { setPaperMessage(error instanceof Error ? error.message : "模拟平仓失败"); setPaperState("error"); }
-  }
-
-  const entryWizard = mode === "entry" ? <StrategyWizard symbol={symbol} currentPrice={currentPrice} chartTimeframe={interval} chartMa={maValue} onStrategyCreated={() => { onPaperChanged(); onConditionalChanged(); }} /> : null;
+  const entryWizard = mode === "entry" ? <StrategyWizard symbol={symbol} currentPrice={currentPrice} chartTimeframe={interval} chartMa={maValue} liveTradingAvailable={liveTradingAvailable} onStrategyCreated={() => { onAccountChanged(); onConditionalChanged(); }} /> : null;
   if (entryWizard) return entryWizard;
 
   return <aside className={styles.strategyPanel} id="strategy">
-    <div className={styles.panelTop}><div><small>{mode === "entry" ? "NO POSITION · ENTRY PLAN" : "POSITION DETECTED · MANAGEMENT"}</small><h2>{mode === "entry" ? "建立新仓计划" : `${position?.side === "LONG" ? "多仓" : "空仓"}管理计划`}</h2></div><span>{positionSource === "paper" ? "PAPER POSITION" : accountConnected ? "ACCOUNT VERIFIED" : "DRAFT MODE"}</span></div>
-    {!accountConnected && !position && <p className={styles.stateNotice}>币安只读账户尚未连接；模拟盘可使用公开实时行情独立运行。</p>}
-    {position && <div className={styles.positionSnapshot}><span>{symbol.replace("USDT", "")} · {position.leverage}x</span><strong>{position.quantity}</strong><small>均价 {fmt(position.entryPrice)} · 标记 {fmt(position.markPrice)} · PnL <b className={position.unrealizedPnl >= 0 ? styles.up : styles.down}>{position.unrealizedPnl >= 0 ? "+" : ""}{position.unrealizedPnl.toFixed(2)}</b></small></div>}
+    <div className={styles.panelTop}><div><small>{mode === "entry" ? "NO POSITION · LIVE ENTRY" : "POSITION DETECTED · MANAGEMENT"}</small><h2>{mode === "entry" ? "建立实盘策略" : `${position?.side === "LONG" ? "多仓" : "空仓"}管理计划`}</h2></div><span>{accountConnected ? "ACCOUNT VERIFIED" : "LIVE ACCOUNT REQUIRED"}</span></div>
+    {!accountConnected && !position && <p className={styles.stateNotice}>币安账户尚未连接；连接后可建立实盘策略。</p>}
+    {position && <div className={styles.positionSnapshot}><span>{displayBinanceSymbol(symbol)} · {position.leverage}x</span><strong>{position.quantity}</strong><small>均价 {fmt(position.entryPrice)} · 标记 {fmt(position.markPrice)} · PnL <b className={position.unrealizedPnl >= 0 ? styles.up : styles.down}>{position.unrealizedPnl >= 0 ? "+" : ""}{position.unrealizedPnl.toFixed(2)}</b></small></div>}
 
     <div className={styles.scoreCard}><div className={styles.scoreDial} data-grade={score.grade}><strong>{score.score}</strong><span>/100</span></div><div><small>操作前纪律评分 · {score.confidence === "high" ? "高置信" : score.confidence === "medium" ? "中置信" : "低置信"}</small><h3>{score.verdict}</h3><p>街哥已核验规则 {knowledgeProfile.verifiedStreetRules} 条；当前依据交易计划模板与系统风险外壳评分。</p></div></div>
     <div className={styles.scoreReasons}>{score.strengths.slice(0, 2).map((item) => <span key={item}>✓ {item}</span>)}{score.mistakes.slice(0, 3).map((item) => <span className={styles.scoreWarning} key={item}>! {item}</span>)}</div>
 
     <div className={styles.aiReviewBar}><button onClick={() => void reviewWithAi()} disabled={reviewState === "loading"}>{reviewState === "loading" ? "正在复核" : "AI复核计划"}</button><span>{aiMode === "openai" ? "GPT-5.6" : aiMode ? "纪律引擎" : "可选复核"}</span></div>
-    {aiReview && <div className={styles.aiReviewCard} data-risk={aiReview.riskLevel}><strong>{aiReview.action === "ALLOW_PAPER" ? "可进入模拟盘" : aiReview.action === "WAIT" ? "建议等待" : "需要修改"}</strong><p>{aiReview.verdict}</p>{aiReview.reasons.slice(0, 3).map((item) => <small key={item}>• {item}</small>)}</div>}
-    {reviewState === "error" && <p className={styles.inlineError}>AI复核暂不可用，模拟盘仍由纪律引擎保护。</p>}
+    {aiReview && <div className={styles.aiReviewCard} data-risk={aiReview.riskLevel}><strong>{aiReview.action === "ALLOW_LIVE" ? "可建立实盘策略" : aiReview.action === "WAIT" ? "建议等待" : "需要修改"}</strong><p>{aiReview.verdict}</p>{aiReview.reasons.slice(0, 3).map((item) => <small key={item}>• {item}</small>)}</div>}
+    {reviewState === "error" && <p className={styles.inlineError}>AI复核暂不可用，实盘策略仍由纪律引擎保护。</p>}
 
     <div className={styles.modeTabs}><button className={tab === "checklist" ? styles.selected : ""} onClick={() => setTab("checklist")}>条件勾选</button><button className={tab === "natural" ? styles.selected : ""} onClick={() => setTab("natural")}>自然语言生成</button></div>
     {tab === "natural" ? <div className={styles.naturalPanel}><textarea value={natural} onChange={(event) => setNatural(event.target.value)} placeholder={mode === "entry" ? "例如：HYPE在4h多头趋势中，15m回撤MA30并且OI不下降时用100 USDT保证金买入，跌破66止损，涨到72先止盈50%。" : "例如：收盘跌破MA30减仓50%，第二根继续跌破全部退出；回踩不破并且OI增加时加仓50 USDT保证金。"} /><button onClick={applyNaturalLanguage}>生成并写入条件</button><small>自然语言只转换成可检查字段，不会直接发送订单。</small></div> : <>
@@ -314,12 +301,11 @@ export default function AdaptiveStrategyPanel({ symbol, position, positionSource
       {isOpenWorkflow && <label className={styles.splitStopCheck}><input type="checkbox" checked={splitStop} onChange={(event) => setSplitStop(event.target.checked)} /><span>跌破入场周期 MA 均线时分两笔止损</span></label>}
       <button className={`${styles.noTradeCheck} ${noTradeRule ? styles.checked : ""}`} onClick={() => setNoTradeRule((value) => !value)}><i />雷达触发AVOID、数据不足或行情过热时禁止执行</button>
     </>}
-    <div className={styles.planActions}><button onClick={() => void saveScore()} disabled={saveState === "saving"}>{saveState === "saving" ? "正在保存" : saveState === "saved" ? "已写入操作知识库" : saveState === "error" ? "保存失败，重试" : "保存评分到知识库"}</button><button disabled>真实下单仍锁定</button></div>
-    <div className={styles.paperActions}>
+    <div className={styles.planActions}><button onClick={() => void saveScore()} disabled={saveState === "saving"}>{saveState === "saving" ? "正在保存" : saveState === "saved" ? "已写入操作知识库" : saveState === "error" ? "保存失败，重试" : "保存评分到知识库"}</button><button disabled>实盘订单需最终确认</button></div>
+    <div className={styles.strategyActions}>
       <button onClick={() => void saveConditionalPlan()} disabled={conditionalState === "saving" || currentPrice <= 0}>{conditionalState === "saving" ? "正在保存等待单" : conditionalState === "saved" ? "已进入云端等待" : "确认条件并等待触发"}</button>
-      {positionSource === "paper" && <><button onClick={() => void closePaper(50)} disabled={paperState === "working"}>减仓50%</button><button onClick={() => void closePaper(100)} disabled={paperState === "working"}>全部退出</button></>}
     </div>
-    <p className={`${styles.paperFeedback} ${paperState === "error" || conditionalState === "error" ? styles.inlineError : ""}`}>{conditionalMessage || paperMessage || `模拟权益 ${paperBalance.toFixed(2)} USDT · 条件确认后保存为云端等待单`}</p>
+    <p className={`${styles.strategyFeedback} ${conditionalState === "error" ? styles.inlineError : ""}`}>{conditionalMessage || `账户可用资金 ${accountBalance.toFixed(2)} USDT · 条件确认后保存为云端等待单`}</p>
   </aside>;
 }
 

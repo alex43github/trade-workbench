@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+// 测试用独立数据库，避免读取本地开发环境里用户保存的真实密钥。
+// node:sqlite 的内存库在每个连接间不共享，必须用临时文件才能跨连接看到表结构。
+const testDb = path.join(os.tmpdir(), `streetlight-rendered-${process.pid}.sqlite`);
+fs.rmSync(testDb, { force: true });
+process.env.STREETLIGHT_LOCAL_D1 = testDb;
+process.env.STREETLIGHT_LOCAL_TEST_MODE = "false";
 
 async function request(path = "/", init = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -50,83 +60,133 @@ test("renders consultation arena review and replay routes", async () => {
   }
 });
 
-test("server-renders the paper trading strategy lab", async () => {
+test("server-renders the live trading terminal", async () => {
   const response = await request("/trade?symbol=SOLUSDT");
   assert.equal(response.status, 200);
   const html = await response.text();
+  const visibleHtml = html.split('<div hidden="">', 1)[0];
   assert.match(html, /街灯交易台/);
-  assert.match(html, /回撤到MA30/);
-  assert.match(html, /PAPER ONLY/);
-  assert.match(html, /自然语言/);
-  assert.match(html, /真实交易锁定/);
+  assert.doesNotMatch(visibleHtml, /PAPER ONLY|模拟盘|模拟总权益/);
+  assert.match(html, /实盘开关：开启/);
+  assert.match(html, /不能下单/);
+  assert.match(html, /策略决策/);
   assert.match(html, /资金曲线/);
   assert.match(html, /止盈止损/);
   assert.match(html, /指标 ·/);
-  assert.match(html, /建立新仓计划/);
-  assert.match(html, /操作前纪律评分/);
+  assert.match(html, /建立实盘策略/);
   assert.match(html, /操作知识库/);
-  assert.match(html, /自然语言生成/);
-  assert.match(html, /模拟总权益/);
-  assert.match(html, /AI复核计划/);
-  assert.match(html, /确认并模拟做多/);
+  assert.match(html, /BINANCE USDⓈ-M/);
+  assert.match(html, /LIVE · LIMIT ORDERS/);
+  assert.match(html, /实盘策略/);
+  assert.match(html, /圆点仅来自 Binance 实际成交回报/);
+  const terminalSource = fs.readFileSync(new URL("../app/trade/TradingTerminal.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(terminalSource, /\/api\/paper|Paper[A-Z]|PAPER|模拟盘/);
+  assert.match(terminalSource, /realTradingStatus/);
+  assert.match(terminalSource, /role="switch"/);
+  assert.match(terminalSource, /当前图表币种/);
+  assert.match(terminalSource, /FontControl|字号|字体大小/);
+  assert.match(terminalSource, /占用保证金/);
+  assert.match(terminalSource, /建议挂单金额/);
+  assert.match(terminalSource, /分析/);
 });
 
-test("keeps the Binance account surface disconnected without server secrets", async () => {
-  const response = await request("/api/account", { headers: { accept: "application/json" } });
+test("renders the shared watchlist and symbol search on advisory pages", async () => {
+  const response = await request("/consultations");
   assert.equal(response.status, 200);
-  const payload = await response.json();
-  assert.equal(payload.connected, false);
-  assert.deepEqual(payload.positions, []);
-  assert.deepEqual(payload.limitOrders, []);
-  assert.deepEqual(payload.conditionalOrders, []);
+  const html = await response.text();
+  assert.match(html, /自选币/);
+  assert.match(html, /搜索或添加币种/);
+  assert.match(html, /BTCUSDT/);
+  assert.match(html, /trade\?symbol=/);
 });
 
-test("renders connection diagnostics without browser-side secret inputs", async () => {
+test("renders the MA30 and OI expansion radar filter", async () => {
+  const response = await request("/radar");
+  assert.equal(response.status, 200);
+  await response.text();
+  const radarSource = fs.readFileSync(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(radarSource, /MA30 × OI 增仓/);
+  assert.match(radarSource, /连续站上 MA30/);
+  assert.match(radarSource, /立即扫描/);
+  assert.match(radarSource, /立即筛选/);
+  assert.match(radarSource, /Bark：新增候选时提醒/);
+  assert.match(radarSource, /破底翻（4H\/日线）/);
+  assert.match(radarSource, /08\/20.*08\/19.*08\/18/s);
+  assert.match(radarSource, /全部归档/);
+});
+
+test("reversal scanner exposes actionable diagnostics when a scan cannot connect", () => {
+  const radarSource = fs.readFileSync(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(radarSource, /扫描诊断/);
+  assert.match(radarSource, /reversal\?\.diagnostic/);
+  assert.match(radarSource, /检查项：/);
+  assert.match(radarSource, /diagnostic/);
+});
+
+test("MA30/OI scanner distinguishes transport failures from insufficient market data", () => {
+  const radarSource = fs.readFileSync(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(radarSource, /createRadarDiagnostic/);
+  assert.match(radarSource, /ma30Oi\?\.diagnostic/);
+  assert.match(radarSource, /扫描诊断/);
+  assert.match(radarSource, /setMa30Oi[\s\S]*createRadarDiagnostic/);
+});
+
+test("radar heading shows the latest scan time alongside a live current clock", () => {
+  const radarSource = fs.readFileSync(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(radarSource, /最近扫描/);
+  assert.match(radarSource, /当前时间/);
+  assert.match(radarSource, /setInterval\(\(\) => setRadarNow/);
+  assert.match(radarSource, /useState<Date \| null>\(null\)/);
+  assert.match(radarSource, /data\?\.updatedAt/);
+});
+
+test("radar coin names are prominent links to their trade charts", () => {
+  const radarSource = fs.readFileSync(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  const stylesSource = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(radarSource, /coin-trade-link/);
+  assert.match(radarSource, /href=\{`\/trade\?symbol=/);
+  assert.match(stylesSource, /coin-trade-link strong\{font-size:16px/);
+  assert.match(stylesSource, /radar-terminal \.coin-trade-link small\{font-size:12px/);
+});
+
+test("account details reject an anonymous request", async () => {
+  const response = await request("/api/account", { headers: { accept: "application/json" } });
+  assert.equal(response.status, 401);
+});
+
+test("connections diagnostics reject an anonymous request", async () => {
   const pageResponse = await request("/settings");
   assert.equal(pageResponse.status, 200);
   const html = await pageResponse.text();
-  assert.match(html, /密钥只进服务端/);
-  assert.match(html, /BINANCE_FUTURES_API_KEY/);
-  assert.match(html, /当前没有真实下单接口/);
+  assert.match(html, /查看服务端连接配置/);
+  assert.match(html, /网页不会把密钥写入/);
+  assert.match(html, /Binance U本位账户/);
+  assert.match(html, /不要开启交易和提现权限/);
   assert.match(html, /连接路径/);
-  assert.doesNotMatch(html, /type=["']password["']/i);
+  assert.match(html, /API 密钥/);
+  assert.match(html, /留空不会覆盖已保存的值/);
+  assert.doesNotMatch(html, /value=["'][^"']+(?:sk-|secret|api)[^"']*["']/i);
 
   const statusResponse = await request("/api/connections", { headers: { accept: "application/json" } });
-  assert.equal(statusResponse.status, 200);
-  const status = await statusResponse.json();
-  assert.equal(status.binancePrivate.configured, false);
-  assert.equal(status.openai.configured, false);
-  assert.equal(status.safety.secretsExposedToBrowser, false);
-  assert.equal(status.safety.realOrderRouteEnabled, false);
-  assert.doesNotMatch(JSON.stringify(status), /API_SECRET|API_KEY/);
+  assert.equal(statusResponse.status, 401);
 });
 
-test("turns the MA strategy description into inspectable rules", async () => {
+test("strategy parsing rejects an anonymous request", async () => {
   const response = await request("/api/strategy/parse", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ text: "15m和1h使用30ma，上下±1%，固定100 USDT，最多买入3次，跌破卖出50%" }),
   });
-  assert.equal(response.status, 200);
-  const payload = await response.json();
-  assert.deepEqual(payload.strategy.timeframes, ["15m", "1h"]);
-  assert.equal(payload.strategy.maLength, 30);
-  assert.equal(payload.strategy.entryBandPct, 1);
-  assert.equal(payload.strategy.maxEntries, 3);
-  assert.equal(payload.strategy.sizeValue, 100);
+  assert.equal(response.status, 401);
 });
 
-test("falls back to the explainable discipline reviewer without an OpenAI key", async () => {
+test("AI plan review rejects an anonymous cross-origin request", async () => {
   const response = await request("/api/ai/plan-review", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ symbol: "BTCUSDT", score: 75, radar: { mode: "live", participation: "A" } }),
   });
-  assert.equal(response.status, 200);
-  const payload = await response.json();
-  assert.equal(payload.configured, false);
-  assert.equal(payload.mode, "rules");
-  assert.equal(payload.review.action, "ALLOW_PAPER");
+  assert.equal(response.status, 403);
 });
 
 test("server-renders the strong coin structure radar", async () => {

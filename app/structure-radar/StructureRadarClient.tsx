@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import styles from "./structure-radar.module.css";
+import { displayBinanceSymbol } from "@/lib/trade/symbols";
 
 type Signal = {
   id: string; symbol: string; timeframe: string; setup: string; state: string; stateVersion: number;
@@ -64,7 +65,7 @@ export default function StructureRadarClient() {
         <div className={styles.filters}>{[["ALL","全部"],["CANDIDATE","候选"],["CONFIRMED","确认"],["ADD_CANDIDATE","加仓候选"],["TAKE_PROFIT_WATCH","止盈观察"],["INVALIDATED","失效"]].map(([value,label]) => <button key={value} className={filter === value ? styles.selected : ""} onClick={() => setFilter(value)}>{label}</button>)}</div>
         <section className={styles.workspace}>
           <div className={styles.list}>
-            {filtered.length === 0 ? <div className={styles.empty}><b>{payload?.connected ? "当前没有命中形态" : "等待雷达连接"}</b><span>候选与确认会在已收盘 K 线后出现。</span></div> : filtered.map((signal) => <button key={signal.id} className={selected?.id === signal.id ? styles.signalSelected : ""} onClick={() => setSelectedId(signal.id)}><span><b>{signal.symbol.replace("USDT", "")}</b><small>{signal.timeframe} · v{signal.stateVersion}</small></span><strong>{stateLabels[signal.state] ?? signal.state}</strong><em>{setupLabels[signal.setup] ?? signal.setup}</em></button>)}
+            {filtered.length === 0 ? <div className={styles.empty}><b>{payload?.connected ? "当前没有命中形态" : "等待雷达连接"}</b><span>候选与确认会在已收盘 K 线后出现。</span></div> : filtered.map((signal) => <button key={signal.id} className={selected?.id === signal.id ? styles.signalSelected : ""} onClick={() => setSelectedId(signal.id)}><span><b>{displayBinanceSymbol(signal.symbol)}</b><small>{signal.timeframe} · v{signal.stateVersion}</small></span><strong>{stateLabels[signal.state] ?? signal.state}</strong><em>{setupLabels[signal.setup] ?? signal.setup}</em></button>)}
           </div>
           <aside className={styles.detail}>
             {!selected ? <div className={styles.empty}><b>选择一个信号查看详情</b><span>形态几何、四专家意见、持仓状态和通知状态会显示在这里。</span></div> : <>
