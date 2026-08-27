@@ -2,10 +2,33 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTerminalTheme, type ThemeMode } from "../themeStore";
+import FontControl from "../components/FontControl";
+import { useFontScale } from "../uiPreferences";
 
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
 type CrowdMood = "SHORT_CROWD" | "TRAPPED" | "CHASE_LONG" | "MIXED" | "UNKNOWN";
 type DataState = "live" | "partial" | "pending" | "demo";
+type TvScreenerCoverage = "live" | "partial" | "stale" | "unavailable";
+
+type TvScreenerRow = {
+  tvSymbol: string;
+  exchange: string | null;
+  rawSymbol: string | null;
+  binanceSymbol: string | null;
+  values: Record<string, number | string | null>;
+  intervalValues: Record<string, Record<string, number | null>>;
+  warnings: string[];
+};
+
+type TvScreenerResponse = {
+  source: "tradingview-screener";
+  advisoryOnly: true;
+  requestId: string;
+  fetchedAt: string;
+  coverage: TvScreenerCoverage;
+  rows: TvScreenerRow[];
+  warnings: string[];
+};
 
 type RadarCoin = {
   symbol: string;
@@ -32,7 +55,6 @@ type RadarCoin = {
   takerRatio: number;
   retailLsr: number;
   asterOi1h: number | null;
-  asterWhaleDelta: number | null;
   top10Pct: number | null;
   top1Pct: number | null;
   cexPct: number | null;
@@ -64,9 +86,53 @@ type RadarResponse = {
   hotCoins?: RadarCoin[];
   resilientCoins?: RadarCoin[];
   shortCrowding?: RadarCoin[];
+  tvScreener?: TvScreenerResponse;
 };
 
-type Filter = "all" | "squeeze" | "candidate" | "concentrated" | "risk";
+type Ma30OiCandidate = {
+  symbol: string;
+  currentOi: number;
+  previousDayOi: number;
+  priorTenDayOiAverage: number;
+  oiExpansionPct: number;
+  consecutiveAboveMa: number;
+  ma30: number;
+  lastClose: number;
+};
+
+type Ma30OiResponse = {
+  status: "ready" | "degraded" | "pending";
+  scannedAt?: string;
+  timezone: string;
+  candidates: Ma30OiCandidate[];
+  scannedSymbols?: number;
+  successfulSymbols?: number;
+  failedSymbols?: number;
+  warning?: string;
+  notifications?: { attempted: number; sent: number; skipped: number; failed: number };
+};
+
+type ReversalRow = {
+  symbol: string;
+  interval: "4h" | "1d";
+  direction: "LONG" | "SHORT";
+  signalTime: number;
+  signalClose: number;
+  reclaimLevel: "OPEN" | "CLOSE" | "HIGH" | "LOW";
+  wickRatio: number;
+  breakRatio: number;
+  score: number;
+};
+type ReversalArchive = ReversalRow & {
+  id: string;
+  outcome: { complete: boolean; barsObserved: number; maxFavorablePct: number | null; maxFavorablePrice: number | null } | null;
+};
+
+type ReversalScan = { status: "ready" | "degraded"; scannedAt: string; candidates: ReversalRow[]; warning?: string };
+type ReversalDiagnostic = { code: string; detail: string; occurredAt: string; checks: string[] };
+type ReversalResponse = { status: "ready" | "pending"; scans: Partial<Record<"4h" | "1d", ReversalScan>>; archives: ReversalArchive[]; warning?: string; diagnostic?: ReversalDiagnostic; notifications?: { attempted: number; sent: number; skipped: number; failed: number } };
+
+type Filter = "all" | "squeeze" | "candidate" | "concentrated" | "risk" | "ma30oi" | "reversal";
 const participationCopy: Record<Participation, { label: string; className: string }> = {
   SQUEEZE: { label: "逼空重点", className: "grade-squeeze" },
   A: { label: "A · 可参与候选", className: "grade-a" },
@@ -88,6 +154,21 @@ const dataStateCopy: Record<DataState, string> = {
   partial: "部分",
   pending: "待接入",
   demo: "演示",
+};
+
+const tvCoverageCopy: Record<TvScreenerCoverage, { label: string; className: string }> = {
+  live: { label: "实时", className: "live" },
+  partial: { label: "部分可用", className: "partial" },
+  stale: { label: "已过期", className: "stale" },
+  unavailable: { label: "不可用", className: "unavailable" },
+};
+
+const tvIntervalCopy: Record<string, string> = {
+  "5": "5m",
+  "15": "15m",
+  "60": "1h",
+  "240": "4h",
+  "1D": "1d",
 };
 
 function formatPercent(value: number, digits = 2) {
@@ -113,6 +194,55 @@ function formatVolume(value: number) {
   return `$${(value / 1_000).toFixed(0)}K`;
 }
 
+function formatOpenInterest(value: number) {
+  if (!Number.isFinite(value)) return "—";
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toFixed(2);
+}
+
+function formatReversalTime(value: number) {
+  return new Date(value).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function formatRadarTime(value: Date | string) {
+  return new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+}
+
+function formatTvValue(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "number") return Number.isFinite(value) ? value.toLocaleString("en-US", { maximumFractionDigits: 6 }) : "—";
+  return value;
+}
+
+function formatTvDataAge(value: string | null | undefined) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "—";
+  const distance = Math.max(0, Date.now() - Date.parse(value));
+  if (distance < 60_000) return "刚刚";
+  const minutes = Math.floor(distance / 60_000);
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  return `${Math.floor(hours / 24)} 天前`;
+}
+
+function reversalLevelCopy(value: ReversalArchive["reclaimLevel"]) {
+  return value === "HIGH" ? "收回前高" : value === "CLOSE" ? "收回前收" : value === "LOW" ? "跌破前低" : "收回前开";
+}
+
+function reversalDiagnostic(status: number | null, message: string): ReversalDiagnostic {
+  const code = status ? `HTTP_${status}` : "NETWORK_ERROR";
+  const checks = status === 401
+    ? ["请通过 http://localhost:3003 进行本机测试，或确认 STREETLIGHT_LOCAL_TEST_MODE 没有设为 false。", "如果你正在通过 VPS 公网域名访问，管理员认证仍会保留，这是预期的安全保护。"]
+    : status === 409
+      ? ["已有扫描正在运行；等待其结束后再重试。", "不要连续重复点击，以免增加数据源请求压力。"]
+      : status && status >= 500
+        ? ["本地扫描服务或上游 Binance 数据源暂不可用。", "稍后重试；若持续失败，请检查 VPS 出网、代理和服务日志。"]
+        : ["检查本地服务是否正在运行，以及 VPS/本机能否访问 Binance Futures。", "确认网络、代理和 DNS 可用后再重试。"];
+  return { code, detail: message || "扫描请求没有返回可用结果", occurredAt: new Date().toISOString(), checks };
+}
+
 function relativeTime(iso: string) {
   const distance = Math.max(0, Date.now() - new Date(iso).getTime());
   const minutes = Math.floor(distance / 60_000);
@@ -127,6 +257,39 @@ function valueTone(value: number) {
   return "";
 }
 
+function TvScreenerPanel({ data }: { data?: TvScreenerResponse }) {
+  const coverage = data?.coverage ?? "unavailable";
+  const coverageCopy = tvCoverageCopy[coverage];
+  const warnings = data?.warnings ?? ["当前雷达响应未包含 TradingView 补充数据"];
+  return <section className={`tv-screener-panel ${coverageCopy.className}`} aria-label="TradingView 补充信息">
+    <div className="section-heading">
+      <div><p className="section-kicker">TRADINGVIEW SUPPLEMENT · RESEARCH ONLY</p><h2>TradingView 补充信息</h2></div>
+      <div className="source-note"><span className={`tv-screener-status ${coverageCopy.className} ${coverage === "stale" || coverage === "unavailable" ? "attention" : ""}`}>{coverageCopy.label}</span><small>{coverage === "stale" ? "已过期，不能视为实时数据" : coverage === "unavailable" ? "补充源不可用，不影响 Binance 雷达" : "仅作研究参考"}</small></div>
+    </div>
+    <p className="tv-screener-advisory" role="note">Binance 数据优先，仅作研究参考；TradingView 补充信息不能证明成交或止损触发。</p>
+    <div className="tv-screener-meta">
+      <span>来源 / provenance：{data?.source ?? "—"}</span>
+      <span>请求 ID：{data?.requestId ?? "—"}</span>
+      <span>抓取时间：{data?.fetchedAt ? formatRadarTime(data.fetchedAt) : "—"}</span>
+      <span>数据年龄：{formatTvDataAge(data?.fetchedAt)}</span>
+      <span>advisory-only：{data?.advisoryOnly ? "是" : "—"}</span>
+    </div>
+    {data?.rows.length ? <div className="tv-screener-rows">
+      {data.rows.map((row) => <article className="tv-screener-row" key={`${row.tvSymbol}-${row.binanceSymbol ?? "unmapped"}`}>
+        <div className="tv-screener-row-heading"><strong>tvSymbol：{row.tvSymbol || "—"}</strong><span>Binance 映射：{row.binanceSymbol ?? "未确认 —"}</span></div>
+        <div className="tv-screener-values"><strong>字段</strong>{Object.entries(row.values).map(([field, value]) => <span key={field}>{field}：{formatTvValue(value)}</span>)}</div>
+        <div className="tv-screener-intervals"><strong>周期</strong>{Object.entries(row.intervalValues).map(([interval, values]) => <div key={interval}><b>{tvIntervalCopy[interval] ?? interval}</b>{Object.entries(values).map(([field, value]) => <span key={`${interval}-${field}`}>{field}：{formatTvValue(value)}</span>)}</div>)}</div>
+        {row.warnings.length > 0 && <ul className="tv-screener-warnings">{row.warnings.map((warning) => <li key={warning}>warning：{warning}</li>)}</ul>}
+      </article>)}
+    </div> : <div className="tv-screener-empty">暂无 TradingView 行；Binance 数据仍是当前雷达唯一优先依据。</div>}
+    {warnings.length > 0 && <ul className="tv-screener-warnings">{warnings.map((warning) => <li key={warning}>warning：{warning}</li>)}</ul>}
+  </section>;
+}
+
+function ReversalTable({ rows, title }: { rows: ReversalRow[]; title: string }) {
+  return <section className="reversal-direction"><div className="reversal-direction-title"><h4>{title}</h4><span>{rows.length} 个</span></div>{rows.length ? <table className="reversal-table"><thead><tr><th>币种</th><th>周期</th><th>评分</th><th>收回</th><th>影线</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.symbol}-${row.interval}-${row.signalTime}`}><td><a href={`/trade?symbol=${encodeURIComponent(row.symbol)}`}>{row.symbol.replace(/USDT$/, "")}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{row.interval === "1d" ? "日线" : "4H"}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{(row.wickRatio * 100).toFixed(0)}%</td></tr>)}</tbody></table> : <div className="reversal-empty">本轮没有符合条件的已收盘形态。</div>}</section>;
+}
+
 export default function Home() {
   const [data, setData] = useState<RadarResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -134,7 +297,14 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [selectedSymbol, setSelectedSymbol] = useState("");
+  const [ma30Oi, setMa30Oi] = useState<Ma30OiResponse | null>(null);
+  const [ma30Scanning, setMa30Scanning] = useState(false);
+  const [reversal, setReversal] = useState<ReversalResponse | null>(null);
+  const [reversalScanning, setReversalScanning] = useState(false);
+  // 当前时间只能在浏览器挂载后开始渲染，避免服务端与客户端跨秒时产生水合不一致。
+  const [radarNow, setRadarNow] = useState<Date | null>(null);
   const { themeMode, resolvedTheme, setThemeMode } = useTerminalTheme();
+  const { fontScale } = useFontScale();
 
   async function loadRadar() {
     setLoading(true);
@@ -156,6 +326,63 @@ export default function Home() {
     }
   }
 
+  async function loadMa30Oi() {
+    try {
+      const response = await fetch("/api/radar/ma30-oi", { cache: "no-store" });
+      if (!response.ok) throw new Error("ma30_oi_unavailable");
+      setMa30Oi((await response.json()) as Ma30OiResponse);
+    } catch {
+      setMa30Oi({ status: "degraded", timezone: "Asia/Shanghai", candidates: [], warning: "筛选快照暂时不可用" });
+    }
+  }
+
+  async function runMa30OiNow() {
+    if (ma30Scanning) return;
+    setMa30Scanning(true);
+    setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "pending", warning: "正在低频扫描 Binance Futures，请耐心等待" }));
+    try {
+      const response = await fetch("/api/radar/ma30-oi", { method: "POST", headers: { "x-radar-manual": "1" } });
+      const payload = await response.json() as Ma30OiResponse;
+      if (!response.ok) throw new Error(payload.warning || "扫描暂时不可用");
+      setMa30Oi(payload);
+    } catch (error) {
+      setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: error instanceof Error ? error.message : "扫描失败" }));
+    } finally {
+      setMa30Scanning(false);
+    }
+  }
+
+  async function loadReversal() {
+    try {
+      const response = await fetch("/api/radar/reversal", { cache: "no-store" });
+      if (!response.ok) throw new Error("reversal_unavailable");
+      setReversal((await response.json()) as ReversalResponse);
+    } catch {
+      setReversal({ status: "pending", scans: {}, archives: [], warning: "破底翻快照暂时不可用" });
+    }
+  }
+
+  async function runReversalNow() {
+    if (reversalScanning) return;
+    setReversalScanning(true);
+    setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: "正在低频筛选 4H 与日线破底翻，请耐心等待", diagnostic: undefined }));
+    try {
+      const response = await fetch("/api/radar/reversal", { method: "POST", headers: { "x-radar-manual": "1" } });
+      const payload = await response.json().catch(() => ({})) as ReversalResponse & { error?: string };
+      if (!response.ok) {
+        const message = payload.warning || payload.error || "破底翻筛选暂时不可用";
+        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: reversalDiagnostic(response.status, message) }));
+        return;
+      }
+      setReversal(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "破底翻筛选失败";
+      setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: reversalDiagnostic(null, message) }));
+    } finally {
+      setReversalScanning(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/radar", { cache: "no-store" })
@@ -174,9 +401,19 @@ export default function Home() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    const ma30Timer = window.setTimeout(() => void loadMa30Oi(), 0);
+    const reversalTimer = window.setTimeout(() => void loadReversal(), 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(ma30Timer);
+      window.clearTimeout(reversalTimer);
     };
+  }, []);
+
+  useEffect(() => {
+    setRadarNow(new Date());
+    const timer = window.setInterval(() => setRadarNow(new Date()), 1_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const filteredCoins = useMemo(() => {
@@ -202,9 +439,12 @@ export default function Home() {
   const candidateCount =
     data?.coins.filter((coin) => ["SQUEEZE", "A", "B"].includes(coin.participation)).length ?? 0;
   const avoidCount = data?.coins.filter((coin) => coin.participation === "AVOID").length ?? 0;
+  const reversalCandidates = Object.values(reversal?.scans ?? {}).flatMap((scan) => scan?.candidates ?? []);
+  const longReversalCandidates = reversalCandidates.filter((candidate) => candidate.direction === "LONG");
+  const shortReversalCandidates = reversalCandidates.filter((candidate) => candidate.direction === "SHORT");
 
   return (
-    <main className="app-shell radar-terminal" data-theme={resolvedTheme}>
+    <main className="app-shell radar-terminal" data-theme={resolvedTheme} style={{ "--site-font-scale": fontScale } as React.CSSProperties}>
       <aside className="radar-sidebar">
         <a className="radar-brand" href="#top"><span>街</span><div><strong>街灯终端</strong><small>STREETLIGHT</small></div></a>
         <nav><a className="active" href="#radar"><b>◎</b>妖币雷达</a><a href="/trade"><b>⌁</b>合约交易</a><a href="#method"><b>◇</b>判断方法</a><a href="/trade#trade-knowledge"><b>◫</b>操作知识库</a><a href="/settings"><b>⚙</b>连接设置</a></nav>
@@ -213,7 +453,7 @@ export default function Home() {
       <div className="radar-app-main">
       <header className="radar-top-header">
         <div><small>HOME / MARKET INTELLIGENCE</small><h1>妖币雷达</h1></div>
-        <div className="radar-header-controls"><div className="radar-theme-switch" aria-label="主题选择">{(["dark", "light", "system"] as ThemeMode[]).map((item) => <button key={item} className={themeMode === item ? "selected" : ""} onClick={() => setThemeMode(item)}>{item === "dark" ? "深色" : item === "light" ? "浅色" : "跟随系统"}</button>)}</div><span className="radar-live-status"><i className={data?.mode === "live" ? "connected" : ""} />{data?.mode === "live" ? "全源实时" : data?.mode === "hybrid" ? "部分实时" : "演示行情"}</span><button className="refresh-button" onClick={() => void loadRadar()} disabled={loading}>{loading ? "正在刷新" : "刷新"}</button></div>
+        <div className="radar-header-controls"><div className="radar-theme-switch" aria-label="主题选择">{(["dark", "light", "system"] as ThemeMode[]).map((item) => <button key={item} className={themeMode === item ? "selected" : ""} onClick={() => setThemeMode(item)}>{item === "dark" ? "深色" : item === "light" ? "浅色" : "跟随系统"}</button>)}</div><FontControl /><span className="radar-live-status"><i className={data?.mode === "live" ? "connected" : ""} />{data?.mode === "live" ? "全源实时" : data?.mode === "hybrid" ? "部分实时" : "演示行情"}</span><button className="refresh-button" onClick={() => void Promise.all([loadRadar(), loadMa30Oi(), loadReversal()])} disabled={loading}>{loading ? "正在刷新" : "刷新"}</button></div>
       </header>
 
       <section className="hero" id="top">
@@ -236,8 +476,8 @@ export default function Home() {
         {([
           ["BINANCE SQUARE", selectedCoin?.coverage.square, "热度 / 喊空 / 套牢语义"],
           ["BINANCE FUTURES", selectedCoin?.coverage.binanceOi, "价格 / OI / 资金费率"],
-          ["ASTER", selectedCoin?.coverage.aster, "全市场OI / 大户持仓增量"],
-          ["CHIP FORENSICS", selectedCoin?.coverage.chips, "Top持仓 / Quiet钱包 / 阶段"],
+          ["ASTER", selectedCoin?.coverage.aster, "Aster OI 变化"],
+          ["CHIP FORENSICS", selectedCoin?.coverage.chips, "排除交易所后的链上Top10"],
           ["ON-CHAIN", selectedCoin?.coverage.chain, "CEX流向 / 异常转账 / 聪明钱"],
         ] as const).map(([label, state, description]) => (
           <div className="source-item" key={label}>
@@ -248,11 +488,13 @@ export default function Home() {
         ))}
       </section>
 
+      <TvScreenerPanel data={data?.tvScreener} />
+
       {data?.mode !== "live" && (
         <div className="demo-banner" role="status">
           <span>{data?.mode === "hybrid" ? "HYBRID" : "DEMO"}</span>
           {data?.mode === "hybrid"
-            ? "币安合约行情已实时接入；广场情绪、Aster和链上筹码仍按字段显示待接入，不参与虚构评分。"
+            ? "币安合约行情已实时接入；Aster OI与链上Top10仅作为低市值币种参考指标，缺失时不虚构评分。"
             : "当前为结构演示数据。每项演示字段均已标记，连接采集服务后会自动切换。"}
         </div>
       )}
@@ -267,14 +509,14 @@ export default function Home() {
         <div className="radar-panel">
           <div className="section-heading">
             <div><p className="section-kicker">MARKET RADAR</p><h2>高波动重点池</h2></div>
-            <div className="source-note">{data?.sourceStatus ?? "等待数据源"}</div>
+            <div className="source-note radar-time-note"><span>最近扫描：{data?.updatedAt ? formatRadarTime(data.updatedAt) : "等待数据"}</span><span>当前时间：{radarNow ? formatRadarTime(radarNow) : "读取中"}</span><small>{data?.sourceStatus ?? "等待数据源"}</small></div>
           </div>
 
           <div className="toolbar">
             <div className="filter-tabs" role="tablist" aria-label="筛选热门币">
               {([
                 ["all", "综合榜"], ["squeeze", "逼空重点"], ["candidate", "候选"],
-                ["concentrated", "筹码集中"], ["risk", "风险检查"],
+                ["concentrated", "筹码集中"], ["risk", "风险检查"], ["ma30oi", "MA30 × OI 增仓"], ["reversal", "破底翻（4H/日线）"],
               ] as const).map(([value, label]) => (
                 <button key={value} role="tab" aria-selected={filter === value}
                   className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>
@@ -286,7 +528,21 @@ export default function Home() {
               onChange={(event) => setQuery(event.target.value)} placeholder="搜索币种" aria-label="搜索币种" /></label>
           </div>
 
-          {error ? (
+          {filter === "reversal" ? (
+            <div className="reversal-panel">
+              <div className="reversal-heading"><div><p className="section-kicker">BREAKDOWN REVERSAL ARCHIVE</p><h3>破底翻双向列表</h3><p>只使用已收盘 K 线。以 08/20 为例，日线比较 08/19 与 08/18：08/19 跌破 08/18 低点后，收盘收回 08/18 开盘；若 08/18 为阳线，再收回前收或前高则权重更高。</p></div><div className="reversal-actions"><span className={`reversal-status ${reversal?.diagnostic ? "degraded" : reversal?.status ?? "pending"}`}>{reversalScanning ? "筛选中" : reversal?.diagnostic ? "连接失败" : reversal?.status === "ready" ? "已归档" : "待执行"}</span><button type="button" onClick={() => void runReversalNow()} disabled={reversalScanning}>{reversalScanning ? "正在筛选…" : "立即筛选"}</button></div></div>
+              <div className="reversal-meta"><span>4H：每 4 小时收盘扫描</span><span>日线：每天 08:00 扫描</span><span>归档：{reversal?.archives.length ?? 0} 条</span><span>Bark：新增候选时提醒</span></div>
+              {reversal?.diagnostic && <div className="reversal-diagnostic" role="alert"><strong>扫描诊断 · {reversal.diagnostic.code}</strong><span>发生时间：{formatRadarTime(reversal.diagnostic.occurredAt)}</span><p>原因：{reversal.diagnostic.detail}</p><ul>{reversal.diagnostic.checks.map((check) => <li key={check}>检查项：{check}</li>)}</ul></div>}
+              <div className="reversal-direction-grid"><ReversalTable title="多头 · 破底翻" rows={longReversalCandidates} /><ReversalTable title="空头 · 破顶翻" rows={shortReversalCandidates} /></div>
+              <div className="reversal-archive"><div className="reversal-direction-title"><h4>全部归档 · 13 根 K 线学习结果</h4><span>按信号时间倒序</span></div>{reversal?.archives.length ? <table className="reversal-table archive-table"><thead><tr><th>方向 / 币种</th><th>周期</th><th>信号评分</th><th>收回位置</th><th>13 根后最高有利幅度</th></tr></thead><tbody>{reversal.archives.map((row) => <tr key={row.id}><td><span className={row.direction === "LONG" ? "positive" : "negative"}>{row.direction === "LONG" ? "多" : "空"}</span> <a href={`/trade?symbol=${encodeURIComponent(row.symbol)}`}>{row.symbol.replace(/USDT$/, "")}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{row.interval === "1d" ? "日线" : "4H"}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{row.outcome?.complete && row.outcome.maxFavorablePct !== null ? `${row.outcome.maxFavorablePct.toFixed(2)}%` : `观察中 · ${row.outcome?.barsObserved ?? 0}/13`}</td></tr>)}</tbody></table> : <div className="reversal-empty">扫描完成后，所有命中的多空形态都会在这里归档。</div>}</div>
+            </div>
+          ) : filter === "ma30oi" ? (
+            <div className="ma30-oi-panel">
+              <div className="ma30-oi-heading"><div><p className="section-kicker">DAILY FUTURES SCREEN</p><h3>连续站上 MA30 + OI 扩张</h3><p>每天 08:00（Asia/Shanghai）扫描：1H 收盘价连续 7 根在 MA30 上方，且前日 OI 严格高于前 10 日均值。</p></div><div className="ma30-oi-actions"><span className={`ma30-oi-status ${ma30Oi?.status ?? "pending"}`}>{ma30Scanning ? "扫描中" : ma30Oi?.status === "ready" ? "已完成" : ma30Oi?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runMa30OiNow()} disabled={ma30Scanning}>{ma30Scanning ? "正在筛选…" : "立即扫描"}</button></div></div>
+              <div className="ma30-oi-meta"><span>排序：当前 OI 降序</span><span>扫描：{ma30Oi?.scannedAt ? new Date(ma30Oi.scannedAt).toLocaleString("zh-CN", { hour12: false }) : "尚未执行"}</span><span>符合：{ma30Oi?.candidates.length ?? 0}</span>{ma30Oi?.successfulSymbols !== undefined && <span>完整数据：{ma30Oi.successfulSymbols}/{ma30Oi.scannedSymbols ?? 0}</span>}</div>
+              {ma30Oi?.candidates.length ? <div className="ma30-oi-table-wrap"><table className="ma30-oi-table"><thead><tr><th>币种</th><th>当前 OI 数量</th><th>前日 OI</th><th>前 10 日均值</th><th>放大</th><th>连续站上</th></tr></thead><tbody>{ma30Oi.candidates.map((candidate) => <tr key={candidate.symbol}><td><a href={`/trade?symbol=${encodeURIComponent(candidate.symbol)}`}>{candidate.symbol.replace(/USDT$/, "")}</a><small>收盘 {formatPrice(candidate.lastClose)} · MA30 {formatPrice(candidate.ma30)}</small></td><td>{formatOpenInterest(candidate.currentOi)}</td><td>{formatOpenInterest(candidate.previousDayOi)}</td><td>{formatOpenInterest(candidate.priorTenDayOiAverage)}</td><td className="positive">+{candidate.oiExpansionPct.toFixed(2)}%</td><td>{candidate.consecutiveAboveMa} 根</td></tr>)}</tbody></table></div> : <div className="ma30-oi-empty">暂无符合条件的币种。{ma30Oi?.warning ?? "每日 08:00 扫描后显示结果。"}</div>}
+            </div>
+          ) : error ? (
             <div className="empty-state"><strong>数据连接失败</strong><span>{error}</span>
               <button onClick={() => void loadRadar()}>重新连接</button></div>
           ) : (
@@ -305,8 +561,8 @@ export default function Home() {
                         onClick={() => setSelectedSymbol(coin.symbol)} tabIndex={0}
                         onKeyDown={(event) => event.key === "Enter" && setSelectedSymbol(coin.symbol)}>
                         <td><div className="coin-identity"><span className="rank">{String(index + 1).padStart(2, "0")}</span>
-                          <span className="coin-avatar">{coin.displayName.slice(0, 1)}</span><span><strong>{coin.displayName}</strong>
-                          <small>{coin.symbol} · ${formatPrice(coin.price)}</small></span></div></td>
+                          <span className="coin-avatar">{coin.displayName.slice(0, 1)}</span><a className="coin-trade-link" href={`/trade?symbol=${encodeURIComponent(coin.symbol)}`} onClick={(event) => event.stopPropagation()}><strong>{coin.displayName}</strong>
+                          <small>{coin.symbol} · ${formatPrice(coin.price)}</small></a></div></td>
                         <td><span className={`crowd-pill ${crowd.className}`}>{crowd.label}</span>
                           <div className="cell-pair"><strong>{coin.heatScore ? coin.heatScore.toFixed(0) : "—"}</strong>
                           <span className={valueTone(coin.heatChange)}>{coin.heatScore ? formatPercent(coin.heatChange, 0) : "热度待接入"}</span></div>
@@ -321,9 +577,9 @@ export default function Home() {
                           <span>费率 {formatPercent(coin.fundingRate, 3)}</span></div></td>
                         <td><strong className={coin.asterOi1h === null ? "muted-value" : valueTone(coin.asterOi1h)}>
                           {coin.asterOi1h === null ? "待接入" : `OI ${formatPercent(coin.asterOi1h)}`}</strong>
-                          <small>大户增量 {optionalPercent(coin.asterWhaleDelta)}</small></td>
+                          <small>仅统计 Aster OI 变化</small></td>
                         <td>{coin.top10Pct === null ? <strong className="muted-value">筹码待接入</strong> :
-                          <><strong>Top10 {coin.top10Pct.toFixed(1)}%</strong><small>Top1 {optionalPercent(coin.top1Pct)} · {coin.chipStage}</small></>}
+                          <><strong>Top10 {coin.top10Pct.toFixed(1)}%</strong><small>已排除交易所 · {coin.chipStage}</small></>}
                           <small>链上 {coin.chainAnomaly === null ? "待接入" : `${coin.chainSignal} ${coin.chainAnomaly}/100`}</small></td>
                         <td><span className={`grade-pill ${grade.className}`}>{grade.label}</span>
                           <small>可用证据评分 {coin.score}/100</small></td>
@@ -382,7 +638,7 @@ export default function Home() {
       <section className="methodology" id="method">
         <div><span>01 / DISCOVER</span><h3>广场先发现</h3><p>有效提及、增速、喊空和套牢语义共同决定是否进入重点池；重复文案和刷屏应降权。</p></div>
         <div><span>02 / CONFIRM</span><h3>OI与价格确认</h3><p>喊空时价格不跌、OI继续升，说明新增对手盘堆积；还要用主动买卖比判断是否真的有人承接。</p></div>
-        <div><span>03 / FORENSICS</span><h3>筹码与链上验真</h3><p>Top10集中只是控盘线索，必须排除交易所、LP、锁仓地址，并检查Quiet钱包、CEX充值和异常转账。</p></div>
+        <div><span>03 / FORENSICS</span><h3>筹码与链上验真</h3><p>Top10集中只是低市值币种的参考线索；统计前排除交易所、LP、桥、销毁和合约地址。</p></div>
         <div><span>04 / VETO</span><h3>风险一票否决</h3><p>极端费率、流动性不足、筹码过度集中、洗量、明显派发或数据过期，命中后直接降级。</p></div>
       </section>
 

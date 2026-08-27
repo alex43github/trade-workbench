@@ -1,0 +1,92 @@
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const radarPath = path.join(root, "app/radar/page.tsx");
+const panelPath = path.join(root, "app/trade/AdaptiveStrategyPanel.tsx");
+
+async function source(file) {
+  return fs.readFile(file, "utf8");
+}
+
+test("RadarResponse keeps tvScreener optional and presents every coverage state", async () => {
+  const radar = await source(radarPath);
+
+  assert.match(radar, /type\s+TvScreenerCoverage\s*=\s*"live"\s*\|\s*"partial"\s*\|\s*"stale"\s*\|\s*"unavailable"/);
+  assert.match(radar, /tvScreener\??\s*:\s*TvScreenerResponse/);
+  assert.match(radar, /live:\s*\{?\s*label:\s*["']实时/);
+  assert.match(radar, /partial:\s*\{?\s*label:\s*["']部分可用/);
+  assert.match(radar, /stale:\s*\{?\s*label:\s*["']已过期/);
+  assert.match(radar, /unavailable:\s*\{?\s*label:\s*["']不可用/);
+  assert.match(radar, /tv-screener-panel/);
+  assert.match(radar, /coverage === "stale"|coverage === "unavailable"/);
+});
+
+test("TradingView panel exposes provenance, age, symbols, mappings, fields, intervals, warnings, and null as a dash", async () => {
+  const radar = await source(radarPath);
+
+  for (const label of ["来源", "抓取时间", "数据年龄", "tvSymbol", "Binance 映射", "字段", "周期", "warnings"]) {
+    assert.match(radar, new RegExp(label));
+  }
+  assert.match(radar, /formatTvDataAge/);
+  assert.match(radar, /value === null \|\| value === undefined/);
+  assert.match(radar, /return ["']—["']/);
+  assert.match(radar, /intervalValues/);
+  assert.match(radar, /15:\s*["']15m|["']15["']\s*:\s*["']15m/);
+  assert.match(radar, /60:\s*["']1h|["']60["']\s*:\s*["']1h/);
+  assert.match(radar, /240:\s*["']4h|["']240["']\s*:\s*["']4h/);
+  assert.match(radar, /1D:\s*["']1d|["']1D["']\s*:\s*["']1d/);
+  assert.match(radar, /row\.warnings|data\.warnings/);
+});
+
+test("TradingView evidence is visibly advisory and Binance takes precedence", async () => {
+  const radar = await source(radarPath);
+
+  assert.match(radar, /Binance 数据优先/);
+  assert.match(radar, /仅作研究参考/);
+  assert.match(radar, /不能证明成交或止损触发/);
+  assert.match(radar, /stale.*已过期|已过期.*stale/s);
+  assert.match(radar, /unavailable.*不可用|不可用.*unavailable/s);
+  assert.doesNotMatch(radar, /api\/radar\/tvscreener/);
+});
+
+test("AI review projects bounded research_evidence as advisory-only without changing execution payloads", async () => {
+  const panel = await source(panelPath);
+
+  assert.match(panel, /buildResearchEvidence/);
+  assert.match(panel, /source:\s*["']tradingview-screener["']/);
+  assert.match(panel, /advisory_only:\s*true/);
+  assert.match(panel, /fetched_at/);
+  assert.match(panel, /rows/);
+  assert.match(panel, /warnings/);
+  assert.match(panel, /slice\(0,\s*\d+\)/);
+  assert.match(panel, /research_evidence/);
+  assert.match(panel, /Binance 数据优先/);
+  assert.match(panel, /不能证明成交或止损触发/);
+
+  const conditionalPlan = panel.slice(panel.indexOf("async function saveConditionalPlan"), panel.indexOf("async function closePaper"));
+  assert.doesNotMatch(conditionalPlan, /research_evidence|tvScreener/);
+});
+
+test("AI evidence remains compatible when /api/radar omits tvScreener", async () => {
+  const panel = await source(panelPath);
+
+  assert.match(panel, /tvScreener\??\s*:/);
+  assert.match(panel, /function buildResearchEvidence\(tvScreener\?: TvScreenerResponse\): ResearchEvidence \| undefined/);
+  assert.match(panel, /researchEvidence\s*\?/);
+  assert.match(panel, /setTvScreener\(payload\.tvScreener/);
+});
+
+test("TV research evidence stays outside radar scoring and execution conditions", async () => {
+  const radar = await source(radarPath);
+  const panel = await source(panelPath);
+  const tvPanel = radar.slice(radar.indexOf("function TvScreenerPanel"), radar.indexOf("function ReversalTable"));
+  const scoreBlock = panel.slice(panel.indexOf("const score = useMemo"), panel.indexOf("function applyNaturalLanguage"));
+
+  assert.doesNotMatch(tvPanel, /score|participation|risk/i);
+  assert.doesNotMatch(scoreBlock, /tvScreener|research_evidence/);
+  assert.match(panel, /fetch\("\/api\/trade\/conditional-orders"/);
+});
