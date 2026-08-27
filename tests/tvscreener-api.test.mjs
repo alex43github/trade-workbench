@@ -78,6 +78,14 @@ test("Binance mapping is an exact current USDT-perpetual allowlist lookup and un
   assert.doesNotMatch(route, /rawSymbol\.replace|rawSymbol\.toUpperCase|endsWith\([^)]*USDT/);
 });
 
+test("mapping also requires the TradingView row to identify Binance", async () => {
+  const route = await source(tvRoutePath);
+
+  assert.match(route, /row\.exchange[^\n]*BINANCE/i);
+  assert.match(route, /row\.tvSymbol[^\n]*BINANCE:/i);
+  assert.match(route, /binanceSymbol\s*=\s*[^;\n]*isBinance/i);
+});
+
 test("radar appends optional tvScreener evidence after analysis without changing score, participation, risks, or lifecycle", async () => {
   const radar = await source(radarRoutePath);
 
@@ -86,8 +94,12 @@ test("radar appends optional tvScreener evidence after analysis without changing
   assert.ok(analyzeStart >= 0 && analyzeEnd > analyzeStart, "expected existing analyze() boundary");
   assert.doesNotMatch(radar.slice(analyzeStart, analyzeEnd), /tvScreener|screenWithTvScreener|loadTvScreenerResearch/);
   assert.match(radar, /loadTvScreenerResearch/);
-  assert.match(radar, /Promise\.race/);
-  assert.match(radar, /return\s+\{\s*\.\.\.payload,\s*tvScreener\s*\}/);
+  assert.doesNotMatch(radar, /Promise\.race/);
+  assert.match(radar, /radarTvScreenerRefresh/);
+  assert.match(radar, /radarTvScreenerCache/);
+  assert.match(radar, /cacheIsFresh/);
+  assert.match(radar, /cachedAt\s*<=\s*30_000/);
+  assert.match(radar, /return\s+\{\s*\.\.\.payload,\s*tvScreener\s*:/);
   assert.match(radar, /\.map\(analyze\)/);
   assert.match(radar, /cache-control["']?\s*:\s*["']public, max-age=20, s-maxage=45["']/);
   assert.match(radar, /cache-control["']?\s*:\s*["']no-store["']/);

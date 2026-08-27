@@ -51,7 +51,8 @@ function sanitizeTvScreenerResponse(response: TvScreenerResponse, allowedSymbols
     coverage: response.coverage,
     rows: response.rows.map((row) => {
       const rawSymbol = row.rawSymbol;
-      const binanceSymbol = rawSymbol && allowedSymbols.has(rawSymbol) ? rawSymbol : null;
+      const isBinanceRow = row.exchange?.trim().toUpperCase() === "BINANCE" && row.tvSymbol.trim().toUpperCase().startsWith("BINANCE:");
+      const binanceSymbol = isBinanceRow && rawSymbol && allowedSymbols.has(rawSymbol) ? rawSymbol : null;
       const warnings = row.warnings.map(sanitizeWarning);
       if (!binanceSymbol) warnings.push("Binance perpetual mapping unavailable");
       return { ...row, binanceSymbol, warnings: [...new Set(warnings)] };

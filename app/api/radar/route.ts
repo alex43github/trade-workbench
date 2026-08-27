@@ -68,7 +68,6 @@ type RadarBase = Omit<RadarCoin, "score" | "participation" | "setupTags" | "verd
 const BINANCE_FUTURES = "https://fapi.binance.com";
 const BINANCE_FUTURES_DATA = "https://fapi.binance.com/futures/data";
 const asterSnapshots = new Map<string, { symbol: string; openInterest: number; capturedAt: string }>();
-const TVSCREENER_RADAR_TIMEOUT_MS = 500;
 
 const demoCoins: RadarBase[] = [
   {
@@ -527,23 +526,37 @@ async function buildLiveMarketFallback(): Promise<RadarCoin[]> {
   return bases.map(analyze).sort((a, b) => b.score - a.score);
 }
 
-async function loadRadarTvScreener(symbols: string[]): Promise<TvScreenerResearch> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      loadTvScreenerResearch(symbols),
-      new Promise<TvScreenerResearch>((resolve) => {
-        timeout = setTimeout(() => resolve(unavailableTvScreenerResearch()), TVSCREENER_RADAR_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
-  }
+let radarTvScreenerCache: { key: string; value: TvScreenerResearch; cachedAt: number } | null = null;
+let radarTvScreenerRefresh: Promise<void> | null = null;
+
+function startRadarTvScreenerRefresh(symbols: string[]) {
+  const uniqueSymbols = [...new Set(symbols)].sort();
+  const key = uniqueSymbols.join(",");
+  const cacheIsFresh = radarTvScreenerCache?.key === key && Date.now() - radarTvScreenerCache.cachedAt <= 30_000;
+  if (!key || radarTvScreenerRefresh || cacheIsFresh) return;
+  radarTvScreenerRefresh = loadTvScreenerResearch(uniqueSymbols)
+    .then((value) => {
+      if (value.coverage !== "unavailable" || !radarTvScreenerCache) {
+        radarTvScreenerCache = { key, value, cachedAt: Date.now() };
+      }
+    })
+    .catch(() => undefined)
+    .finally(() => { radarTvScreenerRefresh = null; });
 }
 
-async function withTvScreener<T extends { coins: RadarCoin[] }>(payload: T) {
-  const tvScreener = await loadRadarTvScreener(payload.coins.map((coin) => coin.symbol));
-  return { ...payload, tvScreener };
+function radarTvScreenerValue(symbols: string[]): TvScreenerResearch {
+  startRadarTvScreenerRefresh(symbols);
+  const key = [...new Set(symbols)].sort().join(",");
+  if (!radarTvScreenerCache || radarTvScreenerCache.key !== key) return unavailableTvScreenerResearch();
+  const age = Date.now() - radarTvScreenerCache.cachedAt;
+  if (age > 30_000 && radarTvScreenerCache.value.coverage !== "stale") {
+    return { ...radarTvScreenerCache.value, coverage: "stale" };
+  }
+  return radarTvScreenerCache.value;
+}
+
+function withTvScreener<T extends { coins: RadarCoin[] }>(payload: T) {
+  return { ...payload, tvScreener: radarTvScreenerValue(payload.coins.map((coin) => coin.symbol)) };
 }
 
 export async function GET() {
@@ -563,7 +576,7 @@ export async function GET() {
         const hotCoins = [...coins].sort((a, b) => (b.mentionCount + b.heatChange) - (a.mentionCount + a.heatChange)).slice(0, 10);
         const resilientCoins = coins.filter((item) => item.shortCallRatio >= 65 && (item.change4h >= 0 || (item.relativeBtc4h ?? 0) > 0)).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
         const shortCrowding = coins.filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
-        return Response.json(await withTvScreener({
+        return Response.json(withTvScreener({
           mode: "live",
           updatedAt: new Date().toISOString(),
           sourceStatus: `币安广场监控已连接 · ${coins.length} 个有效币种 · 缺失字段不参与评分`,
@@ -578,7 +591,7 @@ export async function GET() {
   try {
     const coins = await buildLiveMarketFallback();
     if (coins.length) {
-      return Response.json(await withTvScreener({
+      return Response.json(withTvScreener({
         mode: "hybrid",
         updatedAt: new Date().toISOString(),
         sourceStatus: `Binance Futures实时行情 · ${coins.length} 个高波动合约 · Aster OI与链上Top10按可用快照显示`,
@@ -589,7 +602,7 @@ export async function GET() {
     // A fully labeled demo keeps the product usable when the public endpoint is regionally unavailable.
   }
 
-  return Response.json(await withTvScreener({
+  return Response.json(withTvScreener({
     mode: "demo",
     updatedAt: new Date().toISOString(),
     sourceStatus: baseUrl ? "外部采集暂不可用 · 已切换演示样本" : "尚未连接广场采集服务 · 当前为演示样本",
