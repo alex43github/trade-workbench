@@ -549,7 +549,8 @@ function radarTvScreenerValue(symbols: string[]): TvScreenerResearch {
   const key = [...new Set(symbols)].sort().join(",");
   if (!radarTvScreenerCache || radarTvScreenerCache.key !== key) return unavailableTvScreenerResearch();
   const age = Date.now() - radarTvScreenerCache.cachedAt;
-  if (age > 30_000 && radarTvScreenerCache.value.coverage !== "stale") {
+  const canMarkStale = radarTvScreenerCache.value.coverage === "live" || radarTvScreenerCache.value.coverage === "partial";
+  if (age > 30_000 && canMarkStale) {
     return { ...radarTvScreenerCache.value, coverage: "stale" };
   }
   return radarTvScreenerCache.value;

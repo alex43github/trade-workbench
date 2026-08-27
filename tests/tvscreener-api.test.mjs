@@ -99,6 +99,8 @@ test("radar appends optional tvScreener evidence after analysis without changing
   assert.match(radar, /radarTvScreenerCache/);
   assert.match(radar, /cacheIsFresh/);
   assert.match(radar, /cachedAt\s*<=\s*30_000/);
+  assert.match(radar, /canMarkStale/);
+  assert.match(radar, /coverage\s*===\s*["']live["'][^\n]+coverage\s*===\s*["']partial["']/);
   assert.match(radar, /return\s+\{\s*\.\.\.payload,\s*tvScreener\s*:/);
   assert.match(radar, /\.map\(analyze\)/);
   assert.match(radar, /cache-control["']?\s*:\s*["']public, max-age=20, s-maxage=45["']/);
