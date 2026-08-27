@@ -107,6 +107,15 @@ test("radar appends optional tvScreener evidence after analysis without changing
   assert.match(radar, /cache-control["']?\s*:\s*["']no-store["']/);
 });
 
+test("the first radar response gives an in-flight TV refresh a bounded chance before showing unavailable", async () => {
+  const radar = await source(radarRoutePath);
+
+  assert.match(radar, /TVSCREENER_FIRST_RESPONSE_WAIT_MS\s*=\s*\d+/);
+  assert.match(radar, /async\s+function\s+waitForRadarTvScreenerRefresh/);
+  assert.match(radar, /await\s+waitForRadarTvScreenerRefresh/);
+  assert.match(radar, /setTimeout\(\(\)\s*=>\s*(?:resolve|finish)\(null\)/);
+});
+
 test("no order or strategy module imports tvscreener research data", async () => {
   const protectedRoots = [
     path.join(root, "app/api/trade"),

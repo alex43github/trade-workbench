@@ -526,22 +526,45 @@ async function buildLiveMarketFallback(): Promise<RadarCoin[]> {
   return bases.map(analyze).sort((a, b) => b.score - a.score);
 }
 
-let radarTvScreenerCache: { key: string; value: TvScreenerResearch; cachedAt: number } | null = null;
-let radarTvScreenerRefresh: Promise<void> | null = null;
+const TVSCREENER_FIRST_RESPONSE_WAIT_MS = 1_500;
 
-function startRadarTvScreenerRefresh(symbols: string[]) {
+let radarTvScreenerCache: { key: string; value: TvScreenerResearch; cachedAt: number } | null = null;
+let radarTvScreenerRefresh: Promise<TvScreenerResearch | null> | null = null;
+
+function startRadarTvScreenerRefresh(symbols: string[]): Promise<TvScreenerResearch | null> | null {
   const uniqueSymbols = [...new Set(symbols)].sort();
   const key = uniqueSymbols.join(",");
   const cacheIsFresh = radarTvScreenerCache?.key === key && Date.now() - radarTvScreenerCache.cachedAt <= 30_000;
-  if (!key || radarTvScreenerRefresh || cacheIsFresh) return;
-  radarTvScreenerRefresh = loadTvScreenerResearch(uniqueSymbols)
+  if (!key || cacheIsFresh) return null;
+  if (radarTvScreenerRefresh) return radarTvScreenerRefresh;
+  let refresh: Promise<TvScreenerResearch | null>;
+  refresh = loadTvScreenerResearch(uniqueSymbols)
     .then((value) => {
       if (value.coverage !== "unavailable" || !radarTvScreenerCache) {
         radarTvScreenerCache = { key, value, cachedAt: Date.now() };
       }
+      return value;
     })
-    .catch(() => undefined)
-    .finally(() => { radarTvScreenerRefresh = null; });
+    .catch(() => null)
+    .finally(() => {
+      if (radarTvScreenerRefresh === refresh) radarTvScreenerRefresh = null;
+    });
+  radarTvScreenerRefresh = refresh;
+  return refresh;
+}
+
+async function waitForRadarTvScreenerRefresh(refresh: Promise<TvScreenerResearch | null>, timeoutMs: number) {
+  return new Promise<TvScreenerResearch | null>((resolve) => {
+    let settled = false;
+    const finish = (value: TvScreenerResearch | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    refresh.then(finish, () => finish(null));
+  });
 }
 
 function radarTvScreenerValue(symbols: string[]): TvScreenerResearch {
@@ -556,12 +579,19 @@ function radarTvScreenerValue(symbols: string[]): TvScreenerResearch {
   return radarTvScreenerCache.value;
 }
 
-function withTvScreener<T extends { coins: RadarCoin[] }>(payload: T) {
-  return { ...payload, tvScreener: radarTvScreenerValue(payload.coins.map((coin) => coin.symbol)) };
+async function withTvScreener<T extends { coins: RadarCoin[] }>(payload: T, waitForRefresh = false) {
+  const symbols = payload.coins.map((coin) => coin.symbol);
+  const key = [...new Set(symbols)].sort().join(",");
+  const refresh = startRadarTvScreenerRefresh(symbols);
+  if (waitForRefresh && refresh && (!radarTvScreenerCache || radarTvScreenerCache.key !== key)) {
+    await waitForRadarTvScreenerRefresh(refresh, TVSCREENER_FIRST_RESPONSE_WAIT_MS);
+  }
+  return { ...payload, tvScreener: radarTvScreenerValue(symbols) };
 }
 
-export async function GET() {
+export async function GET(request?: Request) {
   const baseUrl = process.env.SQUARE_MONITOR_BASE_URL?.replace(/\/$/, "");
+  const waitForTvRefresh = request ? new URL(request.url).searchParams.get("wait_for_tv") === "1" : false;
 
   if (baseUrl) {
     try {
@@ -577,12 +607,12 @@ export async function GET() {
         const hotCoins = [...coins].sort((a, b) => (b.mentionCount + b.heatChange) - (a.mentionCount + a.heatChange)).slice(0, 10);
         const resilientCoins = coins.filter((item) => item.shortCallRatio >= 65 && (item.change4h >= 0 || (item.relativeBtc4h ?? 0) > 0)).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
         const shortCrowding = coins.filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
-        return Response.json(withTvScreener({
+        return Response.json(await withTvScreener({
           mode: "live",
           updatedAt: new Date().toISOString(),
           sourceStatus: `币安广场监控已连接 · ${coins.length} 个有效币种 · 缺失字段不参与评分`,
           coins, hotCoins, resilientCoins, shortCrowding,
-        }), { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
+        }, waitForTvRefresh), { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
       }
     } catch {
       // Continue with Binance public market data. The response labels missing sources explicitly.
@@ -592,18 +622,18 @@ export async function GET() {
   try {
     const coins = await buildLiveMarketFallback();
     if (coins.length) {
-      return Response.json(withTvScreener({
+      return Response.json(await withTvScreener({
         mode: "hybrid",
         updatedAt: new Date().toISOString(),
         sourceStatus: `Binance Futures实时行情 · ${coins.length} 个高波动合约 · Aster OI与链上Top10按可用快照显示`,
         coins,
-      }), { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
+      }, waitForTvRefresh), { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
     }
   } catch {
     // A fully labeled demo keeps the product usable when the public endpoint is regionally unavailable.
   }
 
-  return Response.json(withTvScreener({
+  return Response.json(await withTvScreener({
     mode: "demo",
     updatedAt: new Date().toISOString(),
     sourceStatus: baseUrl ? "外部采集暂不可用 · 已切换演示样本" : "尚未连接广场采集服务 · 当前为演示样本",
@@ -611,5 +641,5 @@ export async function GET() {
     hotCoins: demoCoins.map(analyze).sort((a, b) => b.mentionCount - a.mentionCount).slice(0, 10),
     resilientCoins: demoCoins.map(analyze).filter((item) => item.shortCallRatio >= 65),
     shortCrowding: demoCoins.map(analyze).filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")),
-  }), { headers: { "cache-control": "no-store" } });
+  }, waitForTvRefresh), { headers: { "cache-control": "no-store" } });
 }

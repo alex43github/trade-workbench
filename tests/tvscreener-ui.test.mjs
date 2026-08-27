@@ -104,3 +104,11 @@ test("TV research evidence stays outside radar scoring and execution conditions"
   assert.doesNotMatch(scoreBlock, /tvScreener|research_evidence/);
   assert.match(panel, /fetch\("\/api\/trade\/conditional-orders"/);
 });
+
+test("radar refreshes only an unavailable TV supplement after the primary response", async () => {
+  const radar = await source(radarPath);
+
+  assert.match(radar, /tvScreener\?\.coverage\s*===\s*["']unavailable["']/);
+  assert.match(radar, /wait_for_tv/);
+  assert.match(radar, /setTimeout\(/);
+});

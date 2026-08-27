@@ -181,6 +181,7 @@ const tvIntervalCopy: Record<string, string> = {
 };
 
 const operatorLoginWarning = "请先安全登录后再启动扫描；匿名访问只显示已有快照。";
+const TVSCREENER_RETRY_DELAY_MS = 1_000;
 
 function formatPercent(value: number, digits = 2) {
   const sign = value > 0 ? "+" : "";
@@ -558,6 +559,7 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    let tvRetryTimer: number | undefined;
     fetch("/api/radar", { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error("radar_unavailable");
@@ -567,6 +569,26 @@ export default function Home() {
         if (cancelled) return;
         setData(payload);
         setSelectedSymbol(payload.coins[0]?.symbol ?? "");
+        if (payload.tvScreener?.coverage === "unavailable") {
+          tvRetryTimer = window.setTimeout(() => {
+            if (cancelled) return;
+            void fetch(`/api/radar?wait_for_tv=1&tv_retry=${Date.now()}`, { cache: "no-store" })
+              .then((response) => {
+                if (!response.ok) throw new Error("radar_tv_unavailable");
+                return response.json() as Promise<RadarResponse>;
+              })
+              .then((retryPayload) => {
+                if (cancelled || retryPayload.tvScreener?.coverage === "unavailable") return;
+                setData(retryPayload);
+                setSelectedSymbol((current) =>
+                  retryPayload.coins.some((coin) => coin.symbol === current)
+                    ? current
+                    : retryPayload.coins[0]?.symbol ?? "",
+                );
+              })
+              .catch(() => undefined);
+          }, TVSCREENER_RETRY_DELAY_MS);
+        }
       })
       .catch(() => {
         if (!cancelled) setError("雷达数据暂时不可用，请稍后重试。");
@@ -578,6 +600,7 @@ export default function Home() {
     const reversalTimer = window.setTimeout(() => void loadReversal(), 0);
     return () => {
       cancelled = true;
+      if (tvRetryTimer !== undefined) window.clearTimeout(tvRetryTimer);
       window.clearTimeout(ma30Timer);
       window.clearTimeout(reversalTimer);
     };
