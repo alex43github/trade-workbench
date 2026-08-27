@@ -1,4 +1,4 @@
-import { matchesOperatorSecret, operatorSessionCookie } from "@/lib/advisory/operator-session";
+import { matchesOperatorSecret, operatorSessionCookie, requestUsesHttps } from "@/lib/advisory/operator-session";
 import { isSameOriginMutation } from "@/lib/advisory/same-origin";
 import { operatorAccessToken, operatorSessionSecret } from "@/lib/security/operator-guard";
 
@@ -8,5 +8,5 @@ export async function POST(request: Request) {
   const accessToken = operatorAccessToken();
   const sessionSecret = operatorSessionSecret();
   if (!matchesOperatorSecret(body.token, accessToken) || !sessionSecret) return Response.json({ error: "invalid operator token" }, { status: 401 });
-  return Response.json({ unlocked: true, realOrderRouteEnabled: false }, { headers: { "set-cookie": await operatorSessionCookie(sessionSecret, new URL(request.url).protocol === "https:") } });
+  return Response.json({ unlocked: true, realOrderRouteEnabled: false }, { headers: { "set-cookie": await operatorSessionCookie(sessionSecret, requestUsesHttps(request)) } });
 }

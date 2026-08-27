@@ -1,5 +1,10 @@
 const COOKIE_NAME = "streetlight_operator";
 
+export function requestUsesHttps(request: Request) {
+  if (new URL(request.url).protocol === "https:") return true;
+  return request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase() === "https";
+}
+
 function bytesToBase64Url(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);

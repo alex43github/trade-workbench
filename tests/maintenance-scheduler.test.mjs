@@ -4,18 +4,18 @@ import test from "node:test";
 import { getMaintenancePlan, maintenanceRunKey, schedulerStatus, selectDueJobs } from "../lib/workbench/scheduler.ts";
 
 test("scheduler uses closed-candle Asia/Shanghai slots", () => {
-  const daily = getMaintenancePlan(new Date("2026-08-20T00:00:00.000Z")); // 08:00 Shanghai
+  const daily = getMaintenancePlan(new Date("2026-08-20T00:05:00.000Z")); // 08:05 Shanghai
   assert.deepEqual(daily, { fourHour: true, daily: true, timezone: "Asia/Shanghai" });
 
-  const fourHour = getMaintenancePlan(new Date("2026-08-20T04:00:00.000Z")); // 12:00 Shanghai
+  const fourHour = getMaintenancePlan(new Date("2026-08-20T04:05:00.000Z")); // 12:05 Shanghai
   assert.deepEqual(fourHour, { fourHour: true, daily: false, timezone: "Asia/Shanghai" });
 
-  const between = getMaintenancePlan(new Date("2026-08-20T03:59:00.000Z"));
+  const between = getMaintenancePlan(new Date("2026-08-20T04:00:00.000Z"));
   assert.deepEqual(between, { fourHour: false, daily: false, timezone: "Asia/Shanghai" });
 });
 
-test("scheduler emits each due job once per closed-candle slot", () => {
-  const now = new Date("2026-08-20T00:00:00.000Z");
+test("scheduler emits each due job once per five-minute post-close slot", () => {
+  const now = new Date("2026-08-20T00:05:00.000Z");
   const key = maintenanceRunKey(now, "4h");
   assert.deepEqual(selectDueJobs(now, new Set()), ["4h", "daily"]);
   assert.deepEqual(selectDueJobs(now, new Set([key])), ["daily"]);

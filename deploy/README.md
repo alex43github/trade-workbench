@@ -51,8 +51,9 @@ sudo install -m 0644 deploy/{trade-workbench,binance-gateway,trade-workbench-mai
 sudo install -m 0644 deploy/{trade-workbench-maintenance,trade-workbench-paper-strategy,trade-workbench-protection-strategy}.timer /etc/systemd/system/
 sudo install -m 0644 deploy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl daemon-reload
-sudo systemctl enable --now binance-gateway.service trade-workbench.service trade-workbench-maintenance.timer trade-workbench-paper-strategy.timer trade-workbench-protection-strategy.timer caddy.service
-sudo systemctl status binance-gateway.service trade-workbench.service trade-workbench-maintenance.timer trade-workbench-paper-strategy.timer trade-workbench-protection-strategy.timer caddy.service
+sudo systemctl enable --now binance-gateway.service trade-workbench.service trade-workbench-maintenance.timer trade-workbench-protection-strategy.timer caddy.service
+sudo systemctl disable --now trade-workbench-paper-strategy.timer
+sudo systemctl status binance-gateway.service trade-workbench.service trade-workbench-maintenance.timer trade-workbench-protection-strategy.timer caddy.service
 ```
 
 Verify loopback boundaries and public HTTPS:
@@ -106,21 +107,19 @@ never receive the sidecar address. The sidecar does not read the main
 the supplement, stop and disable `tvscreener.service`; no order, strategy,
 position, open-order, or live-mode path depends on it.
 
-## PAPER strategy scheduler
+## Retired PAPER strategy scheduler
 
-`trade-workbench-paper-strategy.timer` invokes the token-protected internal route once a minute through `http://127.0.0.1:3000`. It has no listener of its own. It evaluates only PAPER strategies from public Binance Futures market data, so it keeps refreshing eligible limit entries, simulating fills, applying closed-candle guards, expiring seven-day plans, and issuing configured Bark notifications while every browser is closed. It never sends a real order or uses Binance private credentials.
+PAPER simulation is retired on this deployment. Keep `trade-workbench-paper-strategy.timer` disabled; it is retained only to make an older release reversible and must not be enabled for normal operation. It is independent from real strategy submission and the live protection scheduler.
 
 ## Live protection strategy scheduler
 
 `trade-workbench-protection-strategy.timer` invokes the token-protected internal route once a minute through loopback. It evaluates active MA protection strategies using closed Binance Futures candles and, only after the server-side live switches and source-quantity reconciliation pass, submits source-bound reduce-only market exits through the fixed-IP gateway. Fixed-price protection strategies are submitted at the user confirmation step. Unknown or partial gateway results are recorded for reconciliation and are never retried automatically.
 
-Verify it without exposing the scheduler token:
+Verify the live protection scheduler without exposing the scheduler token:
 
 ```bash
-sudo systemctl list-timers trade-workbench-paper-strategy.timer
-sudo systemctl start trade-workbench-paper-strategy.service
-sudo systemctl status trade-workbench-paper-strategy.service --no-pager
-sudo cat /var/lib/trade-workbench/paper-strategy-scheduler-state.json
+sudo systemctl list-timers trade-workbench-protection-strategy.timer
+sudo systemctl status trade-workbench-protection-strategy.service --no-pager
 ```
 
 For production Bark, set either `BARK_BASE_URL` or `BARK_API_KEY` only in `/etc/trade-workbench/workbench.env` (root-owned, mode `0600`), then restart the timer. 浏览器不保存 Bark 密钥；网页只显示是否已配置，避免将通知凭据写入策略数据库或返回给客户端。

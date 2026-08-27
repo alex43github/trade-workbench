@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { operatorAccessToken, operatorSessionSecret, requireOperator, requireOperatorMutation, requireScheduler } from "../lib/security/operator-guard.ts";
+import { requestUsesHttps } from "../lib/advisory/operator-session.ts";
 
 const production = {
   NODE_ENV: "production",
@@ -67,4 +68,12 @@ test("private mutations accept the public origin forwarded by the HTTPS proxy", 
     },
   }), { ...production, STREETLIGHT_LOCAL_TEST_MODE: "false" });
   assert.equal(response?.status, 401);
+});
+
+test("operator login marks its cookie Secure when Caddy forwards an HTTPS request", () => {
+  const proxied = new Request("http://127.0.0.1:3000/api/advisory/session", {
+    headers: { "x-forwarded-proto": "https", "x-forwarded-host": "terminal.example" },
+  });
+  assert.equal(requestUsesHttps(proxied), true);
+  assert.equal(requestUsesHttps(new Request("http://127.0.0.1:3000/api/advisory/session")), false);
 });

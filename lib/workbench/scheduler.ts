@@ -35,7 +35,8 @@ function shanghaiParts(date: Date) {
 
 export function getMaintenancePlan(date = new Date()) {
   const parts = shanghaiParts(date);
-  const exactSlot = parts.minute === 0;
+  // Run after the candle close and exchange data finalization window.
+  const exactSlot = parts.minute === 5;
   return {
     fourHour: exactSlot && parts.hour % 4 === 0,
     daily: exactSlot && parts.hour === 8,
@@ -85,7 +86,7 @@ export function schedulerStatus(
   return {
     enabled,
     timezone: TIMEZONE,
-    cadence: "4H 每4小时；日线与 MA30/OI 每天08:00",
+    cadence: "4H 每4小时于收盘后 5 分钟；日线与 MA30/OI 每天08:05",
     state,
     lastRunAt,
     lastRunStatus,
