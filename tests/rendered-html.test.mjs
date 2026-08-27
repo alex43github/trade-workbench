@@ -22,24 +22,10 @@ async function request(path = "/", init = {}) {
   );
 }
 
-test("server-renders the AI advisory command center", async () => {
+test("retires the historical advisory dashboard in favor of the radar", async () => {
   const response = await request();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-  const html = await response.text();
-  assert.match(html, /AI 交易驾驶舱/);
-  assert.match(html, /ICT/);
-  assert.match(html, /街哥/);
-  assert.match(html, /静心/);
-  assert.match(html, /bit浪浪/);
-  assert.match(html, /2\/4/);
-  assert.match(html, /仅建议/);
-  assert.match(html, /href="\/consultations"/);
-  assert.match(html, /href="\/arena"/);
-  assert.match(html, /href="\/reviews"/);
-  assert.match(html, /href="\/replay"/);
-  assert.match(html, /href="\/radar"/);
-  assert.doesNotMatch(html, /Your site is taking shape|Building your site|codex-preview/);
+  assert.ok(response.status >= 300 && response.status < 400);
+  assert.equal(response.headers.get("location"), "/radar");
 });
 
 test("keeps the completed market radar at its own route", async () => {
@@ -52,11 +38,11 @@ test("keeps the completed market radar at its own route", async () => {
   assert.match(html, /筹码与链上验真/);
 });
 
-test("renders consultation arena review and replay routes", async () => {
-  for (const [path, expected] of [["/consultations", /专家会诊/], ["/arena", /模拟竞赛/], ["/reviews", /复盘与进化/], ["/replay", /盲测实验室/]]) {
+test("retires historical advisory pages in favor of the radar", async () => {
+  for (const path of ["/consultations", "/arena", "/reviews", "/replay"]) {
     const response = await request(path);
-    assert.equal(response.status, 200);
-    assert.match(await response.text(), expected);
+    assert.ok(response.status >= 300 && response.status < 400);
+    assert.equal(response.headers.get("location"), "/radar");
   }
 });
 
@@ -90,16 +76,6 @@ test("server-renders the live trading terminal", async () => {
   assert.match(terminalSource, /分析/);
 });
 
-test("renders the shared watchlist and symbol search on advisory pages", async () => {
-  const response = await request("/consultations");
-  assert.equal(response.status, 200);
-  const html = await response.text();
-  assert.match(html, /自选币/);
-  assert.match(html, /搜索或添加币种/);
-  assert.match(html, /BTCUSDT/);
-  assert.match(html, /trade\?symbol=/);
-});
-
 test("renders the MA30 and OI expansion radar filter", async () => {
   const response = await request("/radar");
   assert.equal(response.status, 200);
@@ -129,6 +105,12 @@ test("MA30/OI scanner distinguishes transport failures from insufficient market 
   assert.match(radarSource, /ma30Oi\?\.diagnostic/);
   assert.match(radarSource, /扫描诊断/);
   assert.match(radarSource, /setMa30Oi[\s\S]*createRadarDiagnostic/);
+});
+
+test("manual radar scans guide anonymous visitors to sign in instead of auto-starting scans", () => {
+  const radarSource = fs.readFileSync(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(radarSource, /\/signin\?return_to=\/radar/);
+  assert.doesNotMatch(radarSource, /void runMultiTimeframeNow\(multiTimeframeSymbols\)/);
 });
 
 test("radar heading shows the latest scan time alongside a live current clock", () => {

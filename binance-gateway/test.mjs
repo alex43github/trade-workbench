@@ -126,6 +126,16 @@ test("公开合约列表经网关转发", async () => {
   assert.ok([200, 502].includes(res.status));
 });
 
+test("公开 K 线经网关转发", async () => {
+  const res = await fetch(`${BASE}/api/binance/fapi/v1/klines?symbol=BTCUSDT&interval=4h&limit=2`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  const body = await res.json().catch(() => null);
+  assert.ok(body !== null, "网关必须返回可解析 JSON");
+  assert.notEqual(res.status, 404, "K 线必须作为只读公开行情路径转发");
+  assert.ok([200, 502].includes(res.status));
+});
+
 test("只读网关允许 futures data 公共指标，但不扩大交易权限", async () => {
   const res = await fetch(`${BASE}/api/binance/futures/data/openInterestHist?symbol=BTCUSDT&period=5m&limit=1`, {
     headers: { Authorization: `Bearer ${TOKEN}` },

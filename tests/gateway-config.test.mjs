@@ -57,6 +57,23 @@ test("网关允许读取当前币种的成交历史但不扩大交易权限", ()
   assert.match(gatewayServerSource, /path: "\/fapi\/v1\/userTrades", methods: \["GET"\], signed: true, trading: false/);
 });
 
+test("网关允许读取只读 K 线供雷达扫描", () => {
+  assert.match(gatewayServerSource, /path: "\/fapi\/v1\/klines", methods: \["GET"\], signed: false, trading: false/);
+});
+
+test("网关覆盖雷达所需的只读行情端点", () => {
+  for (const path of [
+    "/fapi/v1/ticker/24hr",
+    "/fapi/v1/ticker/price",
+    "/fapi/v1/premiumIndex",
+    "/fapi/v1/openInterest",
+    "/futures/data/takerlongshortRatio",
+    "/futures/data/globalLongShortAccountRatio",
+  ]) {
+    assert.match(gatewayServerSource, new RegExp(`path: "${path.replaceAll("/", "\\/")}"`), `${path} 必须在网关白名单中`);
+  }
+});
+
 test("网关只接受本机回环 HTTP 地址", async () => {
   const token = "0123456789abcdef";
   for (const baseUrl of ["http://203.0.113.10:8788", "https://127.0.0.1:8788", "http://localhost:8788"]) {

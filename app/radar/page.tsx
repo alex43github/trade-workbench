@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTerminalTheme, type ThemeMode } from "../themeStore";
 import FontControl from "../components/FontControl";
 import ManualProgress from "../components/ManualProgress";
@@ -179,6 +180,8 @@ const tvIntervalCopy: Record<string, string> = {
   "1D": "1d",
 };
 
+const operatorLoginWarning = "请先安全登录后再启动扫描；匿名访问只显示已有快照。";
+
 function formatPercent(value: number, digits = 2) {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(digits)}%`;
@@ -336,6 +339,7 @@ function VegasBuckets({ snapshot, bucket, query }: { snapshot: MultiTimeframeSna
 }
 
 export default function Home() {
+  const router = useRouter();
   const [data, setData] = useState<RadarResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -422,7 +426,9 @@ export default function Home() {
       const response = await fetch("/api/radar/multitimeframe", { method: "POST", headers: { "content-type": "application/json", "x-radar-manual": "1" }, body: JSON.stringify({ symbols }) });
       const payload = await response.json().catch(() => ({})) as Partial<MultiTimeframeSnapshot>;
       if (!response.ok) {
-        setMultiTimeframe({ ...createPendingMultiTimeframe(symbols), status: "degraded", warning: payload.warning || "多周期筛选暂时不可用" });
+        const warning = response.status === 401 ? operatorLoginWarning : payload.warning || "多周期筛选暂时不可用";
+        setMultiTimeframe({ ...createPendingMultiTimeframe(symbols), status: "degraded", warning });
+        if (response.status === 401) router.push("/signin?return_to=/radar");
         return;
       }
       setMultiTimeframe(payload as MultiTimeframeSnapshot);
@@ -475,8 +481,9 @@ export default function Home() {
       const response = await fetch("/api/radar/ma30-oi", { method: "POST", headers: { "x-radar-manual": "1" } });
       const payload = await response.json().catch(() => ({})) as Ma30OiResponse;
       if (!response.ok) {
-        const message = payload.warning || "扫描暂时不可用";
+        const message = response.status === 401 ? operatorLoginWarning : payload.warning || "扫描暂时不可用";
         setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        if (response.status === 401) router.push("/signin?return_to=/radar");
         return;
       }
       setMa30Oi(payload);
@@ -530,8 +537,9 @@ export default function Home() {
       const response = await fetch("/api/radar/reversal", { method: "POST", headers: { "x-radar-manual": "1" } });
       const payload = await response.json().catch(() => ({})) as ReversalResponse & { error?: string };
       if (!response.ok) {
-        const message = payload.warning || payload.error || "破底翻筛选暂时不可用";
+        const message = response.status === 401 ? operatorLoginWarning : payload.warning || payload.error || "破底翻筛选暂时不可用";
         setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        if (response.status === 401) router.push("/signin?return_to=/radar");
         return;
       }
       setReversal(payload);
@@ -588,7 +596,10 @@ export default function Home() {
       void loadMultiTimeframe().then((snapshot) => {
         const savedFingerprint = uniqueSymbols(snapshot?.symbols ?? []).join(",");
         if (savedFingerprint !== multiTimeframeFingerprint || !isMultiTimeframeSnapshotFresh(snapshot)) {
-          void runMultiTimeframeNow(multiTimeframeSymbols);
+          setMultiTimeframe((current) => ({
+            ...(current ?? createPendingMultiTimeframe(multiTimeframeSymbols)),
+            warning: "暂无匹配的最新快照；请安全登录后手动点击“立即筛选”。",
+          }));
         } else if (snapshot?.status === "pending") {
           setMultiTimeframeScanning(true);
           void pollMultiTimeframeScan().finally(() => setMultiTimeframeScanning(false));

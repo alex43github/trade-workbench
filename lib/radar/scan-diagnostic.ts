@@ -22,7 +22,7 @@ export function createRadarDiagnostic(status: number | null, message: string, oc
               ? "UPSTREAM_UNAVAILABLE"
               : `HTTP_${status}`;
   const checks = code === "AUTH_REQUIRED"
-    ? ["请通过 http://localhost:3003 进行本机测试，或确认 STREETLIGHT_LOCAL_TEST_MODE 没有设为 false。", "如果你正在通过 VPS 公网域名访问，管理员认证仍会保留，这是预期的安全保护。"]
+    ? ["请先通过 /signin 安全登录管理员账户。", "登录后返回雷达页点击“立即扫描/筛选”；匿名访问只读取已有快照，不会启动扫描。"]
     : code === "SCAN_IN_PROGRESS"
       ? ["已有扫描正在运行；等待其结束后再重试。", "不要连续重复点击，以免增加 Binance 数据源请求压力。"]
       : code === "RATE_LIMITED"

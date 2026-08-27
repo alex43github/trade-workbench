@@ -17,6 +17,15 @@ test("classifies upstream rate limits with a retry action", () => {
   assert.match(diagnostic.checks.join(" "), /等待/);
 });
 
+test("tells anonymous VPS visitors to sign in before starting a scan", () => {
+  const diagnostic = createRadarDiagnostic(401, "operator authentication required", new Date("2026-08-27T14:31:10.000Z"));
+
+  assert.equal(diagnostic.code, "AUTH_REQUIRED");
+  assert.match(diagnostic.checks.join(" "), /\/signin/);
+  assert.match(diagnostic.checks.join(" "), /匿名访问/);
+  assert.doesNotMatch(diagnostic.checks.join(" "), /localhost:3003/);
+});
+
 test("preserves structured Binance transport details in a scan diagnosis", () => {
   const error = Object.assign(new Error("Binance 公共行情不可达"), { status: 503, hint: "请检查服务器出口" });
   const diagnostic = createRadarDiagnosticFromError(error, "扫描失败", new Date("2026-08-27T14:31:10.000Z"));

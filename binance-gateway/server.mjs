@@ -24,11 +24,19 @@ const RATE_MAX = 120;
 const BINANCE_ROUTE_POLICY = [
   { path: "/fapi/v1/time", methods: ["GET"], signed: false, trading: false },
   { path: "/fapi/v1/exchangeInfo", methods: ["GET"], signed: false, trading: false },
+  { path: "/fapi/v1/klines", methods: ["GET"], signed: false, trading: false },
+  { path: "/fapi/v1/ticker/24hr", methods: ["GET"], signed: false, trading: false },
+  { path: "/fapi/v1/ticker/price", methods: ["GET"], signed: false, trading: false },
+  { path: "/fapi/v1/premiumIndex", methods: ["GET"], signed: false, trading: false },
+  { path: "/fapi/v1/openInterest", methods: ["GET"], signed: false, trading: false },
   { path: "/fapi/v3/account", methods: ["GET"], signed: true, trading: false },
   { path: "/fapi/v2/positionRisk", methods: ["GET"], signed: true, trading: false },
   { path: "/fapi/v1/openOrders", methods: ["GET"], signed: true, trading: false },
+  { path: "/fapi/v1/allOrders", methods: ["GET"], signed: true, trading: false },
   { path: "/fapi/v1/userTrades", methods: ["GET"], signed: true, trading: false },
   { path: "/futures/data/openInterestHist", methods: ["GET"], signed: false, trading: false },
+  { path: "/futures/data/takerlongshortRatio", methods: ["GET"], signed: false, trading: false },
+  { path: "/futures/data/globalLongShortAccountRatio", methods: ["GET"], signed: false, trading: false },
   // 实盘执行器只需要创建和取消订单；绝不允许调杠杆、保证金模式或账户级设置。
   { path: "/fapi/v1/order", methods: ["GET", "POST", "DELETE"], signed: true, trading: true },
 ];
