@@ -7,21 +7,49 @@ test("Vegas alignment requires strict MA30 and EMA ordering", async () => {
   assert.equal(passesVegasAlignment({ close: 10, ma30: 9, ema144: 8, ema169: 8, ema576: 6, ema676: 5 }), false);
 });
 
-test("insufficient history never produces a Vegas match", async () => {
+test("long Vegas history shortage falls back to short Vegas and stays usable", async () => {
   const { buildMultiTimeframeSnapshot } = await import("../lib/radar/multitimeframe.ts");
   const result = await buildMultiTimeframeSnapshot(["BTCUSDT"], new Date("2026-08-27T00:00:00Z"), {
     fetchClosedBars: async () => Array.from({ length: 675 }, (_, index) => ({
       openTime: index * 3_600_000,
       closeTime: index * 3_600_000 + 3_599_000,
-      open: 1,
-      high: 1,
-      low: 1,
-      close: 1,
+      open: index + 1,
+      high: index + 1,
+      low: index + 1,
+      close: index + 1,
       volume: 1,
     })),
   });
-  assert.deepEqual(result.vegas["1h"], []);
- assert.match(result.warning ?? "", /676/);
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.vegas["1h"], ["BTCUSDT"]);
+  assert.deepEqual(result.vegasBearish["1h"], []);
+  assert.match(result.warning ?? "", /长期.*不足.*676.*忽略/);
+});
+
+test("short Vegas fallback also keeps bearish candidates discrete", async () => {
+  const { buildMultiTimeframeSnapshot } = await import("../lib/radar/multitimeframe.ts");
+  const result = await buildMultiTimeframeSnapshot(["ETHUSDT"], new Date("2026-08-27T00:00:00Z"), {
+    fetchClosedBars: async () => Array.from({ length: 675 }, (_, index) => ({
+      openTime: index * 3_600_000,
+      closeTime: index * 3_600_000 + 3_599_000,
+      open: 1_000 - index,
+      high: 1_000 - index,
+      low: 1_000 - index,
+      close: 1_000 - index,
+      volume: 1,
+    })),
+  });
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.vegas["4h"], []);
+  assert.deepEqual(result.vegasBearish["4h"], ["ETHUSDT"]);
+});
+
+test("Vegas alignment classifies full and short-only directions", async () => {
+  const { classifyVegasAlignment } = await import("../lib/radar/vegas.ts");
+  assert.deepEqual(classifyVegasAlignment({ close: 10, ma30: 9, ema144: 8, ema169: 7, ema576: 6, ema676: 5 }), { direction: "BULLISH", mode: "FULL" });
+  assert.deepEqual(classifyVegasAlignment({ close: 1, ma30: 2, ema144: 3, ema169: 4, ema576: 5, ema676: 6 }), { direction: "BEARISH", mode: "FULL" });
+  assert.deepEqual(classifyVegasAlignment({ close: 10, ma30: 9, ema144: 8, ema169: 7, ema576: Number.NaN, ema676: Number.NaN }), { direction: "BULLISH", mode: "SHORT" });
+  assert.deepEqual(classifyVegasAlignment({ close: 1, ma30: 2, ema144: 3, ema169: 4, ema576: Number.NaN, ema676: Number.NaN }), { direction: "BEARISH", mode: "SHORT" });
 });
 
 test("forming candles are excluded before MA30 bucketing", async () => {

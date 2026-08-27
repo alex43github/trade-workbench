@@ -13,4 +13,7 @@ test("all radar windows expose closed-candle MA30 buckets and Vegas ordering", a
   assert.match(source, /1h/);
   assert.match(source, /4h/);
   assert.match(source, /1d/);
+  assert.match(source, /vegasBearish/);
+  assert.match(source, /空头 Vegas/);
+  assert.match(source, /长期 Vegas.*忽略/);
 });

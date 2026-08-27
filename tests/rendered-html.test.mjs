@@ -88,6 +88,7 @@ test("renders the MA30 and OI expansion radar filter", async () => {
   assert.match(radarSource, /Bark：新增候选时提醒/);
   assert.match(radarSource, /破底翻（4H\/日线）/);
   assert.match(radarSource, /08\/20.*08\/19.*08\/18/s);
+  assert.match(radarSource, /部分历史不足/);
   assert.match(radarSource, /全部归档/);
 });
 

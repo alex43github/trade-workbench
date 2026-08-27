@@ -313,7 +313,7 @@ function symbolMatchesQuery(symbol: string, query: string) {
 }
 
 function createPendingMultiTimeframe(symbols: string[]): MultiTimeframeSnapshot {
-  return { status: "pending", scannedAt: new Date().toISOString(), timezone: "Asia/Shanghai", symbols, bySymbol: {}, vegas: { "1h": [], "4h": [], "1d": [] }, scannedSymbols: 0, successfulSymbols: 0, failedSymbols: 0, progress: createScanProgress(symbols.length), warning: "正在读取 Binance Futures 最新已收盘 K 线" };
+  return { status: "pending", scannedAt: new Date().toISOString(), timezone: "Asia/Shanghai", symbols, bySymbol: {}, vegas: { "1h": [], "4h": [], "1d": [] }, vegasBearish: { "1h": [], "4h": [], "1d": [] }, scannedSymbols: 0, successfulSymbols: 0, failedSymbols: 0, progress: createScanProgress(symbols.length), warning: "正在读取 Binance Futures 最新已收盘 K 线" };
 }
 
 function MultiTimeframeBucketBar({ symbols, snapshot, selected, onSelect }: { symbols: string[]; snapshot: MultiTimeframeSnapshot | null; selected: Ma30Bucket; onSelect: (value: Ma30Bucket) => void }) {
@@ -330,11 +330,15 @@ function MultiTimeframeBucketBar({ symbols, snapshot, selected, onSelect }: { sy
 
 function VegasBuckets({ snapshot, bucket, query }: { snapshot: MultiTimeframeSnapshot | null; bucket: Ma30Bucket; query: string }) {
   return <div className="vegas-bucket-grid">
-    {(["1h", "4h", "1d"] as const).map((interval) => {
-      const matches = bucketSymbols(snapshot?.vegas[interval] ?? [], snapshot, bucket).filter((symbol) => symbolMatchesQuery(symbol, query));
+    {(["BULLISH", "BEARISH"] as const).flatMap((direction) => (["1h", "4h", "1d"] as const).map((interval) => {
+      const source = direction === "BULLISH" ? snapshot?.vegas?.[interval] ?? [] : snapshot?.vegasBearish?.[interval] ?? [];
+      const matches = bucketSymbols(source, snapshot, bucket).filter((symbol) => symbolMatchesQuery(symbol, query));
       const label = interval === "1h" ? "1 小时" : interval === "4h" ? "4 小时" : "1 日";
-      return <section className="vegas-bucket-card" key={interval}><div className="vegas-bucket-card-heading"><div><span>VEGAS {interval.toUpperCase()}</span><h4>{label} Vegas 多头排列</h4></div><strong>{matches.length} 个</strong></div><p>{"最新已收盘 K 线严格满足 MA30 > EMA144 > EMA169 > EMA576 > EMA676"}</p>{matches.length ? <div className="vegas-symbol-list">{matches.map((symbol) => <a key={symbol} href={`/trade?symbol=${encodeURIComponent(symbol)}`}>{displayBinanceSymbol(symbol)}<small>打开合约图表</small></a>)}</div> : <div className="vegas-empty">{snapshot?.status === "pending" ? "正在筛选…" : snapshot?.status === "degraded" ? "数据不足，未将缺失指标计入结果" : "本轮没有满足完整排列的币种"}</div>}</section>;
-    })}
+      const directionLabel = direction === "BULLISH" ? "多头" : "空头";
+      const directionHeading = direction === "BULLISH" ? "多头 Vegas" : "空头 Vegas";
+      const ordering = direction === "BULLISH" ? "MA30 > EMA144 > EMA169 > EMA576 > EMA676" : "MA30 < EMA144 < EMA169 < EMA576 < EMA676";
+      return <section className="vegas-bucket-card" key={`${direction}-${interval}`}><div className="vegas-bucket-card-heading"><div><span>VEGAS {interval.toUpperCase()}</span><h4>{directionHeading} · {label}排列</h4></div><strong>{matches.length} 个</strong></div><p>最新已收盘 K 线满足 {ordering}；长期 Vegas 历史不足 676 根时忽略长期通道。</p>{matches.length ? <div className="vegas-symbol-list">{matches.map((symbol) => <a key={symbol} href={`/trade?symbol=${encodeURIComponent(symbol)}`}>{displayBinanceSymbol(symbol)}<small>打开合约图表</small></a>)}</div> : <div className="vegas-empty">{snapshot?.status === "pending" ? "正在筛选…" : snapshot?.status === "degraded" ? "部分历史不足，缺失指标未计入结果" : `本轮没有满足${directionLabel}排列的币种`}</div>}</section>;
+    }))}
   </div>;
 }
 
@@ -631,7 +635,7 @@ export default function Home() {
     : filter === "reversal"
       ? uniqueSymbols(reversalCandidates.map((candidate) => candidate.symbol))
       : filter === "vegas"
-        ? uniqueSymbols((multiTimeframe?.vegas["1h"] ?? []).concat(multiTimeframe?.vegas["4h"] ?? [], multiTimeframe?.vegas["1d"] ?? []))
+        ? uniqueSymbols((multiTimeframe?.vegas["1h"] ?? []).concat(multiTimeframe?.vegas["4h"] ?? [], multiTimeframe?.vegas["1d"] ?? [], multiTimeframe?.vegasBearish?.["1h"] ?? [], multiTimeframe?.vegasBearish?.["4h"] ?? [], multiTimeframe?.vegasBearish?.["1d"] ?? []))
         : baseRadarCoins.map((coin) => coin.symbol);
   const bucketedReversalCandidates = reversalCandidates.filter((candidate) => bucketSymbols([candidate.symbol], multiTimeframe, ma30Bucket).length > 0 && symbolMatchesQuery(candidate.symbol, normalizedQuery));
   const bucketedMa30OiCandidates = (ma30Oi?.candidates ?? []).filter((candidate) => bucketSymbols([candidate.symbol], multiTimeframe, ma30Bucket).length > 0 && symbolMatchesQuery(candidate.symbol, normalizedQuery));
@@ -737,7 +741,7 @@ export default function Home() {
               <div className="reversal-archive"><div className="reversal-direction-title"><h4>全部归档 · 13 根 K 线学习结果</h4><span>按信号时间倒序</span></div>{reversal?.archives.length ? <table className="reversal-table archive-table"><thead><tr><th>方向 / 币种</th><th>周期</th><th>信号评分</th><th>收回位置</th><th>13 根后最高有利幅度</th></tr></thead><tbody>{reversal.archives.map((row) => <tr key={row.id}><td><span className={row.direction === "LONG" ? "positive" : "negative"}>{row.direction === "LONG" ? "多" : "空"}</span> <a href={`/trade?symbol=${encodeURIComponent(row.symbol)}`}>{displayBinanceSymbol(row.symbol)}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{row.interval === "1d" ? "日线" : "4H"}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{row.outcome?.complete && row.outcome.maxFavorablePct !== null ? `${row.outcome.maxFavorablePct.toFixed(2)}%` : `观察中 · ${row.outcome?.barsObserved ?? 0}/13`}</td></tr>)}</tbody></table> : <div className="reversal-empty">扫描完成后，所有命中的多空形态都会在这里归档。</div>}</div>
             </div>
          ) : filter === "vegas" ? (
-            <div className="vegas-panel"><div className="vegas-heading"><div><p className="section-kicker">VEGAS CHANNEL SCREEN</p><h3>Vegas 多周期强势归档</h3><p>只使用最新已收盘 K 线；每个周期严格满足 MA30 &gt; EMA144 &gt; EMA169 &gt; EMA576 &gt; EMA676。结果仅作研究筛选，不连接交易执行。</p></div><div className="vegas-actions"><span className={`reversal-status ${multiTimeframe?.status === "ready" && !isMultiTimeframeSnapshotFresh(multiTimeframe) ? "degraded" : multiTimeframe?.status ?? "pending"}`}>{multiTimeframeScanning ? "筛选中" : multiTimeframe?.status === "ready" && !isMultiTimeframeSnapshotFresh(multiTimeframe) ? "快照已过期" : multiTimeframe?.status === "ready" ? "已归档" : multiTimeframe?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runMultiTimeframeNow()} disabled={multiTimeframeScanning || !multiTimeframeSymbols.length}>{multiTimeframeScanning ? "正在筛选…" : "立即筛选"}</button></div></div>
+            <div className="vegas-panel"><div className="vegas-heading"><div><p className="section-kicker">VEGAS CHANNEL SCREEN</p><h3>Vegas 多周期强势归档</h3><p>只使用最新已收盘 K 线；长期通道可用时严格满足 MA30 &gt; EMA144 &gt; EMA169 &gt; EMA576 &gt; EMA676，空头为相反顺序。长期 Vegas 历史不足 676 根时忽略长期通道，按 MA30 + 短期 Vegas 分别归档多空结果。结果仅作研究筛选，不连接交易执行。</p></div><div className="vegas-actions"><span className={`reversal-status ${multiTimeframe?.status === "ready" && !isMultiTimeframeSnapshotFresh(multiTimeframe) ? "degraded" : multiTimeframe?.status ?? "pending"}`}>{multiTimeframeScanning ? "筛选中" : multiTimeframe?.status === "ready" && !isMultiTimeframeSnapshotFresh(multiTimeframe) ? "快照已过期" : multiTimeframe?.status === "ready" ? "已归档" : multiTimeframe?.status === "degraded" && multiTimeframe.warning?.includes("历史不足") ? "部分历史不足" : multiTimeframe?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runMultiTimeframeNow()} disabled={multiTimeframeScanning || !multiTimeframeSymbols.length}>{multiTimeframeScanning ? "正在筛选…" : "立即筛选"}</button></div></div>
             <div className="vegas-meta"><span>扫描：{multiTimeframe?.scannedAt ? formatRadarTime(multiTimeframe.scannedAt) : "尚未执行"}</span><span>候选：{baseWindowSymbols.length} 个</span>{multiTimeframe?.progress && <span>已扫描：{multiTimeframe.progress.scannedSymbols}/{multiTimeframe.progress.totalSymbols} · 命中：{multiTimeframe.progress.matchedSymbols} · 剩余：{multiTimeframe.progress.remainingSymbols}</span>}<span>完整读取：{multiTimeframe?.successfulSymbols ?? 0}/{multiTimeframe?.scannedSymbols ?? 0}</span></div>
             {multiTimeframe?.warning && <p className="reversal-scan-warning" role="status">{multiTimeframe.warning}</p>}
             <VegasBuckets snapshot={multiTimeframe} bucket={ma30Bucket} query={normalizedQuery} />

@@ -22,6 +22,7 @@ function pendingSnapshot(symbols: string[], scannedAt = new Date().toISOString()
     symbols,
     bySymbol: {},
     vegas: { "1h": [], "4h": [], "1d": [] },
+    vegasBearish: { "1h": [], "4h": [], "1d": [] },
     scannedSymbols: progress.scannedSymbols,
     successfulSymbols: 0,
     failedSymbols: 0,

@@ -13,11 +13,23 @@ export type VegasValues = {
   ema676: number;
 };
 
+export type VegasAlignmentDirection = "BULLISH" | "BEARISH";
+export type VegasAlignmentMode = "FULL" | "SHORT" | "NONE";
+export type VegasAlignment = {
+  direction: VegasAlignmentDirection | null;
+  mode: VegasAlignmentMode;
+};
+
 export type TimeframeIndicatorSnapshot = VegasValues & {
   closedTime: number;
   bars: number;
   aboveMa30: boolean;
   vegasAligned: boolean;
+  bearishAligned: boolean;
+  alignment: VegasAlignmentDirection | null;
+  alignmentMode: VegasAlignmentMode;
+  shortTermAvailable: boolean;
+  longTermAvailable: boolean;
 };
 
 function isFiniteSeries(values: readonly number[]) {
@@ -59,31 +71,58 @@ export function calculateVegasValues(closes: readonly number[]): VegasValues | n
 }
 
 export function passesVegasAlignment(values: VegasValues | null | undefined) {
-  if (!values || Object.values(values).some((value) => !Number.isFinite(value))) return false;
-  return values.ma30 > values.ema144
-    && values.ema144 > values.ema169
-    && values.ema169 > values.ema576
-    && values.ema576 > values.ema676;
+  const alignment = classifyVegasAlignment(values);
+  return alignment.direction === "BULLISH" && alignment.mode === "FULL";
+}
+
+export function passesBearishVegasAlignment(values: VegasValues | null | undefined) {
+  const alignment = classifyVegasAlignment(values);
+  return alignment.direction === "BEARISH" && alignment.mode === "FULL";
+}
+
+export function classifyVegasAlignment(values: VegasValues | null | undefined): VegasAlignment {
+  if (!values || !Number.isFinite(values.close)) return { direction: null, mode: "NONE" };
+  const hasShort = [values.ma30, values.ema144, values.ema169].every(Number.isFinite);
+  const hasLong = [values.ema576, values.ema676].every(Number.isFinite);
+  if (!hasShort) return { direction: null, mode: "NONE" };
+
+  const bullishShort = values.ma30 > values.ema144 && values.ema144 > values.ema169;
+  const bearishShort = values.ma30 < values.ema144 && values.ema144 < values.ema169;
+  if (!hasLong) {
+    return { direction: bullishShort ? "BULLISH" : bearishShort ? "BEARISH" : null, mode: "SHORT" };
+  }
+
+  const bullishFull = bullishShort && values.ema169 > values.ema576 && values.ema576 > values.ema676;
+  const bearishFull = bearishShort && values.ema169 < values.ema576 && values.ema576 < values.ema676;
+  return { direction: bullishFull ? "BULLISH" : bearishFull ? "BEARISH" : null, mode: "FULL" };
 }
 
 export function buildTimeframeIndicatorSnapshot(
   closes: readonly number[],
   closedTime: number,
 ): TimeframeIndicatorSnapshot | null {
-  const values = calculateVegasValues(closes);
   const ma30 = calculateSma(closes, 30);
   const close = closes.at(-1);
   if (close === undefined || ma30 === null || !Number.isFinite(close) || !Number.isFinite(closedTime)) return null;
-  return {
+  const indicatorValues = {
     close,
     ma30,
-    ema144: values?.ema144 ?? Number.NaN,
-    ema169: values?.ema169 ?? Number.NaN,
-    ema576: values?.ema576 ?? Number.NaN,
-    ema676: values?.ema676 ?? Number.NaN,
+    ema144: calculateEmaValue(closes, 144) ?? Number.NaN,
+    ema169: calculateEmaValue(closes, 169) ?? Number.NaN,
+    ema576: calculateEmaValue(closes, 576) ?? Number.NaN,
+    ema676: calculateEmaValue(closes, 676) ?? Number.NaN,
+  };
+  const alignment = classifyVegasAlignment(indicatorValues);
+  return {
+    ...indicatorValues,
     closedTime,
     bars: closes.length,
     aboveMa30: close > ma30,
-    vegasAligned: passesVegasAlignment(values),
+    vegasAligned: alignment.direction === "BULLISH" && alignment.mode === "FULL",
+    bearishAligned: alignment.direction === "BEARISH" && alignment.mode === "FULL",
+    alignment: alignment.direction,
+    alignmentMode: alignment.mode,
+    shortTermAvailable: alignment.mode !== "NONE",
+    longTermAvailable: alignment.mode === "FULL",
   };
 }
