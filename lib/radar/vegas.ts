@@ -36,8 +36,9 @@ export type TimeframeIndicatorSnapshot = VegasValues & {
 
 export function matchesMa30Direction(indicator: Pick<TimeframeIndicatorSnapshot, "close" | "ma30" | "aboveMa30" | "belowMa30"> | null | undefined, direction: Ma30Direction) {
   if (!indicator) return false;
-  const above = indicator.aboveMa30 === true || indicator.close > indicator.ma30;
-  const below = indicator.belowMa30 === true || indicator.close < indicator.ma30;
+  const hasFiniteComparison = Number.isFinite(indicator.close) && Number.isFinite(indicator.ma30);
+  const above = hasFiniteComparison ? indicator.close > indicator.ma30 : indicator.aboveMa30 === true;
+  const below = hasFiniteComparison ? indicator.close < indicator.ma30 : indicator.belowMa30 === true;
   return direction === "BULLISH" ? above : direction === "BEARISH" ? below : above || below;
 }
 

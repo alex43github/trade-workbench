@@ -72,6 +72,8 @@ test("MA30 snapshots expose a directional comparison for bearish candles", async
   assert.equal(snapshot?.belowMa30, true);
   assert.equal(matchesMa30Direction(snapshot, "BEARISH"), true);
   assert.equal(matchesMa30Direction(snapshot, "BULLISH"), false);
+  assert.equal(matchesMa30Direction({ close: 90, ma30: 100, aboveMa30: true, belowMa30: false }, "BEARISH"), true);
+  assert.equal(matchesMa30Direction({ close: 90, ma30: 100, aboveMa30: true, belowMa30: false }, "BULLISH"), false);
 });
 
 test("reports candidate scan progress", async () => {
