@@ -239,6 +239,45 @@ def test_interval_technical_fields_do_not_reuse_unqualified_values():
     assert any("60/RSI_14" in warning for warning in row["warnings"])
 
 
+def test_daily_interval_uses_default_daily_screener_fields():
+    request = validate_request(
+        request_payload(
+            intervals=["1D"],
+            fields=["PRICE", "RSI_14", "SMA_30", "EMA_30", "ATR_14"],
+        )
+    )
+    frame = FakeFrame(
+        [
+            {
+                "Symbol": "BINANCE:HEMIUSDT",
+                "Exchange": "BINANCE",
+                "Name": "HEMIUSDT",
+                "close": 0.01047,
+                "close|1D": None,
+                "RSI": 67.9,
+                "RSI|1D": None,
+                "SMA30": 0.00652,
+                "SMA30|1D": None,
+                "EMA30": 0.00714,
+                "EMA30|1D": None,
+                "ATR": 0.00168,
+                "ATR|1D": None,
+            }
+        ]
+    )
+
+    rows, _warnings = normalize_frame(frame, request)
+
+    assert rows[0]["intervalValues"]["1D"] == {
+        "PRICE": 0.01047,
+        "RSI_14": 67.9,
+        "SMA_30": 0.00652,
+        "EMA_30": 0.00714,
+        "ATR_14": 0.00168,
+    }
+    assert not any(warning.startswith("1D/") for warning in rows[0]["warnings"])
+
+
 def test_unmapped_symbol_is_preserved_in_the_normalized_rows():
     request = validate_request(request_payload(symbols=["KRAKEN:BTCUSD"], fields=["PRICE"]))
     frame = FakeFrame(

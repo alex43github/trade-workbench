@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { getGatewayConfig, gatewayJson } from "../binance-gateway.ts";
 import type { ProtectionPosition, ProtectionSide } from "./protection-contracts.ts";
+import { manualSourceOrderId } from "./order-source.ts";
 
 type PositionRiskRecord = {
   symbol?: string;
@@ -45,15 +46,14 @@ function positionSide(item: PositionRiskRecord): ProtectionSide | null {
   return amount > 0 ? "LONG" : "SHORT";
 }
 
-function isAlexEntry(order: AccountOrderRecord, side: ProtectionSide) {
-  const clientOrderId = String(order.clientOrderId ?? "");
+function manualEntrySourceId(order: AccountOrderRecord, side: ProtectionSide) {
+  const sourceOrderId = manualSourceOrderId(order);
   const executedQty = number(order.executedQty);
   const expectedSide = side === "LONG" ? "BUY" : "SELL";
-  return /^alex/i.test(clientOrderId)
-    && executedQty > 0
-    && order.reduceOnly !== true
-    && String(order.side ?? "").toUpperCase() === expectedSide
-    && (!order.positionSide || order.positionSide === "BOTH" || order.positionSide === side);
+  if (!sourceOrderId || executedQty <= 0 || order.reduceOnly === true
+    || String(order.side ?? "").toUpperCase() !== expectedSide
+    || (order.positionSide && order.positionSide !== "BOTH" && order.positionSide !== side)) return null;
+  return sourceOrderId;
 }
 
 function candidateId() {
@@ -78,16 +78,20 @@ export async function getAlexManualPositions(dependencies: AlexPositionsDependen
       const side = positionSide(item);
       if (!side) return [];
       const symbol = String(item.symbol ?? "").toUpperCase();
-      return accountOrders.filter((order) => isAlexEntry(order, side)).map((order) => ({
-        candidateId: candidateId(),
-        symbol,
-        side,
-        quantity: number(order.executedQty),
-        entryPrice: number(item.entryPrice),
-        markPrice: number(item.markPrice),
-        leverage: number(item.leverage) || 1,
-        sourceOrderIds: [String(order.clientOrderId)],
-      }));
+      return accountOrders.flatMap((order) => {
+        const sourceOrderId = manualEntrySourceId(order, side);
+        if (!sourceOrderId) return [];
+        return [{
+          candidateId: candidateId(),
+          symbol,
+          side,
+          quantity: number(order.executedQty),
+          entryPrice: number(item.entryPrice),
+          markPrice: number(item.markPrice),
+          leverage: number(item.leverage) || 1,
+          sourceOrderIds: [sourceOrderId],
+        }];
+      });
     });
     return { connected: true, reason: null, positions };
   } catch {

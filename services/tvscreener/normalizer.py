@@ -250,6 +250,16 @@ def _normalize_field_value(
     aliases = _value_aliases(field, interval, allow_static_fallback)
     value = _read_value(frame, row, aliases)
 
+    # tvscreener 0.4.0 emits a qualified ``|1D`` column for daily requests,
+    # but TradingView currently leaves that column null. The unqualified
+    # CryptoScreener field is the package's default daily timeframe (the same
+    # value shown as the plain field in the raw response), so use it only for
+    # the explicit daily protocol interval. Intraday intervals remain strict.
+    if interval == "1D" and allow_static_fallback and (value is _MISSING or value is None or _is_non_finite(value)):
+        fallback = _read_value(frame, row, FIELD_COLUMN_ALIASES[field])
+        if fallback is not _MISSING:
+            value = fallback
+
     if value is _MISSING and interval is not None and allow_static_fallback:
         value = _read_value(frame, row, FIELD_COLUMN_ALIASES[field])
 
@@ -352,7 +362,7 @@ def _normalize_row(frame: Any, index: Any, row_value: Any, request: Mapping[str,
                 field,
                 warnings,
                 interval=interval,
-                allow_static_fallback=field in STATIC_INTERVAL_FIELDS,
+                allow_static_fallback=interval == "1D" or field in STATIC_INTERVAL_FIELDS,
             )
 
     return {

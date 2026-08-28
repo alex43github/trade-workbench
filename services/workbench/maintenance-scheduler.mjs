@@ -1,24 +1,10 @@
 #!/usr/bin/env node
 
-const timezone = "Asia/Shanghai";
+import { dueJobs, parts } from "./maintenance-schedule.mjs";
+
 const baseUrl = process.env.WORKBENCH_BASE_URL?.replace(/\/$/, "");
 const token = process.env.MAINTENANCE_JOB_TOKEN;
 const stateFile = process.env.WORKBENCH_STATE_FILE || "/var/lib/trade-workbench/maintenance-state.json";
-
-function parts(date = new Date()) {
-  const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-  const values = Object.fromEntries(formatter.formatToParts(date).filter((item) => item.type !== "literal").map((item) => [item.type, item.value]));
-  return { year: Number(values.year), month: Number(values.month), day: Number(values.day), hour: Number(values.hour), minute: Number(values.minute) };
-}
-
-function dueJobs(date = new Date()) {
-  const current = parts(date);
-  if (current.minute !== 0) return [];
-  const jobs = [];
-  if (current.hour % 4 === 0) jobs.push("4h");
-  if (current.hour === 8) jobs.push("daily");
-  return jobs;
-}
 
 function key(date, job) {
   const current = parts(date);

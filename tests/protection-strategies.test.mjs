@@ -26,10 +26,10 @@ const filters = [
 
 const source = {
   candidateId: "a-source-1", symbol: "BTCUSDT", side: "LONG", quantity: 2,
-  entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["alex0001"],
+  entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["manual-btc-1"],
 };
 
-test("creates two source-bound ROI take-profit orders with alex ids", async () => {
+test("creates two source-bound ROI take-profit orders for a Binance manual source", async () => {
   const { createProtectionStrategy } = await strategies();
   const placed = [];
   const result = await createProtectionStrategy({
@@ -53,7 +53,7 @@ test("creates a fixed support stop for only the selected source quantity", async
   const { createProtectionStrategy } = await strategies();
   const placed = [];
   const result = await createProtectionStrategy({
-    env, origin: "ALEX", source: { ...source, symbol: "ETHUSDT", sourceOrderIds: ["alex0002"] }, strategyType: "LEVEL_SL", fixedPrice: 90, idempotencyKey: "alex-level-2",
+    env, origin: "ALEX", source: { ...source, symbol: "ETHUSDT", sourceOrderIds: ["manual-eth-2"] }, strategyType: "LEVEL_SL", fixedPrice: 90, idempotencyKey: "alex-level-2",
   }, {
     readPosition: async () => ({ symbol: "ETHUSDT", positionAmt: "2", entryPrice: "100", markPrice: "100" }),
     readExchangeInfo: async () => ({ symbols: [{ symbol: "ETHUSDT", filters }] }),
@@ -70,7 +70,7 @@ test("creates a fixed support stop for only the selected source quantity", async
 
 test("does not create a second active strategy for the same source and type", async () => {
   const { createProtectionStrategy } = await strategies();
-  const input = { env, origin: "ALEX", source: { ...source, symbol: "SOLUSDT", sourceOrderIds: ["alex0003"] }, strategyType: "LEVEL_SL", fixedPrice: 90, idempotencyKey: "alex-level-3" };
+  const input = { env, origin: "ALEX", source: { ...source, symbol: "SOLUSDT", sourceOrderIds: ["manual-sol-3"] }, strategyType: "LEVEL_SL", fixedPrice: 90, idempotencyKey: "alex-level-3" };
   const dependencies = {
     readPosition: async () => ({ symbol: "SOLUSDT", positionAmt: "2", entryPrice: "100", markPrice: "100" }),
     readExchangeInfo: async () => ({ symbols: [{ symbol: "SOLUSDT", filters }] }),
@@ -85,7 +85,7 @@ test("queries a timed-out protective order by client id before recording unknown
   let placeCount = 0;
   let findCount = 0;
   const result = await createProtectionStrategy({
-    env, origin: "ALEX", source: { ...source, symbol: "DOGEUSDT", sourceOrderIds: ["alex0004"] }, strategyType: "FIXED_TP", fixedPrice: 110, idempotencyKey: "alex-fixed-4",
+    env, origin: "ALEX", source: { ...source, symbol: "DOGEUSDT", sourceOrderIds: ["manual-doge-4"] }, strategyType: "FIXED_TP", fixedPrice: 110, idempotencyKey: "alex-fixed-4",
   }, {
     readPosition: async () => ({ symbol: "DOGEUSDT", positionAmt: "2", entryPrice: "100", markPrice: "100" }),
     readExchangeInfo: async () => ({ symbols: [{ symbol: "DOGEUSDT", filters }] }),
@@ -96,4 +96,14 @@ test("queries a timed-out protective order by client id before recording unknown
   assert.equal(findCount, 1);
   assert.equal(result.strategy.orders[0].status, "SUBMITTED");
   assert.equal(result.strategy.orders[0].exchangeOrderId, "404");
+});
+
+test("rejects application-generated source order ids for manual protection", async () => {
+  const { createProtectionStrategy } = await strategies();
+  for (const sourceOrderId of ["alex0001", "tele0001", "web0001", "tw0001"]) {
+    await assert.rejects(() => createProtectionStrategy({
+      env, origin: "ALEX", source: { ...source, sourceOrderIds: [sourceOrderId] }, strategyType: "LEVEL_SL", fixedPrice: 90,
+      idempotencyKey: `manual-source-reject-${sourceOrderId}`,
+    }), /保护策略来源订单不正确/);
+  }
 });

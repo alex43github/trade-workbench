@@ -35,7 +35,7 @@ async function createMaStrategy(symbol, sourceOrderId) {
 
 test("closed-candle MA stop exits source quantity in two isolated stages", async () => {
   const { runProtectionStrategyTick } = await executor();
-  const strategy = await createMaStrategy("BTCUSDT", "alex-exec-1");
+  const strategy = await createMaStrategy("BTCUSDT", "manual-exec-1");
   let amount = 2;
   let candle = { id: "candle-1", close: 98, ma: 100, atr: 1, timeframe: "1h" };
   const placed = [];
@@ -57,7 +57,7 @@ test("closed-candle MA stop exits source quantity in two isolated stages", async
 
 test("safe closed candle resets invalid count and repeated candle does not submit again", async () => {
   const { runProtectionStrategyTick } = await executor();
-  const strategy = await createMaStrategy("ETHUSDT", "alex-exec-2");
+  const strategy = await createMaStrategy("ETHUSDT", "manual-exec-2");
   let candle = { id: "safe-1", close: 101, ma: 100, atr: 1, timeframe: "1h" };
   let placeCount = 0;
   const dependencies = {

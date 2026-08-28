@@ -14,7 +14,6 @@ import { useFontScale } from "../uiPreferences";
 import { fetchBrowserBinanceKlines } from "../binancePublicBrowser";
 import type { PositionAnalysisResponse, PositionContext } from "@/lib/trade/position-analysis";
 import type { ExpertId } from "@/lib/advisory/types";
-import type { ConditionalOrder } from "@/lib/trade/conditional-orders";
 import { resolveRealTradingStatus } from "@/lib/trade/live-mode";
 import { LIVE_CLOSE_PERCENT_OPTIONS, type LiveClosePercent } from "@/lib/trade/live-position-close";
 import { displayBinanceSymbol, normalizeBinanceFuturesSymbol, quoteAssetForSymbol } from "@/lib/trade/symbols";
@@ -97,7 +96,6 @@ function formatPrice(value: number) {
 }
 function formatMoney(value: number) { return Number.isFinite(value) ? value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 function orderDisplayPrice(order: AccountOrder) { return order.stopPrice > 0 ? order.stopPrice : order.price; }
-function formatTriggerDistance(value: number | null) { return value === null || !Number.isFinite(value) ? "距离待确认" : `距离触发 ${value >= 0 ? "+" : ""}${value.toFixed(2)}%`; }
 
 export default function TradingTerminal({ initialSymbol }: { initialSymbol: string }) {
   const [symbol, setSymbol] = useState(initialSymbol);
@@ -108,11 +106,8 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const [updatedAt, setUpdatedAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<AccountResponse>(emptyAccount);
-  const [conditionalRevision, setConditionalRevision] = useState(0);
-  const [waitingOrders, setWaitingOrders] = useState<ConditionalOrder[]>([]);
   const [aiStrongCoins, setAiStrongCoins] = useState<AiStrongCoin[]>([]);
   const [selectedAiSymbol, setSelectedAiSymbol] = useState("");
-  const [selectedWaitingOrderId, setSelectedWaitingOrderId] = useState("");
   const [equityPoints, setEquityPoints] = useState<EquityPoint[]>(() => {
     if (typeof window === "undefined") return [];
     try { return (JSON.parse(window.localStorage.getItem("streetlight-equity-v1") || "[]") as EquityPoint[]).slice(-1000); }
@@ -239,16 +234,12 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      fetch("/api/radar", { cache: "no-store" }).then((response) => response.json()) as Promise<{ coins?: AiStrongCoin[] }>,
-      fetch("/api/trade/conditional-orders", { cache: "no-store" }).then((response) => response.json()) as Promise<{ orders?: ConditionalOrder[] }>,
-    ]).then(([radarPayload, waitingPayload]) => {
+    fetch("/api/radar", { cache: "no-store" }).then((response) => response.json()).then((radarPayload: { coins?: AiStrongCoin[] }) => {
       if (!active) return;
       setAiStrongCoins((radarPayload.coins ?? []).filter((coin) => coin.participation === "SQUEEZE" || coin.participation === "A").sort((left, right) => right.score - left.score));
-      setWaitingOrders(waitingPayload.orders ?? []);
-    }).catch(() => { if (active) { setAiStrongCoins([]); setWaitingOrders([]); } });
+    }).catch(() => { if (active) setAiStrongCoins([]); });
     return () => { active = false; };
-  }, [conditionalRevision]);
+  }, []);
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -373,7 +364,6 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const displayedConnected = account.connected;
   const equityChange = displayedPoints.length > 1 ? displayedEquity - displayedPoints[0].value : 0;
   const selectedAiCoin = aiStrongCoins.find((coin) => coin.symbol === selectedAiSymbol) ?? aiStrongCoins[0] ?? null;
-  const selectedWaitingOrder = waitingOrders.find((order) => order.id === selectedWaitingOrderId) ?? waitingOrders[0] ?? null;
 
   function chooseSymbol(next: string) {
     const normalized = next.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -553,15 +543,11 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
         </section>
 
         <section className={styles.topDecisionStrip} aria-label="顶部策略决策">
-          <div className={styles.topDecisionHeader}><div><small>DECISION LOG</small><h2>策略决策</h2><p>把高参与候选和你已保存的条件等待单放在这里，下面的列表可逐条查看。</p></div><button onClick={runStrategyCheck}>立即检查</button></div>
+          <div className={styles.topDecisionHeader}><div><small>DECISION LOG</small><h2>策略决策</h2><p>把高参与候选放在这里；已提交的实盘策略在右侧策略列表查看。</p></div><button onClick={runStrategyCheck}>立即检查</button></div>
           <div className={styles.topDecisionGrid}>
             <section className={styles.decisionBlock}>
               <div><strong>AI强参与币</strong><small>优先观察强共振、逼空或高参与候选 · {aiStrongCoins.length} 个</small></div>
               {aiStrongCoins.length ? <><select aria-label="选择AI强参与币" value={selectedAiCoin?.symbol ?? ""} onChange={(event) => setSelectedAiSymbol(event.target.value)}>{aiStrongCoins.map((coin) => <option key={coin.symbol} value={coin.symbol}>{coin.displayName || displayBinanceSymbol(coin.symbol)} · {Math.round(coin.score)}/100</option>)}</select>{selectedAiCoin && <article><b><a href={`/trade?symbol=${selectedAiCoin.symbol}`}>{selectedAiCoin.displayName || displayBinanceSymbol(selectedAiCoin.symbol)}</a></b><span>{selectedAiCoin.participation} · {Math.round(selectedAiCoin.score)}/100</span><small>{selectedAiCoin.verdict || "等待进一步确认"}</small></article>}</> : <p>暂无 AI 强参与候选</p>}
-            </section>
-            <section className={styles.decisionBlock}>
-              <div><strong>我的条件等待单</strong><small>已确认并保存在云端，等待条件触发 · {waitingOrders.length} 个</small></div>
-              {waitingOrders.length ? <><select aria-label="选择条件等待单" value={selectedWaitingOrder?.id ?? ""} onChange={(event) => setSelectedWaitingOrderId(event.target.value)}>{waitingOrders.map((order) => <option key={order.id} value={order.id}>{displayBinanceSymbol(order.symbol)} · {order.intent === "OPEN" ? "下单" : "持仓风控"} · {order.timeframe}</option>)}</select>{selectedWaitingOrder && <article><b>{displayBinanceSymbol(selectedWaitingOrder.symbol)} · {selectedWaitingOrder.intent === "OPEN" ? "下单" : "持仓风控"}</b><span>{selectedWaitingOrder.timeframe} · {selectedWaitingOrder.side === "LONG" ? "做多" : "做空"}</span><small>{formatTriggerDistance(selectedWaitingOrder.distancePct)} · {selectedWaitingOrder.orderCount}笔 · 每笔保证金 {formatMoney(selectedWaitingOrder.marginPerOrder)} USDT</small></article>}</> : <p>暂无已确认的条件等待单</p>}
             </section>
           </div>
         </section>
@@ -619,7 +605,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
             <div className={styles.chartFoot}><span>TradingView Lightweight Charts · {marketSource === "browser" ? "Binance浏览器直连行情" : "Binance Futures 行情"}</span><span>圆点仅来自 Binance 实际成交回报</span></div>
           </div>
           <div className={styles.panelResizeHandle} role="separator" aria-label="拖动调整策略面板宽度" onPointerDown={() => beginResize("panel")} onDoubleClick={resetWorkspaceSize} />
-          <AdaptiveStrategyPanel key={`${symbol}:${selectedPosition?.symbol ?? "entry"}`} symbol={symbol} position={selectedPosition} positionSource={selectedPositionSource} interval={interval} accountConnected={account.connected} liveTradingAvailable={realTradingStatus.canPlaceOrders} currentPrice={marketState.latest?.close ?? 0} maLength={strategy.maLength} maValue={marketState.ma} entryAtrUpper={strategy.entryAtrUpper} entryAtrLower={strategy.entryAtrLower} accountBalance={account.account.availableBalance} onAccountChanged={() => setAccountRevision((value) => value + 1)} onConditionalChanged={() => setConditionalRevision((value) => value + 1)} />
+          <AdaptiveStrategyPanel key={`${symbol}:${selectedPosition?.symbol ?? "entry"}`} symbol={symbol} position={selectedPosition} positionSource={selectedPositionSource} interval={interval} accountConnected={account.connected} liveTradingAvailable={realTradingStatus.canPlaceOrders} currentPrice={marketState.latest?.close ?? 0} maLength={strategy.maLength} maValue={marketState.ma} entryAtrUpper={strategy.entryAtrUpper} entryAtrLower={strategy.entryAtrLower} accountBalance={account.account.availableBalance} onAccountChanged={() => setAccountRevision((value) => value + 1)} />
         </section>
 
         <section className={styles.accountPanel} id="account">

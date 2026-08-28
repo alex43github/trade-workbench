@@ -1,5 +1,6 @@
 import { STRATEGY_TIMEFRAMES } from "../trade/strategy-contracts.ts";
 import { isBinanceFuturesSymbol } from "../trade/symbols.ts";
+import { isProjectClientOrderId } from "../trade/order-source.ts";
 
 export type TelegramConversation = {
   id: string;
@@ -124,17 +125,17 @@ function validateConversationInput(input: Record<string, unknown>): void {
   if ("maKind" in input && input.maKind !== "SMA" && input.maKind !== "EMA") fail("均线类型不正确");
   if ("useDefaultProfitTargets" in input && typeof input.useDefaultProfitTargets !== "boolean") fail("止盈设置不正确");
   if ("alexCandidates" in input) {
-    if (!Array.isArray(input.alexCandidates) || input.alexCandidates.length < 1 || input.alexCandidates.length > 20) fail("alex 持仓候选不正确");
+    if (!Array.isArray(input.alexCandidates) || input.alexCandidates.length < 1 || input.alexCandidates.length > 20) fail("手动持仓候选不正确");
     for (const candidate of input.alexCandidates) {
-      const item = record(candidate, "alex 持仓候选不正确");
+      const item = record(candidate, "手动持仓候选不正确");
       if (typeof item.candidateId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(item.candidateId)
         || typeof item.symbol !== "string" || !isBinanceFuturesSymbol(item.symbol)
         || (item.side !== "LONG" && item.side !== "SHORT")
         || !Array.isArray(item.sourceOrderIds) || item.sourceOrderIds.length < 1
-        || item.sourceOrderIds.some((value) => typeof value !== "string" || !/^alex/i.test(value))) fail("alex 持仓候选不正确");
+        || item.sourceOrderIds.some((value) => typeof value !== "string" || !/^[A-Za-z0-9:_-]{1,160}$/.test(value) || isProjectClientOrderId(value))) fail("手动持仓候选不正确");
     }
   }
-  if ("alexSelectedCandidateId" in input && (typeof input.alexSelectedCandidateId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(input.alexSelectedCandidateId))) fail("alex 持仓候选不正确");
+  if ("alexSelectedCandidateId" in input && (typeof input.alexSelectedCandidateId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(input.alexSelectedCandidateId))) fail("手动持仓候选不正确");
   if ("alexStrategyType" in input && !["DEFAULT_TP", "FIXED_TP", "MA_SL", "LEVEL_SL"].includes(String(input.alexStrategyType))) fail("保护策略类型不正确");
   if ("alexTimeframe" in input && !STRATEGY_TIMEFRAMES.includes(input.alexTimeframe as typeof STRATEGY_TIMEFRAMES[number])) fail("保护策略周期不正确");
   if ("step" in input && (typeof input.step !== "string" || !steps.has(input.step as TelegramConversation["step"]))) fail("会话步骤不正确");

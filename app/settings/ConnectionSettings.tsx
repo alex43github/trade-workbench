@@ -13,7 +13,7 @@ type ConnectionStatus = {
   openai: { configured: boolean; model: string; message: string };
   ai: { activeProvider: string; configured: boolean; model: string; message: string; providers: Array<{ id: string; name: string; configured: boolean; model: string }>; alerts: Array<{ id: string; title: string; message: string; createdAt: string }>; resumableCount: number; operatorUnlocked: boolean; taskRouting?: Array<{ task: "market_scan" | "expert_consultation" | "risk_review"; models: Array<{ id: string; name: string; model: string }> }> };
   squareMonitor: { configured: boolean; message: string };
-  safety: { secretsExposedToBrowser: boolean; realOrderRouteEnabled: boolean; mode: "live-paper" | "demo-paper" };
+  safety: { secretsExposedToBrowser: boolean; realOrderRouteEnabled: boolean; mode: "live" | "readonly" };
 };
 type AiChannel = { id: string; name: string; baseUrl: string; protocol: "responses" | "chat_completions"; configured: boolean; models: Array<{ label: string; model: string }> };
 type DeploymentStatus = { enabled: boolean; triggered: boolean; message: string; version: string; buildId: string; gateway?: { configured: boolean; connected: boolean; message: string } };
@@ -216,7 +216,7 @@ export default function ConnectionSettings() {
 
   const serverMarketLive = Boolean(status?.publicMarket.connected);
   const publicLive = serverMarketLive || Boolean(browserMarket?.connected);
-  const canPaperTrade = publicLive;
+  const liveRouteEnabled = status?.safety.realOrderRouteEnabled === true;
   const credentialsWritable = credentialStorage?.writable !== false;
   const credentialUnavailableLabel = credentialsWritable ? "未保存" : "需在 VPS 服务端配置";
   const barkUnavailableLabel = credentialsWritable ? "未配置" : "需在 VPS 服务端配置";
@@ -228,7 +228,7 @@ export default function ConnectionSettings() {
         <nav>
           <Link href="/"><b>◎</b>妖币雷达</Link><Link href="/trade"><b>⌁</b>合约交易</Link><Link className={styles.active} href="/settings"><b>⚙</b>连接设置</Link>
         </nav>
-        <div className={styles.sidebarFoot}><i className={publicLive ? styles.connected : ""} /><div><strong>{publicLive ? "真实行情可用" : "演示行情模式"}</strong><small>服务端安全诊断</small></div></div>
+        <div className={styles.sidebarFoot}><i className={publicLive ? styles.connected : ""} /><div><strong>{publicLive ? "真实行情可用" : "行情暂不可用"}</strong><small>服务端安全诊断</small></div></div>
       </aside>
 
       <div className={styles.main}>
@@ -242,7 +242,7 @@ export default function ConnectionSettings() {
 
         <section className={styles.hero}>
           <div><span className={styles.eyebrow}>SERVER-SIDE CONNECTIONS</span><h2>查看服务端连接配置</h2><p>正式 VPS 只读取服务端环境变量中的密钥，网页不会把密钥写入应用数据库或浏览器。测试密钥应限制权限，并在测试完成后撤销。</p></div>
-          <div className={`${styles.runState} ${canPaperTrade ? styles.ready : ""}`}><small>当前运行模式</small><strong>{canPaperTrade ? "真实行情模拟盘" : "演示行情模拟盘"}</strong><span>{canPaperTrade ? `${serverMarketLive ? "服务端" : "浏览器"}公开行情已连通，模拟订单绝不发往交易所` : "服务端与浏览器都无法访问公开行情，页面会明确标注 DEMO"}</span></div>
+          <div className={`${styles.runState} ${liveRouteEnabled ? styles.ready : ""}`}><small>当前运行模式</small><strong>{liveRouteEnabled ? "实盘策略通道已开启" : "只读模式"}</strong><span>{liveRouteEnabled ? "服务端实盘开关与 Binance 网关交易开关均已开启；每次仍需账户连接和最终确认" : publicLive ? `${serverMarketLive ? "服务端" : "浏览器"}公开行情已连通；实盘策略通道未开启` : "公开行情暂不可用；请检查 Binance 网关或服务器网络"}</span></div>
         </section>
 
         {error && <p className={styles.error} role="alert">{error}</p>}
@@ -258,7 +258,7 @@ export default function ConnectionSettings() {
           <article className={styles.card}>
             <div className={styles.cardHead}><div className={styles.icon}>账户</div><StateBadge ok={Boolean(status?.binancePrivate.connected)} pending={loading && !status} /></div>
             <h3>Binance U本位只读账户</h3><p>{status?.binancePrivate.message || "正在检查服务端环境…"}</p>
-            <dl><div><dt>配置状态</dt><dd>{status?.binancePrivate.configured ? "已配置" : "未配置"}</dd></div><div><dt>真实交易</dt><dd>未启用</dd></div></dl>
+            <dl><div><dt>配置状态</dt><dd>{status?.binancePrivate.configured ? "已配置" : "未配置"}</dd></div><div><dt>实盘策略</dt><dd>{liveRouteEnabled ? "通道已开启" : "通道未开启"}</dd></div></dl>
           </article>
 
           <article className={styles.card}>
@@ -272,7 +272,7 @@ export default function ConnectionSettings() {
           <article className={styles.card}>
             <div className={styles.cardHead}><div className={styles.icon}>广场</div><StateBadge ok={Boolean(status?.squareMonitor.configured)} pending={loading && !status} /></div>
             <h3>币安广场热度采集</h3><p>{status?.squareMonitor.message || "正在检查采集器地址…"}</p>
-            <dl><div><dt>未连接影响</dt><dd>雷达部分降级</dd></div><div><dt>模拟交易</dt><dd>仍可使用</dd></div></dl>
+            <dl><div><dt>未连接影响</dt><dd>雷达部分降级</dd></div><div><dt>实盘策略</dt><dd>需要公开行情</dd></div></dl>
           </article>
         </section>
 
@@ -309,7 +309,7 @@ export default function ConnectionSettings() {
             </div>
           </div>
           <div className={styles.credentialActions}><div><strong>{saveMessage || (credentialStorage?.writable === false ? "VPS 正式环境：网页只读" : "")}</strong><span>{credentialStorage?.writable === false ? "请通过 SSH 写入 /etc/trade-workbench/workbench.env 后重启服务；网页不会保存这些密钥。" : "保存后点击上方“重新检测”即可再次检查连接。"}</span></div><button disabled={savingCredentials || !credentialsWritable} onClick={() => void saveCredentials()}>{savingCredentials ? "正在保存" : credentialsWritable ? "保存并检测连接" : "请通过 VPS 配置密钥"}</button></div>
-          <p className={styles.securityNotice}>{credentialStorage?.writable === false ? "正式 VPS 只从服务端环境变量读取密钥。不要把 Binance、模型或 Bark 密钥粘贴到公开网页、聊天记录或 Git。" : "本地测试凭据保存在本机服务端数据库中。正式公开部署时应迁移到受限服务端 Secret 存储。"} 当前网站仍没有真实下单接口。</p>
+          <p className={styles.securityNotice}>{credentialStorage?.writable === false ? "正式 VPS 只从服务端环境变量读取密钥。不要把 Binance、模型或 Bark 密钥粘贴到公开网页、聊天记录或 Git。" : "本地测试凭据保存在本机服务端数据库中。正式公开部署时应迁移到受限服务端 Secret 存储。"} 实盘策略只有在账户连接、服务端通道、网页开关和最终确认同时满足时才会提交。</p>
         </section>
         <section className={styles.credentialsPanel}>
           <div className={styles.setupTitle}><span>CCSwitch 后台模型通道</span><small>先保存对应 API Key，再“测试并启用”；绿灯代表该模型将用于网站分析。</small></div>
@@ -321,7 +321,7 @@ export default function ConnectionSettings() {
           <div className={styles.providerGrid}>{status?.ai.taskRouting?.map((route) => <article key={route.task} className={styles.credentialGroup}><h3>{route.task === "market_scan" ? "批量扫描" : route.task === "expert_consultation" ? "四专家会诊" : "风险复核"}</h3><p>{route.task === "market_scan" ? "雷达、MA30 × OI、破底翻" : route.task === "expert_consultation" ? "四位交易高手与计划汇总" : "持仓管理与下单前纪律复核"}</p><p>{route.models.length ? route.models.map((item) => item.model).join(" → ") : "暂无已配置候选模型"}</p></article>)}</div>
         </section>
 
-        <footer className={styles.footer}><span>最后检测：{status ? new Date(status.updatedAt).toLocaleString("zh-CN") : "—"}</span><span>模拟盘 ≠ 实盘成交 · 所有结果均需人工复核</span></footer>
+        <footer className={styles.footer}><span>最后检测：{status ? new Date(status.updatedAt).toLocaleString("zh-CN") : "—"}</span><span>实盘策略必须人工最终确认 · 请核对风险参数</span></footer>
       </div>
     </main>
   );

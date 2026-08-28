@@ -75,18 +75,18 @@ test("Telegram live wizard submits a multi-leg strategy with tele client ids", a
   assert.doesNotMatch(result.text, /PAPER|模拟|纸面/);
 });
 
-test("Telegram protection flow binds a fixed level to the selected alex source", async () => {
+test("Telegram protection flow binds a fixed level to the selected manual source", async () => {
   const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
   let submitted;
   const dependencies = memoryConversationDependencies({
     getAlexManualPositions: async () => ({
       connected: true,
       reason: null,
-      positions: [{ candidateId: "candidate-opaque-2", symbol: "ETHUSDT", side: "SHORT", quantity: 0.5, entryPrice: 2000, markPrice: 1990, leverage: 5, sourceOrderIds: ["alex0007"] }],
+      positions: [{ candidateId: "candidate-opaque-2", symbol: "ETHUSDT", side: "SHORT", quantity: 0.5, entryPrice: 2000, markPrice: 1990, leverage: 5, sourceOrderIds: ["manual-eth-7"] }],
     }),
     createProtectionStrategy: async (input) => {
       submitted = input;
-      return { ok: true, status: 200, strategy: { id: "alex-ps-2", sourceOrderId: "alex0007", symbol: "ETHUSDT", orders: [{ clientOrderId: "alexSL00000002", status: "SUBMITTED", exchangeOrderId: "8002" }] } };
+      return { ok: true, status: 200, strategy: { id: "alex-ps-2", sourceOrderId: "manual-eth-7", symbol: "ETHUSDT", orders: [{ clientOrderId: "alexSL00000002", status: "SUBMITTED", exchangeOrderId: "8002" }] } };
     },
   });
   let reply = await handleAuthorizedTelegramUpdate(update(30, "CALLBACK", "tg:act:home_protection_01", "903"), dependencies);
@@ -105,7 +105,7 @@ test("Telegram protection flow binds a fixed level to the selected alex source",
   assert.equal(submitted.origin, "ALEX");
   assert.equal(submitted.strategyType, "LEVEL_SL");
   assert.equal(submitted.fixedPrice, 2100);
-  assert.deepEqual(submitted.source.sourceOrderIds, ["alex0007"]);
+  assert.deepEqual(submitted.source.sourceOrderIds, ["manual-eth-7"]);
   assert.match(result.text, /alex-ps-2|alexSL00000002/);
 });
 

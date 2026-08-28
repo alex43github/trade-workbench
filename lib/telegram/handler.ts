@@ -242,7 +242,7 @@ function renderWizardStep(step: TelegramConversation["step"], session: TelegramC
     case "MARGIN": return { text: "请输入总保证金（USDT），例如 100。", keyboard: cancelAndBackKeyboard };
     case "LEG_COUNT": return { text: "请选择分几笔下单（默认3笔）。", keyboard: withBack(legCountKeyboard) };
     case "PARAMETERS": return { text: "关键位策略暂需在网站端配置，请返回选择均线策略。", keyboard: withBack(methodKeyboard) };
-    case "ALEX_ASSET": return { text: "请选择要挂止盈止损的 alex 手动持仓。", keyboard: alexCandidateKeyboard(session) };
+    case "ALEX_ASSET": return { text: "请选择要挂止盈止损的币安手动持仓。", keyboard: alexCandidateKeyboard(session) };
     case "ALEX_KIND": return { text: "请选择要挂止盈还是止损策略。", keyboard: withBack(protectionKindKeyboard) };
     case "ALEX_TP_MODE": return { text: "请选择止盈方式。默认止盈按 ROI/保证金收益率执行：100% 卖初始仓25%，200% 卖初始仓40%。", keyboard: withBack(takeProfitKeyboard) };
     case "ALEX_TP_PRICE": return { text: "请输入固定止盈触发价格。", keyboard: cancelAndBackKeyboard };
@@ -321,7 +321,7 @@ function alexCandidateKeyboard(session: TelegramConversation): TelegramKeyboard 
 
 function alexCandidateText(session: TelegramConversation) {
   const rows = alexCandidates(session).map((item) => `${item.symbol} · ${item.side === "LONG" ? "做多" : "做空"} · 数量 ${numberText(item.quantity)} · 来源 ${item.sourceOrderIds[0]}`);
-  return `请选择要挂止盈止损的 alex 手动持仓。\n${rows.join("\n")}`;
+  return `请选择要挂止盈止损的币安手动持仓。\n${rows.join("\n")}`;
 }
 
 function protectionSummary(session: TelegramConversation) {
@@ -405,12 +405,12 @@ export async function handleAuthorizedTelegramUpdate(update: AuthorizedUpdate, d
       try {
         const findPositions = dependencies.getAlexManualPositions ?? getAlexManualPositions;
         const result: AlexPositionsResult = await findPositions();
-        if (!result.connected) return screen(`alex 手动持仓查询未连接：${result.reason ?? "未知原因"}。`, homeKeyboard);
-        if (!result.positions.length) return screen("当前没有可挂保护策略的 alex 手动持仓。", homeKeyboard);
+        if (!result.connected) return screen(`币安手动持仓查询未连接：${result.reason ?? "未知原因"}。`, homeKeyboard);
+        if (!result.positions.length) return screen("当前没有可挂保护策略的币安手动持仓。", homeKeyboard);
         await transitionConversation(update.userId, dependencies, { alexCandidates: result.positions, step: "ALEX_ASSET", confirmNonce: null }, { reset: true });
         const session = await currentConversation(update.userId, dependencies);
         return screen(alexCandidateText(session), alexCandidateKeyboard(session));
-      } catch (error) { return screen(`alex 手动持仓查询失败：${error instanceof Error ? error.message : "未知错误"}`, homeKeyboard); }
+      } catch (error) { return screen(`币安手动持仓查询失败：${error instanceof Error ? error.message : "未知错误"}`, homeKeyboard); }
     }
 
     if (actionId.startsWith("alex_asset_") && actionId.endsWith("_01")) {

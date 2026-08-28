@@ -9,8 +9,20 @@ type Timeframe = "5m" | "15m" | "1h" | "4h" | "1d";
 type Side = "LONG" | "SHORT";
 type Style = "MA" | "HORIZONTAL";
 
+export type StrategyWizardPosition = {
+  symbol: string;
+  side: Side;
+  quantity: number;
+  entryPrice: number;
+  markPrice: number;
+  unrealizedPnl: number;
+  liquidationPrice: number;
+  leverage: number;
+};
+
 type Props = {
   symbol: string;
+  position?: StrategyWizardPosition;
   currentPrice: number;
   chartTimeframe: string;
   chartMa: number;
@@ -37,9 +49,13 @@ function buildEntryOffsets(count: number, multiplier: number, style: Style) {
   return Array.from({ length: count }, (_, index) => Number((multiplier - (2 * multiplier * index) / (count - 1)).toFixed(8)));
 }
 
-export default function StrategyWizard({ symbol, currentPrice, chartTimeframe, chartMa, liveTradingAvailable, onStrategyCreated }: Props) {
+function positionPrice(value: number) {
+  return Number.isFinite(value) && value > 0 ? price(value) : "—";
+}
+
+export default function StrategyWizard({ symbol, position, currentPrice, chartTimeframe, chartMa, liveTradingAvailable, onStrategyCreated }: Props) {
   const [step, setStep] = useState(0);
-  const [side, setSide] = useState<Side | null>(null);
+  const [side, setSide] = useState<Side | null>(() => position?.side ?? null);
   const [timeframe, setTimeframe] = useState<Timeframe>(() => usableTimeframe(chartTimeframe));
   const [style, setStyle] = useState<Style>("MA");
   const [maKind, setMaKind] = useState<"SMA" | "EMA">("SMA");
@@ -56,6 +72,7 @@ export default function StrategyWizard({ symbol, currentPrice, chartTimeframe, c
   const [strategyRevision, setStrategyRevision] = useState(0);
 
   const steps = ["方向", "周期", "策略", "参数", "确认"];
+  const hasPosition = Boolean(position);
   const canContinue = step !== 0 || side !== null;
   const entryOffsets = useMemo(() => buildEntryOffsets(legCount, atrMultiplier, style), [atrMultiplier, legCount, style]);
   const marginPerLeg = totalMargin > 0 ? totalMargin / legCount : 0;
@@ -114,14 +131,14 @@ export default function StrategyWizard({ symbol, currentPrice, chartTimeframe, c
   }
 
   return <aside className={styles.strategyPanel} id="strategy">
-    <div className={styles.panelTop}><div><small>NO POSITION · LIVE ENTRY</small><h2>建立实盘策略</h2></div><span>LIVE · LIMIT ORDERS</span></div>
-    <div className={styles.wizardInsight}><strong>{displayBinanceSymbol(symbol)} · {price(currentPrice)}</strong><span>图表 {chartTimeframe} · 当前均线 {price(chartMa)}</span><p>AI 只提供分析建议与预填；AI不会自主开仓。最终策略必须由你手动确认。</p></div>
+    <div className={styles.panelTop}><div><small>{hasPosition ? "POSITION DETECTED · LIVE STRATEGY" : "NO POSITION · LIVE ENTRY"}</small><h2>{hasPosition ? "持仓中 · 新建策略" : "建立实盘策略"}</h2></div><span>LIVE · LIMIT ORDERS</span></div>
+    <div className={styles.wizardInsight}><strong>{displayBinanceSymbol(symbol)} · {price(currentPrice)}</strong><span>图表 {chartTimeframe} · 当前均线 {price(chartMa)}</span>{position && <small>已有{position.side === "LONG" ? "多" : "空"}仓 {position.quantity} · 均价 {positionPrice(position.entryPrice)} · 标记 {positionPrice(position.markPrice)} · PnL {position.unrealizedPnl >= 0 ? "+" : ""}{position.unrealizedPnl.toFixed(2)}</small>}<p>{hasPosition ? "当前已有实盘仓位；本向导只新增限价策略，不自动平仓。止盈止损请在真实持仓区确认。" : "AI 只提供分析建议与预填；AI不会自主开仓。最终策略必须由你手动确认。"}</p></div>
     <div className={styles.strategyWizard}>
       <div className={styles.executionModePicker} aria-label="策略执行模式"><strong>实盘 LIVE</strong><small>{liveTradingAvailable ? "实盘开关、账户和服务端通道均已就绪" : "实盘需先连接币安账户并打开实盘开关"}</small><small>有效期 7天 · 仅已收盘 K 线刷新 · 部分成交不改价 · 从不市价兜底</small></div>
       <div className={styles.wizardProgress}>{steps.map((label, index) => <span key={label} className={index === step ? styles.wizardCurrent : index < step ? styles.wizardDone : ""}>{index + 1} {label}</span>)}</div>
-      {step === 0 && <section><h3>这次操作做多还是做空？</h3><div className={styles.wizardChoices}><button className={side === "LONG" ? styles.wizardLong : ""} onClick={() => setSide("LONG")}>做多</button><button className={side === "SHORT" ? styles.wizardShort : ""} onClick={() => setSide("SHORT")}>做空</button></div></section>}
+      {step === 0 && <section><h3>{hasPosition ? "已有持仓；这次策略做多还是做空？" : "这次操作做多还是做空？"}</h3><div className={styles.wizardChoices}><button className={side === "LONG" ? styles.wizardLong : ""} onClick={() => setSide("LONG")}>做多</button><button className={side === "SHORT" ? styles.wizardShort : ""} onClick={() => setSide("SHORT")}>做空</button></div>{position && <p className={styles.wizardHint}>当前仓位方向：{position.side === "LONG" ? "做多" : "做空"}；如要反向操作，请先确认账户持仓模式和风险。</p>}</section>}
       {step === 1 && <section><h3>参与哪个周期？</h3><p>默认 1h；该周期的已收盘 K 线才会刷新均线限价单或确认止损。</p><div className={styles.wizardChoices}>{timeframes.map((item) => <button key={item} className={timeframe === item ? styles.wizardSelected : ""} onClick={() => setTimeframe(item)}>{item}</button>)}</div></section>}
-      {step === 2 && <section><h3>按什么逻辑入场？</h3><div className={styles.wizardMethod}><button className={style === "MA" ? styles.wizardSelected : ""} onClick={() => setStyle("MA")}><strong>均线策略</strong><span>围绕移动中的 MA 和 ATR 分层限价入场</span></button><button className={style === "HORIZONTAL" ? styles.wizardSelected : ""} onClick={() => setStyle("HORIZONTAL")}><strong>支撑阻力位策略</strong><span>在固定横向关键位挂静态限价单</span></button></div></section>}
+      {step === 2 && <section><h3>{hasPosition ? "按什么逻辑新增策略？" : "按什么逻辑入场？"}</h3><div className={styles.wizardMethod}><button className={style === "MA" ? styles.wizardSelected : ""} onClick={() => setStyle("MA")}><strong>均线策略</strong><span>围绕移动中的 MA 和 ATR 分层限价入场</span></button><button className={style === "HORIZONTAL" ? styles.wizardSelected : ""} onClick={() => setStyle("HORIZONTAL")}><strong>支撑阻力位策略</strong><span>在固定横向关键位挂静态限价单</span></button></div></section>}
       {step === 3 && <section><h3>{style === "MA" ? "均线与 ATR 参数" : "关键位与风控参数"}</h3><div className={styles.wizardFields}>
         <label>均线类型<select value={maKind} onChange={(event) => setMaKind(event.target.value as "SMA" | "EMA")}><option>SMA</option><option>EMA</option></select></label>
         <label>均线周期<input aria-label="均线周期" type="number" min="2" value={maLength} onChange={(event) => setMaLength(Math.max(2, Number(event.target.value) || 30))} /></label>
@@ -132,7 +149,7 @@ export default function StrategyWizard({ symbol, currentPrice, chartTimeframe, c
         {style === "HORIZONTAL" && <label>静态入场价<input aria-label="静态入场价" type="number" min="0" step="any" value={staticPrice || ""} onChange={(event) => setStaticPrice(Number(event.target.value))} /></label>}
         <label>横向止损价（可选）<input type="number" min="0" step="any" value={horizontalGuardPrice || ""} onChange={(event) => setHorizontalGuardPrice(Number(event.target.value))} /></label>
       </div><p className={styles.wizardHint}>{legCount} 腿限价单：每笔约 {price(marginPerLeg)} USDT · {entrySummary}</p></section>}
-      {step === 4 && <section><h3>确认建立实盘策略</h3><div className={styles.wizardReview}><p><b>{preview.side} · {timeframe} · {entrySummary}</b></p><p>{preview.guard}</p><ol>{entryOffsets.map((offset, index) => <li key={`${index}-${offset}`}>第{index + 1}腿：{style === "MA" ? offset === 0 ? "均线" : `均线 ${offset > 0 ? "+" : ""}${offset} ATR` : "静态入场价"} · LIMIT GTX</li>)}</ol><ul><li>点击确认后将并发提交全部 Binance 实盘限价单，不会自动改价或市价兜底。</li><li>任一拒单或超时都会保留逐腿结果并进入需要对账状态。</li><li>每腿数量、最小名义价值和账户余额都必须满足交易所规则。</li></ul><label className={styles.liveConfirmationField}>输入 CONFIRM 才会提交订单<input aria-label="实盘确认" value={liveConfirmation} onChange={(event) => setLiveConfirmation(event.target.value)} placeholder="输入 CONFIRM" autoComplete="off" /></label></div></section>}
+      {step === 4 && <section><h3>确认建立实盘策略</h3><div className={styles.wizardReview}><p><b>{preview.side} · {timeframe} · {entrySummary}</b></p>{position && <p>当前已有{position.side === "LONG" ? "多" : "空"}仓；确认后只新增该策略的限价腿，不会自动平仓。</p>}<p>{preview.guard}</p><ol>{entryOffsets.map((offset, index) => <li key={`${index}-${offset}`}>第{index + 1}腿：{style === "MA" ? offset === 0 ? "均线" : `均线 ${offset > 0 ? "+" : ""}${offset} ATR` : "静态入场价"} · LIMIT GTX</li>)}</ol><ul><li>点击确认后将并发提交全部 Binance 实盘限价单，不会自动改价或市价兜底。</li><li>任一拒单或超时都会保留逐腿结果并进入需要对账状态。</li><li>每腿数量、最小名义价值和账户余额都必须满足交易所规则。</li></ul><label className={styles.liveConfirmationField}>输入 CONFIRM 才会提交订单<input aria-label="实盘确认" value={liveConfirmation} onChange={(event) => setLiveConfirmation(event.target.value)} placeholder="输入 CONFIRM" autoComplete="off" /></label></div></section>}
       <div className={styles.wizardActions}><button disabled={step === 0} onClick={() => setStep((value) => Math.max(0, value - 1))}>返回</button>{step < 4 ? <button className={styles.wizardPrimary} disabled={!canContinue} onClick={() => setStep((value) => Math.min(4, value + 1))}>继续</button> : <button className={styles.wizardPrimary} disabled={state === "saving" || !liveTradingAvailable} onClick={() => void submit()}>{state === "saving" ? "正在提交实盘订单" : "确认建立实盘策略"}</button>}</div>
       {message && <p className={`${styles.wizardMessage} ${state === "error" ? styles.inlineError : ""}`}>{message}</p>}
     </div>

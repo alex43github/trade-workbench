@@ -9,6 +9,7 @@ import {
   sourceExitQuantity,
   validateFixedProtectionPrice,
 } from "./protection-math.ts";
+import { isProjectClientOrderId } from "./order-source.ts";
 import type {
   ProtectionOrderPlan,
   ProtectionOrigin,
@@ -244,9 +245,13 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
   const env = input.env ?? process.env;
   if (!enabled(env)) throw new Error("真实保护策略挂单通道未开启");
   if (!/^[A-Za-z0-9:_-]{8,200}$/.test(input.idempotencyKey)) throw new Error("保护策略幂等编号不正确");
-  if (!input.source.sourceOrderIds.length || !new RegExp(`^${originPrefix(input.origin)}`, "i").test(input.source.sourceOrderIds[0])) throw new Error("保护策略来源订单不正确");
-  if (!["DEFAULT_TP", "FIXED_TP", "MA_SL", "LEVEL_SL"].includes(input.strategyType)) throw new Error("保护策略类型不正确");
+  if (!input.source.sourceOrderIds.length) throw new Error("保护策略来源订单不正确");
   const sourceOrderId = safeId(input.source.sourceOrderIds[0], "来源订单编号不正确");
+  const validSource = input.origin === "ALEX"
+    ? !isProjectClientOrderId(sourceOrderId)
+    : new RegExp(`^${originPrefix(input.origin)}`, "i").test(sourceOrderId);
+  if (!validSource) throw new Error("保护策略来源订单不正确");
+  if (!["DEFAULT_TP", "FIXED_TP", "MA_SL", "LEVEL_SL"].includes(input.strategyType)) throw new Error("保护策略类型不正确");
   const symbol = safeId(input.source.symbol.toUpperCase(), "交易对不正确");
   const db = await getD1();
   await ensureProtectionSchema();

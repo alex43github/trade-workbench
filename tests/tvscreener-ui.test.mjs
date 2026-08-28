@@ -67,31 +67,21 @@ test("TradingView evidence is visibly advisory and Binance takes precedence", as
   assert.doesNotMatch(radar, /api\/radar\/tvscreener/);
 });
 
-test("AI review projects bounded research_evidence as advisory-only without changing execution payloads", async () => {
+test("the unified live wizard keeps TradingView research out of the execution payload", async () => {
   const panel = await source(panelPath);
 
-  assert.match(panel, /buildResearchEvidence/);
-  assert.match(panel, /source:\s*["']tradingview-screener["']/);
-  assert.match(panel, /advisory_only:\s*true/);
-  assert.match(panel, /fetched_at/);
-  assert.match(panel, /rows/);
-  assert.match(panel, /warnings/);
-  assert.match(panel, /slice\(0,\s*\d+\)/);
-  assert.match(panel, /research_evidence/);
-  assert.match(panel, /Binance 数据优先/);
-  assert.match(panel, /不能证明成交或止损触发/);
-
-  const conditionalPlan = panel.slice(panel.indexOf("async function saveConditionalPlan"), panel.indexOf("async function closePaper"));
-  assert.doesNotMatch(conditionalPlan, /research_evidence|tvScreener/);
+  assert.match(panel, /StrategyWizard/);
+  assert.doesNotMatch(panel, /research_evidence|tvScreener|\/api\/radar\/tvscreener/);
+  assert.doesNotMatch(panel, /\/api\/trade\/conditional-orders/);
 });
 
-test("AI evidence remains compatible when /api/radar omits tvScreener", async () => {
+test("the optional TradingView evidence stays on the radar surface", async () => {
+  const radar = await source(radarPath);
   const panel = await source(panelPath);
 
-  assert.match(panel, /tvScreener\??\s*:/);
-  assert.match(panel, /function buildResearchEvidence\(tvScreener\?: TvScreenerResponse\): ResearchEvidence \| undefined/);
-  assert.match(panel, /researchEvidence\s*\?/);
-  assert.match(panel, /setTvScreener\(payload\.tvScreener/);
+  assert.match(radar, /tvScreener\??\s*:/);
+  assert.match(radar, /tvScreener\?\.coverage/);
+  assert.doesNotMatch(panel, /tvScreener|research_evidence/);
 });
 
 test("TV research evidence stays outside radar scoring and execution conditions", async () => {
@@ -102,7 +92,7 @@ test("TV research evidence stays outside radar scoring and execution conditions"
 
   assert.doesNotMatch(tvPanel, /score|participation|risk/i);
   assert.doesNotMatch(scoreBlock, /tvScreener|research_evidence/);
-  assert.match(panel, /fetch\("\/api\/trade\/conditional-orders"/);
+  assert.doesNotMatch(panel, /fetch\("\/api\/trade\/conditional-orders"/);
 });
 
 test("radar refreshes only an unavailable TV supplement after the primary response", async () => {

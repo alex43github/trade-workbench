@@ -35,7 +35,7 @@ export async function getLiveAccountSnapshot(): Promise<LiveAccountSnapshot> {
         const normalized = [];
         for (const item of orders) {
           const clientOrderId = String(item.clientOrderId ?? "").trim();
-          const projectOrderId = /^(alex|tele|web)[A-Za-z0-9_-]+$/i.test(clientOrderId) ? clientOrderId : `binance-${item.orderId}`;
+          const projectOrderId = /^(alex|tele|web|tw)[A-Za-z0-9_-]+$/i.test(clientOrderId) ? clientOrderId : `binance-${item.orderId}`;
           const websiteOrderId = projectOrderId.toLowerCase();
           normalized.push({
             orderId: String(item.orderId), websiteOrderId, symbol: item.symbol, side: item.side, type: item.type, status: item.status,

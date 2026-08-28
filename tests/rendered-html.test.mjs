@@ -103,6 +103,8 @@ test("reversal scanner exposes actionable diagnostics when a scan cannot connect
 test("MA30/OI scanner distinguishes transport failures from insufficient market data", () => {
   const radarSource = fs.readFileSync(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
   assert.match(radarSource, /createRadarDiagnostic/);
+  assert.match(radarSource, /transientScanWarning/);
+  assert.match(radarSource, /status: transient \? "pending"/);
   assert.match(radarSource, /ma30Oi\?\.diagnostic/);
   assert.match(radarSource, /扫描诊断/);
   assert.match(radarSource, /setMa30Oi[\s\S]*createRadarDiagnostic/);
@@ -152,6 +154,15 @@ test("connections diagnostics reject an anonymous request", async () => {
 
   const statusResponse = await request("/api/connections", { headers: { accept: "application/json" } });
   assert.equal(statusResponse.status, 401);
+});
+
+test("connection settings describe the live route instead of retired paper trading", async () => {
+  const settingsSource = fs.readFileSync(new URL("../app/settings/ConnectionSettings.tsx", import.meta.url), "utf8");
+  const connectionsSource = fs.readFileSync(new URL("../app/api/connections/route.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(settingsSource, /模拟盘|模拟交易|模拟订单|演示行情/);
+  assert.match(settingsSource, /realOrderRouteEnabled/);
+  assert.match(settingsSource, /实盘策略/);
+  assert.doesNotMatch(connectionsSource, /realOrderRouteEnabled:\s*false/);
 });
 
 test("strategy parsing rejects an anonymous request", async () => {

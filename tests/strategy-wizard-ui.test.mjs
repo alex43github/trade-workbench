@@ -41,14 +41,21 @@ test("wizard creates only a LIVE limit strategy with an explicit final confirmat
   assert.doesNotMatch(wizardSource, /fetch\("\/api\/trade\/strategies"/);
 });
 
-test("entry panel uses the wizard while existing position management remains available", () => {
-  assert.match(panelSource, /import StrategyWizard from "\.\/StrategyWizard"/);
-  assert.match(panelSource, /mode === "entry"\s*\?\s*<StrategyWizard/);
-  assert.match(panelSource, /POSITION DETECTED · MANAGEMENT/);
-  assert.match(panelSource, /已有持仓止盈止损/);
+test("every symbol state uses the same live wizard shell", () => {
+  assert.match(panelSource, /import StrategyWizard(?:,| from)/);
+  assert.match(panelSource, /<StrategyWizard[\s\S]*position=\{position\}/);
+  assert.doesNotMatch(panelSource, /POSITION DETECTED · MANAGEMENT/);
+  assert.doesNotMatch(panelSource, /api\/trade\/conditional-orders/);
   assert.doesNotMatch(panelSource, /api\/paper\/close|PAPER|模拟盘/);
   assert.match(stylesSource, /\.strategyWizard/);
   assert.match(stylesSource, /@media \(max-width: 780px\)/);
+});
+
+test("all symbol states use the same wizard shell, including existing positions", () => {
+  assert.match(wizardSource, /position\?:/);
+  assert.match(panelSource, /<StrategyWizard[\s\S]*position=\{position\}/);
+  assert.doesNotMatch(panelSource, /const entryWizard = mode === "entry"/);
+  assert.match(wizardSource, /POSITION DETECTED · LIVE STRATEGY/);
 });
 
 test("wizard keeps LIVE strategy status visible and refreshes it after a change", () => {

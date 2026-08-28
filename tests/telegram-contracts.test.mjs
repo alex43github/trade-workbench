@@ -75,3 +75,18 @@ test("rejects empty and unknown conversation draft fields", async () => {
   assert.throws(() => applyConversationInput(session, { method: "" }), /(策略类型|会话输入)/);
   assert.throws(() => applyConversationInput(session, { unexpected: "value" }), /会话输入/);
 });
+
+test("accepts Binance manual source ids and rejects project source ids", async () => {
+  const { applyConversationInput, newConversation } = await contracts();
+  const candidate = {
+    candidateId: "candidate-1", symbol: "BTCUSDT", side: "LONG", quantity: 1,
+    entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["binance-123"],
+  };
+  assert.doesNotThrow(() => applyConversationInput(newConversation("42"), { alexCandidates: [candidate] }));
+  for (const sourceOrderId of ["alex0001", "tele0001", "web0001", "tw0001"]) {
+    assert.throws(
+      () => applyConversationInput(newConversation("42"), { alexCandidates: [{ ...candidate, sourceOrderIds: [sourceOrderId] }] }),
+      /手动持仓候选/,
+    );
+  }
+});

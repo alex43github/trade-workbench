@@ -39,14 +39,14 @@ test("Telegram home is live-only and removes every paper entry", async () => {
   assert.ok(reply.replyMarkup.inline_keyboard.flat().every((button) => !/paper/i.test(button.callback_data)));
 });
 
-test("alex protection flow uses server-side candidate mapping and submits a default ROI strategy", async () => {
+test("manual protection flow uses server-side candidate mapping and submits a default ROI strategy", async () => {
   const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
   let submission;
   const dependencies = memoryConversationDependencies({
     getAlexManualPositions: async () => ({
       connected: true,
       reason: null,
-      positions: [{ candidateId: "candidate-opaque-1", symbol: "BTCUSDT", side: "LONG", quantity: 2, entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["alex0001"] }],
+      positions: [{ candidateId: "candidate-opaque-1", symbol: "BTCUSDT", side: "LONG", quantity: 2, entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["manual-btc-1"] }],
     }),
     createProtectionStrategy: async (input) => {
       submission = input;
@@ -72,7 +72,7 @@ test("alex protection flow uses server-side candidate mapping and submits a defa
   reply = await handleAuthorizedTelegramUpdate(update(6, "CALLBACK", confirmButton.callback_data), dependencies);
   assert.equal(submission.origin, "ALEX");
   assert.equal(submission.strategyType, "DEFAULT_TP");
-  assert.deepEqual(submission.source.sourceOrderIds, ["alex0001"]);
+  assert.deepEqual(submission.source.sourceOrderIds, ["manual-btc-1"]);
   assert.match(reply.text, /alex-ps-1/);
   assert.match(reply.text, /alexTP00000001/);
   assert.doesNotMatch(reply.text, /PAPER|模拟|纸面/);

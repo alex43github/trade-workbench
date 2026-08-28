@@ -55,6 +55,9 @@ export async function GET(request: Request) {
   ]);
   const gateway = getGatewayConfig();
   const binanceConfigured = gateway.configured || Boolean((binanceKey || process.env.BINANCE_API_KEY) && (binanceSecret || process.env.BINANCE_SECRET_KEY));
+  const gatewayTradingEnabled = String(process.env.BINANCE_GATEWAY_TRADING || "").toLowerCase() === "true";
+  const appLiveSwitchEnabled = String(process.env.WORKBENCH_LIVE_TRADING_ENABLED || "").toLowerCase() === "true";
+  const realOrderRouteEnabled = gateway.configured && gatewayTradingEnabled && appLiveSwitchEnabled;
   const gatewayStatus = await probeGateway();
 
   const [publicMarket, accountResponse] = await Promise.all([
@@ -120,8 +123,8 @@ export async function GET(request: Request) {
     },
     safety: {
       secretsExposedToBrowser: false,
-      realOrderRouteEnabled: false,
-      mode: (publicMarket.connected || gatewayStatus.connected) ? "live-paper" : "demo-paper",
+      realOrderRouteEnabled,
+      mode: realOrderRouteEnabled ? "live" : "readonly",
     },
   }, { headers: { "cache-control": "no-store" } });
   return response;

@@ -12,6 +12,7 @@ import { isMultiTimeframeSnapshotFresh, type MultiTimeframeSnapshot } from "@/li
 import { matchesMa30Direction, type Ma30Direction } from "@/lib/radar/vegas";
 import { createScanProgress, type RadarScanProgress } from "@/lib/radar/scan-progress";
 import type { CompositeCandidate, CompositeSnapshot } from "@/lib/radar/composite-ranking";
+import { isTransientScanTransportFailure, transientScanWarning } from "@/lib/radar/scan-transport";
 
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
 type CrowdMood = "SHORT_CROWD" | "TRAPPED" | "CHASE_LONG" | "MIXED" | "UNKNOWN";
@@ -427,13 +428,19 @@ export default function Home() {
     try {
       const response = await fetch("/api/radar/multitimeframe", { cache: "no-store" });
       const payload = await response.json().catch(() => ({})) as Partial<MultiTimeframeSnapshot>;
-      if (!response.ok) throw new Error(payload.warning || "多周期快照暂时不可用");
+      if (!response.ok) {
+        const transient = isTransientScanTransportFailure(response.status);
+        const warning = transient ? transientScanWarning : payload.warning || "多周期快照暂时不可用";
+        const snapshot = { ...createPendingMultiTimeframe(multiTimeframeSymbols), status: transient ? "pending" as const : "degraded" as const, warning };
+        setMultiTimeframe(snapshot);
+        return snapshot;
+      }
       const snapshot = payload as MultiTimeframeSnapshot;
       setMultiTimeframe(snapshot);
       return snapshot;
-    } catch (reason) {
-      const warning = reason instanceof Error ? reason.message : "多周期快照暂时不可用";
-      const snapshot = { ...createPendingMultiTimeframe(multiTimeframeSymbols), status: "degraded" as const, warning };
+    } catch {
+      const warning = transientScanWarning;
+      const snapshot = { ...createPendingMultiTimeframe(multiTimeframeSymbols), status: "pending" as const, warning };
       setMultiTimeframe(snapshot);
       return snapshot;
     }
@@ -454,11 +461,19 @@ export default function Home() {
   async function pollMultiTimeframeScan() {
     for (let attempt = 0; attempt < 600; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1_000));
-      const response = await fetch("/api/radar/multitimeframe", { cache: "no-store" });
-      const payload = await response.json().catch(() => ({})) as Partial<MultiTimeframeSnapshot>;
+      let response: Response;
+      let payload: Partial<MultiTimeframeSnapshot>;
+      try {
+        response = await fetch("/api/radar/multitimeframe", { cache: "no-store" });
+        payload = await response.json().catch(() => ({})) as Partial<MultiTimeframeSnapshot>;
+      } catch {
+        setMultiTimeframe((current) => ({ ...(current ?? createPendingMultiTimeframe(multiTimeframeSymbols)), status: "pending", warning: transientScanWarning }));
+        return;
+      }
       if (!response.ok) {
-        const warning = payload.warning || "多周期扫描状态暂时不可用";
-        setMultiTimeframe((current) => ({ ...(current ?? createPendingMultiTimeframe(multiTimeframeSymbols)), status: "degraded", warning }));
+        const transient = isTransientScanTransportFailure(response.status);
+        const warning = transient ? transientScanWarning : payload.warning || "多周期扫描状态暂时不可用";
+        setMultiTimeframe((current) => ({ ...(current ?? createPendingMultiTimeframe(multiTimeframeSymbols)), status: transient ? "pending" : "degraded", warning }));
         return;
       }
       setMultiTimeframe(payload as MultiTimeframeSnapshot);
@@ -475,15 +490,16 @@ export default function Home() {
       const response = await fetch("/api/radar/multitimeframe", { method: "POST", headers: { "content-type": "application/json", "x-radar-manual": "1" }, body: JSON.stringify({ symbols }) });
       const payload = await response.json().catch(() => ({})) as Partial<MultiTimeframeSnapshot>;
       if (!response.ok) {
-        const warning = response.status === 401 ? operatorLoginWarning : payload.warning || "多周期筛选暂时不可用";
-        setMultiTimeframe({ ...createPendingMultiTimeframe(symbols), status: "degraded", warning });
+        const transient = isTransientScanTransportFailure(response.status);
+        const warning = response.status === 401 ? operatorLoginWarning : transient ? transientScanWarning : payload.warning || "多周期筛选暂时不可用";
+        setMultiTimeframe({ ...createPendingMultiTimeframe(symbols), status: transient ? "pending" : "degraded", warning });
         if (response.status === 401) router.push("/signin?return_to=/radar");
         return;
       }
       setMultiTimeframe(payload as MultiTimeframeSnapshot);
       if (payload.status === "pending") await pollMultiTimeframeScan();
-    } catch (reason) {
-      setMultiTimeframe({ ...createPendingMultiTimeframe(symbols), status: "degraded", warning: reason instanceof Error ? reason.message : "多周期筛选失败" });
+    } catch {
+      setMultiTimeframe({ ...createPendingMultiTimeframe(symbols), status: "pending", warning: transientScanWarning });
     } finally {
       setMultiTimeframeScanning(false);
     }
@@ -498,25 +514,33 @@ export default function Home() {
      const response = await fetch("/api/radar/ma30-oi", { cache: "no-store" });
       const payload = await response.json().catch(() => ({})) as Partial<Ma30OiResponse>;
       if (!response.ok) {
-        const message = payload.warning || "筛选快照暂时不可用";
-        setMa30Oi({ status: "degraded", timezone: "Asia/Shanghai", candidates: [], warning: message, diagnostic: createRadarDiagnostic(response.status, message) });
+        const transient = isTransientScanTransportFailure(response.status) && !payload.diagnostic;
+        const message = transient ? transientScanWarning : payload.warning || "筛选快照暂时不可用";
+        setMa30Oi({ status: transient ? "pending" : "degraded", timezone: "Asia/Shanghai", candidates: [], warning: message, diagnostic: transient ? undefined : createRadarDiagnostic(response.status, message) });
         return;
       }
       setMa30Oi(payload as Ma30OiResponse);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "筛选快照暂时不可用";
-      setMa30Oi({ status: "degraded", timezone: "Asia/Shanghai", candidates: [], warning: message, diagnostic: createRadarDiagnostic(null, message) });
+    } catch {
+      setMa30Oi({ status: "pending", timezone: "Asia/Shanghai", candidates: [], warning: transientScanWarning, diagnostic: undefined });
     }
   }
 
   async function pollMa30OiScan() {
     for (let attempt = 0; attempt < 600; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1_000));
-      const response = await fetch("/api/radar/ma30-oi", { cache: "no-store" });
-      const payload = await response.json().catch(() => ({})) as Partial<Ma30OiResponse>;
+      let response: Response;
+      let payload: Partial<Ma30OiResponse>;
+      try {
+        response = await fetch("/api/radar/ma30-oi", { cache: "no-store" });
+        payload = await response.json().catch(() => ({})) as Partial<Ma30OiResponse>;
+      } catch {
+        setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "pending", warning: transientScanWarning, diagnostic: undefined }));
+        return;
+      }
       if (!response.ok) {
-        const message = payload.warning || "扫描状态暂时不可用";
-        setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        const transient = isTransientScanTransportFailure(response.status) && !payload.diagnostic;
+        const message = transient ? transientScanWarning : payload.warning || "扫描状态暂时不可用";
+        setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: transient ? "pending" : "degraded", warning: message, diagnostic: transient ? undefined : createRadarDiagnostic(response.status, message) }));
         return;
       }
       setMa30Oi(payload as Ma30OiResponse);
@@ -534,16 +558,16 @@ export default function Home() {
       const response = await fetch("/api/radar/ma30-oi", { method: "POST", headers: { "x-radar-manual": "1" } });
       const payload = await response.json().catch(() => ({})) as Ma30OiResponse;
       if (!response.ok) {
-        const message = response.status === 401 ? operatorLoginWarning : payload.warning || "扫描暂时不可用";
-        setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        const transient = isTransientScanTransportFailure(response.status) && !payload.diagnostic;
+        const message = response.status === 401 ? operatorLoginWarning : transient ? transientScanWarning : payload.warning || "扫描暂时不可用";
+        setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: transient ? "pending" : "degraded", warning: message, diagnostic: transient ? undefined : createRadarDiagnostic(response.status, message) }));
         if (response.status === 401) router.push("/signin?return_to=/radar");
         return;
       }
       setMa30Oi(payload);
       if (payload.status === "pending") await pollMa30OiScan();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "扫描失败";
-      setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "degraded", warning: message, diagnostic: createRadarDiagnostic(null, message) }));
+    } catch {
+      setMa30Oi((current) => ({ ...(current ?? { timezone: "Asia/Shanghai", candidates: [] }), status: "pending", warning: transientScanWarning, diagnostic: undefined }));
     } finally {
       setMa30Scanning(false);
     }
@@ -554,25 +578,33 @@ export default function Home() {
       const response = await fetch("/api/radar/reversal", { cache: "no-store" });
       const payload = await response.json().catch(() => ({})) as Partial<ReversalResponse>;
       if (!response.ok) {
-        const message = payload.warning || "破底翻快照暂时不可用";
-        setReversal({ status: "pending", scans: {}, archives: [], warning: message, diagnostic: createRadarDiagnostic(response.status, message) });
+        const transient = isTransientScanTransportFailure(response.status) && !payload.diagnostic;
+        const message = transient ? transientScanWarning : payload.warning || "破底翻快照暂时不可用";
+        setReversal({ status: transient ? "pending" : "degraded", scans: {}, archives: [], warning: message, diagnostic: transient ? undefined : createRadarDiagnostic(response.status, message) });
         return;
       }
       setReversal(payload as ReversalResponse);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "破底翻快照暂时不可用";
-      setReversal({ status: "pending", scans: {}, archives: [], warning: message, diagnostic: createRadarDiagnostic(null, message) });
+    } catch {
+      setReversal({ status: "pending", scans: {}, archives: [], warning: transientScanWarning, diagnostic: undefined });
     }
   }
 
   async function pollReversalScan() {
     for (let attempt = 0; attempt < 600; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1_000));
-      const response = await fetch("/api/radar/reversal", { cache: "no-store" });
-      const payload = await response.json().catch(() => ({})) as ReversalResponse;
+      let response: Response;
+      let payload: ReversalResponse;
+      try {
+        response = await fetch("/api/radar/reversal", { cache: "no-store" });
+        payload = await response.json().catch(() => ({})) as ReversalResponse;
+      } catch {
+        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: transientScanWarning, diagnostic: undefined }));
+        return;
+      }
       if (!response.ok) {
-        const message = payload.warning || "扫描状态暂时不可用";
-        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        const transient = isTransientScanTransportFailure(response.status) && !payload.diagnostic;
+        const message = transient ? transientScanWarning : payload.warning || "扫描状态暂时不可用";
+        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: transient ? "pending" : "degraded", warning: message, diagnostic: transient ? undefined : createRadarDiagnostic(response.status, message) }));
         return;
       }
       setReversal(payload);
@@ -590,16 +622,16 @@ export default function Home() {
       const response = await fetch("/api/radar/reversal", { method: "POST", headers: { "x-radar-manual": "1" } });
       const payload = await response.json().catch(() => ({})) as ReversalResponse & { error?: string };
       if (!response.ok) {
-        const message = response.status === 401 ? operatorLoginWarning : payload.warning || payload.error || "破底翻筛选暂时不可用";
-        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: createRadarDiagnostic(response.status, message) }));
+        const transient = isTransientScanTransportFailure(response.status) && !payload.diagnostic;
+        const message = response.status === 401 ? operatorLoginWarning : transient ? transientScanWarning : payload.warning || payload.error || "破底翻筛选暂时不可用";
+        setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: transient ? undefined : createRadarDiagnostic(response.status, message) }));
         if (response.status === 401) router.push("/signin?return_to=/radar");
         return;
       }
       setReversal(payload);
       if (payload.status === "pending") await pollReversalScan();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "破底翻筛选失败";
-      setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: message, diagnostic: createRadarDiagnostic(null, message) }));
+    } catch {
+      setReversal((current) => ({ ...(current ?? { scans: {}, archives: [] }), status: "pending", warning: transientScanWarning, diagnostic: undefined }));
     } finally {
       setReversalScanning(false);
     }

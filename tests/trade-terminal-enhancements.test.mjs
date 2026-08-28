@@ -8,6 +8,7 @@ import fs from "node:fs";
 const terminalSource = fs.readFileSync(new URL("../app/trade/TradingTerminal.tsx", import.meta.url), "utf8");
 const chartSource = fs.readFileSync(new URL("../app/trade/TradeChart.tsx", import.meta.url), "utf8");
 const strategyPanelSource = fs.readFileSync(new URL("../app/trade/AdaptiveStrategyPanel.tsx", import.meta.url), "utf8");
+const wizardSource = fs.readFileSync(new URL("../app/trade/StrategyWizard.tsx", import.meta.url), "utf8");
 const dailyJobSource = fs.readFileSync(new URL("../lib/advisory/daily-job.ts", import.meta.url), "utf8");
 const orchestratorSource = fs.readFileSync(new URL("../lib/advisory/orchestrator.ts", import.meta.url), "utf8");
 const stylesSource = fs.readFileSync(new URL("../app/trade/trade.module.css", import.meta.url), "utf8");
@@ -90,40 +91,33 @@ test("fixed order size is margin and leverage determines notional value", () => 
 test("trade UI labels the ATR bands and fixed size as margin", () => {
   assert.match(terminalSource, /上方 ATR/);
   assert.match(terminalSource, /下方 ATR/);
-  assert.match(strategyPanelSource, /固定保证金/);
+  assert.match(wizardSource, /总投入 USDT/);
   assert.doesNotMatch(strategyPanelSource, /保证金金额；名义价值/);
   assert.match(chartSource, /calculateAtrBand|atrUpperMultiplier/);
 });
 
-test("position management selects an action timeframe and keeps the margin field compact", () => {
+test("positions keep the same wizard shell and show an explicit add-only warning", () => {
   assert.match(terminalSource, /interval=\{interval\}/);
-  assert.match(strategyPanelSource, /操作周期/);
-  assert.match(strategyPanelSource, /管理周期|actionTimeframe/);
-  assert.match(strategyPanelSource, /5m.*15m.*1h.*4h.*1d/);
-  assert.match(strategyPanelSource, /actionTimeframe/);
-  assert.doesNotMatch(strategyPanelSource, /保证金金额；名义价值/);
+  assert.match(strategyPanelSource, /position=\{position\}/);
+  assert.match(wizardSource, /POSITION DETECTED · LIVE STRATEGY/);
+  assert.match(wizardSource, /只新增限价策略，不自动平仓/);
 });
 
-test("strategy panel stages order or position management before cloud waiting confirmation", () => {
-  assert.match(strategyPanelSource, /操作意图/);
-  assert.match(strategyPanelSource, /下单/);
-  assert.match(strategyPanelSource, /已有持仓止盈止损/);
-  assert.match(strategyPanelSource, /下单笔数/);
-  assert.match(strategyPanelSource, /每笔.*保证金/);
-  assert.match(strategyPanelSource, /分两笔止损/);
-  assert.match(strategyPanelSource, /api\/trade\/conditional-orders/);
-  assert.match(strategyPanelSource, /确认条件并等待触发/);
-  assert.match(terminalSource, /onConditionalChanged/);
+test("the unified strategy panel uses final live confirmation instead of the retired conditional endpoint", () => {
+  assert.match(wizardSource, /下单笔数/);
+  assert.match(wizardSource, /api\/trade\/live-strategies/);
+  assert.match(wizardSource, /输入 CONFIRM/);
+  assert.doesNotMatch(strategyPanelSource, /api\/trade\/conditional-orders/);
+  assert.doesNotMatch(terminalSource, /api\/trade\/conditional-orders/);
+  assert.doesNotMatch(terminalSource, /conditionalRevision|onConditionalChanged|waitingOrders/);
 });
 
-test("decision log shows AI participation and user waiting orders with trigger distance", () => {
+test("decision log shows AI participation without the retired waiting-order source", () => {
   assert.match(terminalSource, /AI强参与币/);
-  assert.match(terminalSource, /我的条件等待单/);
-  assert.match(terminalSource, /距离触发/);
-  assert.match(terminalSource, /api\/trade\/conditional-orders/);
+  assert.match(terminalSource, /已提交的实盘策略/);
+  assert.doesNotMatch(terminalSource, /我的条件等待单|距离触发|api\/trade\/conditional-orders/);
   assert.match(terminalSource, /topDecisionStrip/);
   assert.match(terminalSource, /选择AI强参与币/);
-  assert.match(terminalSource, /选择条件等待单/);
   assert.doesNotMatch(terminalSource, /aiStrongCoins[\s\S]*\.slice\(0, 4\)/);
 });
 
