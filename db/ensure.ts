@@ -447,6 +447,10 @@ export async function ensureAdvisorySchema() {
       symbols_json TEXT NOT NULL, snapshot_json TEXT NOT NULL, warning TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS radar_composite_snapshots (
+      id TEXT PRIMARY KEY NOT NULL, generated_at TEXT NOT NULL, status TEXT NOT NULL,
+      payload_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS radar_reversal_scans (
       id TEXT PRIMARY KEY NOT NULL, interval TEXT NOT NULL, scanned_at TEXT NOT NULL,
       status TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -477,6 +481,7 @@ export async function ensureAdvisorySchema() {
     db.prepare("CREATE INDEX IF NOT EXISTS idx_system_alerts_status_created ON system_alerts(status, created_at)"),
    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_ma30_oi_scanned_at ON radar_ma30_oi_snapshots(scanned_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_multitimeframe_scanned_at ON radar_multitimeframe_snapshots(scanned_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_composite_generated_at ON radar_composite_snapshots(generated_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_scans_interval_scanned ON radar_reversal_scans(interval, scanned_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_interval_direction_time ON radar_reversal_archives(interval, direction, signal_time)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_pending ON radar_reversal_archives(outcome_complete, signal_time)")

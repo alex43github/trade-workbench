@@ -13,6 +13,7 @@ import { createScanProgress, type RadarScanProgress } from "@/lib/radar/scan-pro
 import { requireOperatorMutation } from "@/lib/security/operator-guard";
 
 let running = false;
+const MAX_MULTI_TIMEFRAME_SYMBOLS = 250;
 
 function pendingSnapshot(symbols: string[], scannedAt = new Date().toISOString(), progress = createScanProgress(symbols.length)): MultiTimeframeSnapshot {
   return {
@@ -51,6 +52,10 @@ function failureSnapshot(symbols: string[], error: unknown, scannedAt: string): 
   };
 }
 
+function appendWarning(snapshot: MultiTimeframeSnapshot, warning?: string) {
+  return warning ? { ...snapshot, warning: snapshot.warning ? `${snapshot.warning}；${warning}` : warning } : snapshot;
+}
+
 export async function GET() {
   await ensureAdvisorySchema();
   const snapshot = await loadLatestMultiTimeframeSnapshot(await getD1());
@@ -58,21 +63,34 @@ export async function GET() {
 }
 
 export async function runMultiTimeframeScan(symbolsInput: readonly string[]) {
-  const symbols = normalizeSymbols(symbolsInput);
-  await ensureAdvisorySchema();
-  const db = await getD1();
-  const pending = pendingSnapshot(symbols);
-  await saveMultiTimeframeSnapshot(db, pending);
+  const normalized = normalizeSymbols(symbolsInput);
+  const truncated = normalized.length > MAX_MULTI_TIMEFRAME_SYMBOLS;
+  const symbols = normalized.slice(0, MAX_MULTI_TIMEFRAME_SYMBOLS);
+  const truncationWarning = truncated ? `来源并集去重后超过 ${MAX_MULTI_TIMEFRAME_SYMBOLS} 个，已截断为前 ${MAX_MULTI_TIMEFRAME_SYMBOLS} 个` : undefined;
+  if (running) {
+    return appendWarning({ ...pendingSnapshot(symbols), warning: "已有多周期筛选任务进行中，请等待当前任务完成" }, truncationWarning);
+  }
+  running = true;
+  const pending = appendWarning(pendingSnapshot(symbols), truncationWarning);
+  let db: Awaited<ReturnType<typeof getD1>> | undefined;
   try {
+    await ensureAdvisorySchema();
+    db = await getD1();
+    await saveMultiTimeframeSnapshot(db, pending);
     const snapshot = await buildMultiTimeframeSnapshot(symbols, new Date(), {
       fetchClosedBars: (symbol, interval, now) => fetchClosedBars(symbol, interval, now, 1_000),
     });
-    await saveMultiTimeframeSnapshot(db, snapshot);
-    return snapshot;
+    const completed = appendWarning(snapshot, truncationWarning);
+    await saveMultiTimeframeSnapshot(db, completed);
+    return completed;
   } catch (error) {
-    const failed = failureSnapshot(symbols, error, pending.scannedAt);
-    try { await saveMultiTimeframeSnapshot(db, failed); } catch { /* preserve the original scan error */ }
+    const failed = appendWarning(failureSnapshot(symbols, error, pending.scannedAt), truncationWarning);
+    if (db) {
+      try { await saveMultiTimeframeSnapshot(db, failed); } catch { /* preserve the original scan error */ }
+    }
     return failed;
+  } finally {
+    running = false;
   }
 }
 
