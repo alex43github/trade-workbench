@@ -57,6 +57,25 @@ export async function GET() {
   return Response.json(snapshot ?? pendingSnapshot([]), { headers: { "Cache-Control": "no-store" } });
 }
 
+export async function runMultiTimeframeScan(symbolsInput: readonly string[]) {
+  const symbols = normalizeSymbols(symbolsInput);
+  await ensureAdvisorySchema();
+  const db = await getD1();
+  const pending = pendingSnapshot(symbols);
+  await saveMultiTimeframeSnapshot(db, pending);
+  try {
+    const snapshot = await buildMultiTimeframeSnapshot(symbols, new Date(), {
+      fetchClosedBars: (symbol, interval, now) => fetchClosedBars(symbol, interval, now, 1_000),
+    });
+    await saveMultiTimeframeSnapshot(db, snapshot);
+    return snapshot;
+  } catch (error) {
+    const failed = failureSnapshot(symbols, error, pending.scannedAt);
+    try { await saveMultiTimeframeSnapshot(db, failed); } catch { /* preserve the original scan error */ }
+    return failed;
+  }
+}
+
 export async function POST(request: Request) {
   const denied = await requireOperatorMutation(request);
   if (denied) return denied;
@@ -69,7 +88,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { symbols?: unknown } | null;
   const symbols = normalizeSymbols(body?.symbols);
   if (!symbols.length) return Response.json({ status: "degraded", warning: "没有可扫描的候选币种" }, { status: 400 });
-  if (symbols.length > 100) return Response.json({ status: "degraded", warning: "单次最多扫描 100 个候选币种" }, { status: 413 });
+  if (symbols.length > 250) return Response.json({ status: "degraded", warning: "单次最多扫描 250 个候选币种" }, { status: 413 });
   running = true;
   const pending = pendingSnapshot(symbols);
   try {

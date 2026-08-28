@@ -8,6 +8,7 @@ test("multi-timeframe route has read and guarded manual scan paths", async () =>
   assert.match(source, /export async function GET/);
   assert.match(source, /export async function POST/);
   assert.match(source, /requireOperatorMutation/);
+  assert.match(source, /250/);
   assert.match(persistence, /radar_multitimeframe_snapshots/);
   assert.match(source, /pending/);
 });

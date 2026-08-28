@@ -112,7 +112,7 @@ Allow 15m as a BinanceKlineInterval, add a bounded limit argument capped at Bina
 
 - [x] Step 4: Add the snapshot table and route
 
-Create radar_multitimeframe_snapshots with id, status, scanned_at, symbols_json, snapshot_json, and warning; add an index on scanned_at. GET loads the newest valid row. POST validates at most 100 symbols, stores a pending row, scans through the existing Binance public fetcher with bounded concurrency, writes the ready/degraded result, and returns JSON diagnostics. Keep the authorization checks already used by MA30/OI and reversal routes.
+Create radar_multitimeframe_snapshots with id, status, scanned_at, symbols_json, snapshot_json, and warning; add an index on scanned_at. GET loads the newest valid row. POST validates at most 250 symbols, stores a pending row, scans through the existing Binance public fetcher with bounded concurrency, writes the ready/degraded result, and returns JSON diagnostics. Keep the authorization checks already used by MA30/OI and reversal routes.
 
 - [x] Step 5: Run API and existing radar lifecycle tests
 
@@ -202,7 +202,7 @@ Expected: FAIL because the shared bar and Vegas tab are not present.
 
 - [x] Step 3: Add snapshot loading and guarded manual progress state
 
-Load the latest snapshot on mount, automatically request a scan for the deduplicated union of current candidate symbols capped at 100, poll while pending, and expose a manual 立即筛选 action on the Vegas tab. Reuse ManualProgress for every manual scan and show ready/degraded/pending, scan time, failed symbols, and warnings.
+Load the latest snapshot on mount without starting an anonymous scan; expose a manual 立即筛选 action for the current window, scanning the deduplicated candidate symbols capped at 250, and poll while pending. Reuse ManualProgress for every manual scan and show ready/degraded/pending, scan time, failed symbols, and warnings.
 
 - [x] Step 4: Apply the MA30 post-filter to every window
 

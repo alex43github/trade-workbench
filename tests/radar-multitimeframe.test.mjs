@@ -60,8 +60,18 @@ test("forming candles are excluded before MA30 bucketing", async () => {
   }));
   bars[30].closeTime = 31_000;
   const result = await buildMultiTimeframeSnapshot(["BTCUSDT"], now, { fetchClosedBars: async () => bars });
-  assert.equal(result.bySymbol.BTCUSDT["15m"]?.close, 1);
+ assert.equal(result.bySymbol.BTCUSDT["15m"]?.close, 1);
  assert.equal(result.bySymbol.BTCUSDT["15m"]?.aboveMa30, false);
+ assert.equal(result.bySymbol.BTCUSDT["15m"]?.belowMa30, false);
+});
+
+test("MA30 snapshots expose a directional comparison for bearish candles", async () => {
+  const { buildTimeframeIndicatorSnapshot, matchesMa30Direction } = await import("../lib/radar/vegas.ts");
+  const snapshot = buildTimeframeIndicatorSnapshot(Array.from({ length: 30 }, (_, index) => 30 - index), 1_000);
+  assert.equal(snapshot?.aboveMa30, false);
+  assert.equal(snapshot?.belowMa30, true);
+  assert.equal(matchesMa30Direction(snapshot, "BEARISH"), true);
+  assert.equal(matchesMa30Direction(snapshot, "BULLISH"), false);
 });
 
 test("reports candidate scan progress", async () => {

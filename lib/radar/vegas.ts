@@ -15,6 +15,7 @@ export type VegasValues = {
 
 export type VegasAlignmentDirection = "BULLISH" | "BEARISH";
 export type VegasAlignmentMode = "FULL" | "SHORT" | "NONE";
+export type Ma30Direction = "BULLISH" | "BEARISH" | "BOTH";
 export type VegasAlignment = {
   direction: VegasAlignmentDirection | null;
   mode: VegasAlignmentMode;
@@ -24,6 +25,7 @@ export type TimeframeIndicatorSnapshot = VegasValues & {
   closedTime: number;
   bars: number;
   aboveMa30: boolean;
+  belowMa30: boolean;
   vegasAligned: boolean;
   bearishAligned: boolean;
   alignment: VegasAlignmentDirection | null;
@@ -31,6 +33,13 @@ export type TimeframeIndicatorSnapshot = VegasValues & {
   shortTermAvailable: boolean;
   longTermAvailable: boolean;
 };
+
+export function matchesMa30Direction(indicator: Pick<TimeframeIndicatorSnapshot, "close" | "ma30" | "aboveMa30" | "belowMa30"> | null | undefined, direction: Ma30Direction) {
+  if (!indicator) return false;
+  const above = indicator.aboveMa30 === true || indicator.close > indicator.ma30;
+  const below = indicator.belowMa30 === true || indicator.close < indicator.ma30;
+  return direction === "BULLISH" ? above : direction === "BEARISH" ? below : above || below;
+}
 
 function isFiniteSeries(values: readonly number[]) {
   return values.length > 0 && values.every((value) => Number.isFinite(value));
@@ -118,6 +127,7 @@ export function buildTimeframeIndicatorSnapshot(
     closedTime,
     bars: closes.length,
     aboveMa30: close > ma30,
+    belowMa30: close < ma30,
     vegasAligned: alignment.direction === "BULLISH" && alignment.mode === "FULL",
     bearishAligned: alignment.direction === "BEARISH" && alignment.mode === "FULL",
     alignment: alignment.direction,

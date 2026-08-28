@@ -9,6 +9,7 @@ import { useFontScale } from "../uiPreferences";
 import { displayBinanceSymbol } from "@/lib/trade/symbols";
 import { createRadarDiagnostic, type RadarDiagnostic } from "@/lib/radar/scan-diagnostic";
 import { isMultiTimeframeSnapshotFresh, type MultiTimeframeSnapshot } from "@/lib/radar/multitimeframe";
+import { matchesMa30Direction, type Ma30Direction } from "@/lib/radar/vegas";
 import { createScanProgress, type RadarScanProgress } from "@/lib/radar/scan-progress";
 
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
@@ -142,6 +143,7 @@ type ReversalResponse = { status: "ready" | "degraded" | "pending"; scans: Parti
 type Filter = "all" | "squeeze" | "candidate" | "concentrated" | "risk" | "ma30oi" | "reversal" | "vegas";
 type Ma30Bucket = "all" | "15m" | "1h" | "4h";
 const ma30BucketLabels: Record<Ma30Bucket, string> = { all: "全部候选", "15m": "K 线站上 15 分钟 MA30", "1h": "K 线站上 1 小时 MA30", "4h": "K 线站上 4 小时 MA30" };
+const ma30BearishBucketLabels: Record<Exclude<Ma30Bucket, "all">, string> = { "15m": "K 线低于 15 分钟 MA30", "1h": "K 线低于 1 小时 MA30", "4h": "K 线低于 4 小时 MA30" };
 const participationCopy: Record<Participation, { label: string; className: string }> = {
   SQUEEZE: { label: "逼空重点", className: "grade-squeeze" },
   A: { label: "A · 可参与候选", className: "grade-a" },
@@ -182,6 +184,7 @@ const tvIntervalCopy: Record<string, string> = {
 
 const operatorLoginWarning = "请先安全登录后再启动扫描；匿名访问只显示已有快照。";
 const TVSCREENER_RETRY_DELAY_MS = 1_000;
+const MULTI_TIMEFRAME_MAX_SYMBOLS = 250;
 
 function formatPercent(value: number, digits = 2) {
   const sign = value > 0 ? "+" : "";
@@ -294,11 +297,11 @@ function uniqueSymbols(symbols: readonly string[]) {
   return [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))];
 }
 
-function bucketSymbols(symbols: readonly string[], snapshot: MultiTimeframeSnapshot | null, bucket: Ma30Bucket) {
+function bucketSymbols(symbols: readonly string[], snapshot: MultiTimeframeSnapshot | null, bucket: Ma30Bucket, direction: Ma30Direction = "BULLISH") {
   const unique = uniqueSymbols(symbols);
   if (bucket === "all") return unique;
   if (!isMultiTimeframeSnapshotFresh(snapshot)) return [];
-  return unique.filter((symbol) => snapshot?.bySymbol[symbol]?.[bucket]?.aboveMa30 === true);
+  return unique.filter((symbol) => matchesMa30Direction(snapshot?.bySymbol[symbol]?.[bucket], direction));
 }
 
 function matchesRadarFilter(coin: RadarCoin, filter: Filter) {
@@ -317,15 +320,23 @@ function createPendingMultiTimeframe(symbols: string[]): MultiTimeframeSnapshot 
   return { status: "pending", scannedAt: new Date().toISOString(), timezone: "Asia/Shanghai", symbols, bySymbol: {}, vegas: { "1h": [], "4h": [], "1d": [] }, vegasBearish: { "1h": [], "4h": [], "1d": [] }, scannedSymbols: 0, successfulSymbols: 0, failedSymbols: 0, progress: createScanProgress(symbols.length), warning: "正在读取 Binance Futures 最新已收盘 K 线" };
 }
 
-function MultiTimeframeBucketBar({ symbols, snapshot, selected, onSelect }: { symbols: string[]; snapshot: MultiTimeframeSnapshot | null; selected: Ma30Bucket; onSelect: (value: Ma30Bucket) => void }) {
+function MultiTimeframeBucketBar({ symbols, snapshot, selected, onSelect, onScan, scanning }: { symbols: string[]; snapshot: MultiTimeframeSnapshot | null; selected: Ma30Bucket; onSelect: (value: Ma30Bucket) => void; onScan: () => void; scanning: boolean }) {
   const fresh = isMultiTimeframeSnapshotFresh(snapshot);
-  const status = !fresh && snapshot?.status === "ready" ? "快照已过期" : snapshot?.status === "ready" ? "已更新" : snapshot?.status === "pending" ? "筛选中" : snapshot?.status === "degraded" ? "数据不足/部分失败" : "等待已收盘数据";
+  const snapshotMatchesWindow = fresh && snapshot?.symbols?.join(",") === uniqueSymbols(symbols).join(",");
+  const status = scanning || snapshot?.status === "pending" ? "筛选中" : !snapshot ? "等待已收盘数据" : !snapshotMatchesWindow ? "需要重新筛选" : !fresh ? "快照已过期" : snapshot.status === "ready" ? "已更新" : snapshot.status === "degraded" ? "数据不足/部分失败" : "等待已收盘数据";
+  const count = (bucket: Exclude<Ma30Bucket, "all">, direction: Ma30Direction) => bucketSymbols(symbols, snapshotMatchesWindow ? snapshot : null, bucket, direction).length;
   return <section className="ma30-bucket-panel" aria-label="已收盘 K 线 MA30 分档">
-    <div className="ma30-bucket-heading"><div><strong>当前窗口后置分档</strong><small>只在原筛选结果内继续筛选，使用最新已收盘 K 线</small></div><span className={`ma30-bucket-status ${snapshot?.status ?? "pending"}`}>{status}</span></div>
+    <div className="ma30-bucket-heading"><div><strong>当前窗口后置分档</strong><small>只在原筛选结果内继续筛选，使用最新已收盘 K 线</small></div><div className="ma30-bucket-actions"><span className={`ma30-bucket-status ${snapshot?.status ?? "pending"}`}>{status}</span><button type="button" onClick={onScan} disabled={scanning || !symbols.length}>{scanning ? "正在筛选…" : "立即筛选"}</button></div></div>
     <div className="ma30-bucket-buttons">
-      {(["all", "15m", "1h", "4h"] as const).map((value) => <button type="button" key={value} className={selected === value ? "active" : ""} aria-pressed={selected === value} onClick={() => onSelect(value)}>{ma30BucketLabels[value]} <b>{value === "all" ? symbols.length : bucketSymbols(symbols, snapshot, value).length}</b></button>)}
+      <button type="button" className={selected === "all" ? "active" : ""} aria-pressed={selected === "all"} onClick={() => onSelect("all")}>{ma30BucketLabels.all} <b>{symbols.length}</b></button>
     </div>
-    <small className="ma30-bucket-note">{!fresh && snapshot?.status === "ready" ? "快照已过期，请重新筛选" : snapshot?.warning ?? (symbols.length ? "正在读取 15m、1h、4h 已收盘 K 线" : "当前窗口暂无候选币种")} · 缺失数据不会计入站上 MA30</small>
+    <div className="ma30-bucket-direction"><strong>多头：需站上</strong><div className="ma30-bucket-buttons">
+      {(["15m", "1h", "4h"] as const).map((value) => <button type="button" key={`bull-${value}`} className={selected === value ? "active" : ""} aria-pressed={selected === value} onClick={() => onSelect(value)}>{ma30BucketLabels[value]} <b>{count(value, "BULLISH")}</b></button>)}
+    </div></div>
+    <div className="ma30-bucket-direction"><strong>空头：需低于</strong><div className="ma30-bucket-buttons">
+      {(["15m", "1h", "4h"] as const).map((value) => <button type="button" key={`bear-${value}`} className={selected === value ? "active" : ""} aria-pressed={selected === value} onClick={() => onSelect(value)}>{ma30BearishBucketLabels[value]} <b>{count(value, "BEARISH")}</b></button>)}
+    </div></div>
+    <small className="ma30-bucket-note">{!snapshotMatchesWindow ? "当前窗口候选集合已变化，请点击“立即筛选”读取全部候选" : !fresh && snapshot?.status === "ready" ? "快照已过期，请重新筛选" : snapshot?.warning ?? (symbols.length ? "正在读取 15m、1h、4h 已收盘 K 线" : "当前窗口暂无候选币种")} · 缺失数据不会计入多头或空头结果</small>
   </section>;
 }
 
@@ -333,7 +344,7 @@ function VegasBuckets({ snapshot, bucket, query }: { snapshot: MultiTimeframeSna
   return <div className="vegas-bucket-grid">
     {(["BULLISH", "BEARISH"] as const).flatMap((direction) => (["1h", "4h", "1d"] as const).map((interval) => {
       const source = direction === "BULLISH" ? snapshot?.vegas?.[interval] ?? [] : snapshot?.vegasBearish?.[interval] ?? [];
-      const matches = bucketSymbols(source, snapshot, bucket).filter((symbol) => symbolMatchesQuery(symbol, query));
+      const matches = bucketSymbols(source, snapshot, bucket, direction).filter((symbol) => symbolMatchesQuery(symbol, query));
       const label = interval === "1h" ? "1 小时" : interval === "4h" ? "4 小时" : "1 日";
       const directionLabel = direction === "BULLISH" ? "多头" : "空头";
       const directionHeading = direction === "BULLISH" ? "多头 Vegas" : "空头 Vegas";
@@ -363,12 +374,15 @@ export default function Home() {
   const [radarNow, setRadarNow] = useState<Date | null>(null);
  const { themeMode, resolvedTheme, setThemeMode } = useTerminalTheme();
  const { fontScale } = useFontScale();
-  const multiTimeframeSymbols = useMemo(() => uniqueSymbols([
-    ...(data?.coins ?? []).map((coin) => coin.symbol),
-    ...(ma30Oi?.candidates ?? []).map((candidate) => candidate.symbol),
-    ...Object.values(reversal?.scans ?? {}).flatMap((scan) => scan?.candidates.map((candidate) => candidate.symbol) ?? []),
-    ...(reversal?.archives ?? []).map((archive) => archive.symbol),
-  ]).slice(0, 100), [data, ma30Oi, reversal]);
+  const multiTimeframeSymbols = useMemo(() => {
+    const reversalSymbols = Object.values(reversal?.scans ?? {}).flatMap((scan) => scan?.candidates.map((candidate) => candidate.symbol) ?? []);
+    const symbols = filter === "reversal"
+      ? reversalSymbols
+      : filter === "ma30oi"
+        ? (ma30Oi?.candidates ?? []).map((candidate) => candidate.symbol)
+        : (data?.coins ?? []).filter((coin) => filter === "vegas" || matchesRadarFilter(coin, filter)).map((coin) => coin.symbol);
+    return uniqueSymbols(symbols).slice(0, MULTI_TIMEFRAME_MAX_SYMBOLS);
+  }, [data, filter, ma30Oi, reversal]);
   const multiTimeframeFingerprint = multiTimeframeSymbols.join(",");
 
   async function loadRadar() {
@@ -443,6 +457,10 @@ export default function Home() {
     } finally {
       setMultiTimeframeScanning(false);
     }
+  }
+
+  function scanCurrentWindow() {
+    return runMultiTimeframeNow(multiTimeframeSymbols);
   }
 
  async function loadMa30Oi() {
@@ -642,7 +660,7 @@ export default function Home() {
   const baseRadarCoins = useMemo(() => (data?.coins ?? []).filter((coin) => matchesRadarFilter(coin, filter)), [data, filter]);
   const filteredCoins = useMemo(() => baseRadarCoins.filter((coin) => {
     const matchesQuery = !normalizedQuery || coin.symbol.includes(normalizedQuery) || coin.displayName.toUpperCase().includes(normalizedQuery);
-    const matchesBucket = ma30Bucket === "all" || bucketSymbols([coin.symbol], multiTimeframe, ma30Bucket).length > 0;
+    const matchesBucket = ma30Bucket === "all" || bucketSymbols([coin.symbol], multiTimeframe, ma30Bucket, "BOTH").length > 0;
     return matchesQuery && matchesBucket;
   }), [baseRadarCoins, normalizedQuery, ma30Bucket, multiTimeframe]);
 
@@ -658,10 +676,13 @@ export default function Home() {
     : filter === "reversal"
       ? uniqueSymbols(reversalCandidates.map((candidate) => candidate.symbol))
       : filter === "vegas"
-        ? uniqueSymbols((multiTimeframe?.vegas["1h"] ?? []).concat(multiTimeframe?.vegas["4h"] ?? [], multiTimeframe?.vegas["1d"] ?? [], multiTimeframe?.vegasBearish?.["1h"] ?? [], multiTimeframe?.vegasBearish?.["4h"] ?? [], multiTimeframe?.vegasBearish?.["1d"] ?? []))
+        ? multiTimeframeSymbols
         : baseRadarCoins.map((coin) => coin.symbol);
-  const bucketedReversalCandidates = reversalCandidates.filter((candidate) => bucketSymbols([candidate.symbol], multiTimeframe, ma30Bucket).length > 0 && symbolMatchesQuery(candidate.symbol, normalizedQuery));
-  const bucketedMa30OiCandidates = (ma30Oi?.candidates ?? []).filter((candidate) => bucketSymbols([candidate.symbol], multiTimeframe, ma30Bucket).length > 0 && symbolMatchesQuery(candidate.symbol, normalizedQuery));
+  const bucketedReversalCandidates = reversalCandidates.filter((candidate) => {
+    const direction = candidate.direction === "LONG" ? "BULLISH" : "BEARISH";
+    return bucketSymbols([candidate.symbol], multiTimeframe, ma30Bucket, direction).length > 0 && symbolMatchesQuery(candidate.symbol, normalizedQuery);
+  });
+  const bucketedMa30OiCandidates = (ma30Oi?.candidates ?? []).filter((candidate) => bucketSymbols([candidate.symbol], multiTimeframe, ma30Bucket, "BULLISH").length > 0 && symbolMatchesQuery(candidate.symbol, normalizedQuery));
   const reversalProgresses = (["4h", "1d"] as const).flatMap((interval) => {
     const progress = reversal?.scans[interval]?.progress;
     return progress ? [{ label: interval === "4h" ? "4H" : "日线", progress }] : [];
@@ -750,7 +771,7 @@ export default function Home() {
             <label className="search-box"><span>⌕</span><input value={query}
               onChange={(event) => setQuery(event.target.value)} placeholder="搜索币种" aria-label="搜索币种" /></label>
          </div>
-          <MultiTimeframeBucketBar symbols={baseWindowSymbols} snapshot={multiTimeframe} selected={ma30Bucket} onSelect={setMa30Bucket} />
+          <MultiTimeframeBucketBar symbols={baseWindowSymbols} snapshot={multiTimeframe} selected={ma30Bucket} onSelect={setMa30Bucket} onScan={() => void scanCurrentWindow()} scanning={multiTimeframeScanning} />
           <ManualProgress active={multiTimeframeScanning} progress={multiTimeframe?.progress} label="正在读取 15m、1h、4h、1d 已收盘 K 线" estimate="数十秒至数分钟，取决于当前候选数量和网络" />
 
          {filter === "reversal" ? (
