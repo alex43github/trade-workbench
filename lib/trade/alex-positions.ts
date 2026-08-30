@@ -56,8 +56,18 @@ function manualEntrySourceId(order: AccountOrderRecord, side: ProtectionSide) {
   return sourceOrderId;
 }
 
-function candidateId() {
-  return `a${crypto.randomUUID().replaceAll("-", "").slice(0, 20)}`;
+function candidateId(symbol: string, side: ProtectionSide, sourceOrderIds: string[]) {
+  const digest = crypto.createHash("sha256").update(`${symbol}|${side}|${sourceOrderIds.join("|")}`).digest("hex");
+  return `a${digest.slice(0, 20)}`;
+}
+
+function sourceFillId(symbol: string, side: ProtectionSide, sourceOrderIds: string[]) {
+  const digest = crypto.createHash("sha256").update(`${symbol}|${side}|${sourceOrderIds.join("|")}`).digest("hex");
+  return `manual-${symbol}-${side.toLowerCase()}-${digest.slice(0, 20)}`;
+}
+
+function amount(value: number) {
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 const disconnected = (reason: string): AlexPositionsResult => ({ connected: false, reason, positions: [] });
@@ -74,25 +84,45 @@ export async function getAlexManualPositions(dependencies: AlexPositionsDependen
       item,
       orders: await readAllOrders(String(item.symbol).toUpperCase()),
     })));
-    const positions = orders.flatMap(({ item, orders: accountOrders }) => {
+    const positions = (await Promise.all(orders.map(async ({ item, orders: accountOrders }) => {
       const side = positionSide(item);
       if (!side) return [];
       const symbol = String(item.symbol ?? "").toUpperCase();
-      return accountOrders.flatMap((order) => {
-        const sourceOrderId = manualEntrySourceId(order, side);
-        if (!sourceOrderId) return [];
-        return [{
-          candidateId: candidateId(),
-          symbol,
-          side,
-          quantity: number(order.executedQty),
-          entryPrice: number(item.entryPrice),
-          markPrice: number(item.markPrice),
-          leverage: number(item.leverage) || 1,
-          sourceOrderIds: [sourceOrderId],
-        }];
-      });
-    });
+      const manualOrders = accountOrders
+        .map((order) => ({ order, sourceOrderId: manualEntrySourceId(order, side) }))
+        .filter((item): item is { order: AccountOrderRecord; sourceOrderId: string } => Boolean(item.sourceOrderId));
+      if (!manualOrders.length) return [];
+      const sourceOrderIds = manualOrders.map((entry) => entry.sourceOrderId);
+      const totalQuantity = Math.abs(number(item.positionAmt));
+      const rawManualQuantity = manualOrders.reduce((sum, entry) => sum + number(entry.order.executedQty), 0);
+      const manualQuantity = Math.min(rawManualQuantity, totalQuantity);
+      const otherQuantity = Math.max(totalQuantity - manualQuantity, 0);
+      const markPrice = number(item.markPrice);
+      const leverage = number(item.leverage) || 1;
+      const totalNotional = amount(totalQuantity * markPrice);
+      const manualNotional = amount(manualQuantity * markPrice);
+      const otherNotional = amount(otherQuantity * markPrice);
+      return [{
+        candidateId: candidateId(symbol, side, sourceOrderIds),
+        sourceFillId: sourceFillId(symbol, side, sourceOrderIds),
+        symbol,
+        side,
+        quantity: manualQuantity,
+        entryPrice: number(item.entryPrice),
+        markPrice,
+        leverage,
+        sourceOrderIds,
+        totalQuantity,
+        totalNotional,
+        totalMargin: amount(totalNotional / leverage),
+        otherQuantity,
+        otherNotional,
+        otherMargin: amount(otherNotional / leverage),
+        manualNotional,
+        manualMargin: amount(manualNotional / leverage),
+        ...(rawManualQuantity > totalQuantity + Number.EPSILON ? { reconciliationRequired: true } : {}),
+      }];
+    }))).flat();
     return { connected: true, reason: null, positions };
   } catch {
     return disconnected("币安持仓来源查询暂时不可用");

@@ -99,7 +99,7 @@ test("trade UI labels the ATR bands and fixed size as margin", () => {
 test("positions keep the same wizard shell and show an explicit add-only warning", () => {
   assert.match(terminalSource, /interval=\{interval\}/);
   assert.match(strategyPanelSource, /position=\{position\}/);
-  assert.match(wizardSource, /POSITION DETECTED · LIVE STRATEGY/);
+  assert.match(wizardSource, /<h2>实盘策略<\/h2>/);
   assert.match(wizardSource, /只新增限价策略，不自动平仓/);
 });
 

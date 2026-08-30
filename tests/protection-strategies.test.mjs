@@ -107,3 +107,11 @@ test("rejects application-generated source order ids for manual protection", asy
     }), /保护策略来源订单不正确/);
   }
 });
+
+test("rejects a grouped manual source when its quantity cannot be reconciled", async () => {
+  const { createProtectionStrategy } = await strategies();
+  await assert.rejects(() => createProtectionStrategy({
+    env, origin: "ALEX", source: { ...source, reconciliationRequired: true, sourceOrderIds: ["ios_coin_1", "ios_coin_2"] }, strategyType: "DEFAULT_TP",
+    idempotencyKey: "manual-reconcile-1",
+  }), /无法与当前仓位安全对账/);
+});

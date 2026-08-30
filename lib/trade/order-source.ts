@@ -13,7 +13,5 @@ export function isProjectClientOrderId(value: unknown) {
 export function manualSourceOrderId(order: BinanceOrderLike): string | null {
   const clientOrderId = String(order.clientOrderId ?? "").trim();
   if (clientOrderId) return isProjectClientOrderId(clientOrderId) ? null : clientOrderId;
-
-  const orderId = String(order.orderId ?? "").trim();
-  return orderId ? `binance-${orderId}` : null;
+  return null;
 }

@@ -13,7 +13,9 @@ import { isProjectClientOrderId } from "./order-source.ts";
 import type {
   ProtectionOrderPlan,
   ProtectionOrigin,
+  ProtectionPositionSide,
   ProtectionPosition,
+  ProtectionMarketConfig,
   ProtectionStrategyType,
 } from "./protection-contracts.ts";
 
@@ -53,6 +55,7 @@ export type PersistedProtectionStrategy = {
   side: "LONG" | "SHORT";
   strategyType: ProtectionStrategyType;
   status: ProtectionStatus;
+  error: string | null;
   config: Record<string, unknown>;
   initialQuantity: number;
   remainingQuantity: number;
@@ -71,6 +74,7 @@ export type ProtectionCreateInput = {
   strategyType: ProtectionStrategyType;
   fixedPrice?: number;
   timeframe?: string;
+  marketConfig?: ProtectionMarketConfig;
   idempotencyKey: string;
 };
 
@@ -157,7 +161,7 @@ async function hydrate(row: Row | null): Promise<PersistedProtectionStrategy | n
     id: String(row.id), origin: String(row.origin) as ProtectionOrigin, sourceOrderId: String(row.source_order_id),
     sourceFillId: row.source_fill_id == null ? null : String(row.source_fill_id), symbol: String(row.symbol),
     side: String(row.side) === "LONG" ? "LONG" : "SHORT", strategyType: String(row.strategy_type) as ProtectionStrategyType,
-    status: strategyStatus(row.status), config: parseConfig(row.config_json), initialQuantity: Number(row.initial_quantity),
+    status: strategyStatus(row.status), error: row.error == null ? null : String(row.error), config: parseConfig(row.config_json), initialQuantity: Number(row.initial_quantity),
     remainingQuantity: Number(row.remaining_quantity), entryPrice: Number(row.entry_price), leverage: Number(row.leverage),
     invalidCandleCount: Number(row.invalid_candle_count ?? 0), lastClosedCandleId: row.last_closed_candle_id == null ? null : String(row.last_closed_candle_id),
     revision: Number(row.revision), orders: orders.results.map(decodeOrder),
@@ -196,6 +200,14 @@ function oppositeSide(side: "LONG" | "SHORT") {
   return side === "LONG" ? "SELL" : "BUY";
 }
 
+function protectionPositionSide(value: unknown, strategySide: "LONG" | "SHORT"): ProtectionPositionSide {
+  if (value === undefined || value === null || String(value).trim() === "") return strategySide;
+  const normalized = String(value).trim().toUpperCase();
+  if (normalized === "BOTH") return "BOTH";
+  if (normalized === strategySide) return strategySide;
+  throw new Error("当前持仓模式与策略方向不一致");
+}
+
 function originPrefix(origin: ProtectionOrigin) {
   return origin === "ALEX" ? "alex" : origin === "TELEGRAM" ? "tele" : "web";
 }
@@ -221,23 +233,26 @@ function enabled(env: RuntimeEnv) {
     && getGatewayConfig(env).configured;
 }
 
-async function activeSourceAllocation(db: Awaited<ReturnType<typeof getD1>>, symbol: string, side: string, exceptSourceOrderId: string) {
+async function activeSourceAllocation(db: Awaited<ReturnType<typeof getD1>>, symbol: string, side: string, exceptSourceFillId: string) {
   const rows = await db.prepare(`SELECT source_order_id, MAX(CAST(initial_quantity AS REAL)) AS quantity
     FROM trade_protection_strategies
-    WHERE symbol = ? AND side = ? AND source_order_id <> ?
+    WHERE symbol = ? AND side = ? AND source_fill_id <> ?
       AND status IN ('DRAFT', 'ACTIVE', 'PARTIALLY_PROTECTED', 'TRIGGERING')
-    GROUP BY source_order_id`).bind(symbol, side, exceptSourceOrderId).all<Row>();
+    GROUP BY source_fill_id`).bind(symbol, side, exceptSourceFillId).all<Row>();
   return rows.results.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0);
 }
 
 function planConfig(input: ProtectionCreateInput, stopPrices: number[]) {
   return {
     strategyType: input.strategyType,
+    sourceOrderIds: input.source.sourceOrderIds,
+    manualAliasIds: input.source.manualAliasIds ?? [],
     fixedPrice: input.fixedPrice ?? null,
     timeframe: input.timeframe ?? null,
     stopPrices,
     roiTargets: input.strategyType === "DEFAULT_TP" ? [100, 200] : [],
     firstGuardExitPct: input.strategyType === "MA_SL" ? 50 : null,
+    marketConfig: input.marketConfig ?? null,
   };
 }
 
@@ -246,7 +261,10 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
   if (!enabled(env)) throw new Error("真实保护策略挂单通道未开启");
   if (!/^[A-Za-z0-9:_-]{8,200}$/.test(input.idempotencyKey)) throw new Error("保护策略幂等编号不正确");
   if (!input.source.sourceOrderIds.length) throw new Error("保护策略来源订单不正确");
+  if (input.source.reconciliationRequired) throw new Error("手动持仓来源无法与当前仓位安全对账，暂不能挂保护策略");
+  if (input.origin === "ALEX" && input.source.sourceOrderIds.some((value) => isProjectClientOrderId(value))) throw new Error("保护策略来源订单不正确");
   const sourceOrderId = safeId(input.source.sourceOrderIds[0], "来源订单编号不正确");
+  const sourceFillId = safeId(input.source.sourceFillId ?? sourceOrderId, "来源成交批次编号不正确");
   const validSource = input.origin === "ALEX"
     ? !isProjectClientOrderId(sourceOrderId)
     : new RegExp(`^${originPrefix(input.origin)}`, "i").test(sourceOrderId);
@@ -258,8 +276,8 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
   const replay = await db.prepare("SELECT * FROM trade_protection_strategies WHERE idempotency_key = ? LIMIT 1").bind(safeIdempotencyKey(input.idempotencyKey)).first<Row>();
   if (replay) return { ok: replay.status === "ACTIVE", status: replay.status === "ACTIVE" ? 200 : 409, strategy: (await hydrate(replay))! };
   const duplicate = await db.prepare(`SELECT id FROM trade_protection_strategies
-    WHERE source_order_id = ? AND strategy_type = ? AND status IN ('DRAFT', 'ACTIVE', 'PARTIALLY_PROTECTED', 'TRIGGERING') LIMIT 1`)
-    .bind(sourceOrderId, input.strategyType).first<Row>();
+    WHERE source_fill_id = ? AND strategy_type = ? AND status IN ('DRAFT', 'ACTIVE', 'PARTIALLY_PROTECTED', 'TRIGGERING') LIMIT 1`)
+    .bind(sourceFillId, input.strategyType).first<Row>();
   if (duplicate) throw new Error("该来源订单已有活动保护策略");
 
   const readPosition = dependencies.readPosition ?? (async (candidate) => {
@@ -273,9 +291,10 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
   const currentSide = currentAmount >= 0 ? "LONG" : "SHORT";
   if (!Number.isFinite(currentAmount) || currentAmount === 0 || currentSide !== input.source.side) throw new Error("当前持仓方向已变化");
   const currentQuantity = Math.abs(currentAmount);
+  const orderPositionSide = protectionPositionSide(current.positionSide, input.source.side);
   const sourceQuantity = finitePositive(input.source.quantity, "来源初始数量");
   if (currentQuantity + Number.EPSILON < sourceQuantity) throw new Error("当前仓位小于来源订单数量，无法安全绑定保护策略");
-  const reserved = await activeSourceAllocation(db, symbol, input.source.side, sourceOrderId);
+  const reserved = await activeSourceAllocation(db, symbol, input.source.side, sourceFillId);
   if (reserved + sourceQuantity > currentQuantity + Number.EPSILON) throw new Error("当前合并仓位不足以独立保护该来源订单");
 
   const exchange = await readExchangeInfo(symbol);
@@ -304,7 +323,7 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
     const sequence = await nextSequence("order");
     const clientOrderId = nextProtectionClientOrderId({ origin: input.origin, kind, sequence });
     plans.push({
-      strategyId: id, origin: input.origin, symbol, side: exitSide, positionSide: input.source.side,
+      strategyId: id, origin: input.origin, symbol, side: exitSide, positionSide: orderPositionSide,
       type: kind === "TP" ? "TAKE_PROFIT_MARKET" : "STOP_MARKET", quantity: formatDecimal(quantity, filter.stepSize),
       ...(price === undefined ? {} : { stopPrice: formatDecimal(price, filter.tickSize) }), reduceOnly: true,
       newClientOrderId: clientOrderId, stage,
@@ -326,14 +345,14 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
       (id, idempotency_key, origin, source_order_id, source_fill_id, symbol, side, strategy_type, status, config_json,
        initial_quantity, remaining_quantity, entry_price, leverage, invalid_candle_count)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, 0)`)
-      .bind(id, input.idempotencyKey, input.origin, sourceOrderId, sourceOrderId, symbol, input.source.side, input.strategyType,
+      .bind(id, input.idempotencyKey, input.origin, sourceOrderId, sourceFillId, symbol, input.source.side, input.strategyType,
         JSON.stringify(config), String(sourceQuantity), String(sourceQuantity), String(entryPrice), String(leverage)),
     ...orderRows.map((order) => db.prepare(`INSERT INTO trade_protection_orders
       (id, strategy_id, origin, stage, client_order_id, symbol, side, type, quantity, stop_price, reduce_only, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'RESERVED')`)
       .bind(order.id, order.strategyId, order.origin, order.stage, order.clientOrderId, order.symbol, order.side, order.type, order.quantity, order.stopPrice)),
     db.prepare("INSERT INTO trade_protection_events (id, strategy_id, type, payload_json) VALUES (?, ?, 'CREATED', ?)")
-      .bind(crypto.randomUUID(), id, JSON.stringify({ origin: input.origin, sourceOrderId, strategyType: input.strategyType })),
+      .bind(crypto.randomUUID(), id, JSON.stringify({ origin: input.origin, sourceOrderId, sourceFillId, strategyType: input.strategyType })),
   ]);
 
   if (!plans.length) {
@@ -344,8 +363,13 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
 
   const placeOrder = dependencies.placeOrder ?? ((plan: ProtectionOrderPlan) => gatewayJson<BinanceOrderResult>("/fapi/v1/order", {
     method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ symbol: plan.symbol, side: plan.side, type: plan.type, quantity: plan.quantity,
-      ...(plan.stopPrice ? { stopPrice: plan.stopPrice } : {}), reduceOnly: "true", newClientOrderId: plan.newClientOrderId }).toString(),
+    body: (() => {
+      const params = new URLSearchParams({ symbol: plan.symbol, side: plan.side, type: plan.type, quantity: plan.quantity,
+        ...(plan.stopPrice ? { stopPrice: plan.stopPrice } : {}), newClientOrderId: plan.newClientOrderId });
+      if (plan.positionSide === "BOTH") params.set("reduceOnly", "true");
+      else params.set("positionSide", plan.positionSide);
+      return params.toString();
+    })(),
   }));
   const findOrder = dependencies.findOrder ?? ((order: { symbol: string; clientOrderId: string }) => gatewayJson<BinanceOrderResult>(
     `/fapi/v1/order?symbol=${encodeURIComponent(order.symbol)}&origClientOrderId=${encodeURIComponent(order.clientOrderId)}`,
@@ -393,6 +417,23 @@ export async function listProtectionStrategies(limit = 50) {
   const safeLimit = Number.isInteger(limit) && limit > 0 && limit <= 100 ? limit : 50;
   const rows = await (await getD1()).prepare("SELECT * FROM trade_protection_strategies ORDER BY created_at DESC LIMIT ?").bind(safeLimit).all<Row>();
   return Promise.all(rows.results.map((row) => hydrate(row))) as Promise<PersistedProtectionStrategy[]>;
+}
+
+export async function listProtectionStrategiesBySourceOrderId(sourceOrderId: unknown) {
+  await ensureProtectionSchema();
+  const source = safeId(sourceOrderId, "来源订单编号不正确");
+  const rows = await (await getD1()).prepare("SELECT * FROM trade_protection_strategies WHERE source_order_id = ? ORDER BY created_at, id").bind(source).all<Row>();
+  return Promise.all(rows.results.map((row) => hydrate(row))) as Promise<PersistedProtectionStrategy[]>;
+}
+
+export async function markProtectionStrategyReconciliationRequired(id: unknown, error: unknown) {
+  await ensureProtectionSchema();
+  const strategyId = safeId(id, "保护策略编号不正确");
+  const result = await (await getD1()).prepare(`UPDATE trade_protection_strategies
+    SET status = 'RECONCILIATION_REQUIRED', error = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status IN ('ACTIVE', 'PARTIALLY_PROTECTED', 'TRIGGERING')`).bind(safeError(error), strategyId).run();
+  if (changed(result) !== 1) return await getProtectionStrategy(strategyId);
+  return getProtectionStrategy(strategyId);
 }
 
 export async function getProtectionStrategy(id: unknown) {

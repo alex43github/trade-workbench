@@ -9,6 +9,7 @@ type Props = {
   interval: string;
   accountConnected: boolean;
   liveTradingAvailable: boolean;
+  currentLeverage: number | null;
   currentPrice: number;
   maLength: number;
   maValue: number;
@@ -18,10 +19,12 @@ type Props = {
   onAccountChanged: () => void;
 };
 
-export default function AdaptiveStrategyPanel({ symbol, position, interval, liveTradingAvailable, currentPrice, maValue, onAccountChanged }: Props) {
+export default function AdaptiveStrategyPanel({ symbol, position, interval, accountConnected, liveTradingAvailable, currentLeverage, currentPrice, maValue, onAccountChanged }: Props) {
   return <StrategyWizard
     symbol={symbol}
     position={position}
+    accountConnected={accountConnected}
+    currentLeverage={currentLeverage}
     currentPrice={currentPrice}
     chartTimeframe={interval}
     chartMa={maValue}

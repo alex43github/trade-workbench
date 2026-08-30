@@ -52,7 +52,15 @@ export async function GET(request: Request) {
   const denied = await requireOperator(request);
   if (denied) return denied;
   try {
-    return Response.json({ strategies: await listLiveStrategies(20) }, { headers: { "cache-control": "no-store" } });
+    const strategies = await listLiveStrategies(20);
+    return Response.json({
+      strategies: strategies.map((strategy) => ({
+        ...strategy,
+        currentGeneration: strategy.currentGeneration,
+        lifecycle: strategy.lifecycle,
+        attempts: strategy.attempts,
+      })),
+    }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return Response.json({ error: safeError(error), strategies: [] }, { status: 503, headers: { "cache-control": "no-store" } });
   }

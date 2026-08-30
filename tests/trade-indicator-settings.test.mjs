@@ -12,6 +12,8 @@ test("indicator settings normalize per-symbol ATR values and line styles", () =>
     maLength: 55,
     entryAtrUpper: 1.75,
     entryAtrLower: 0.6,
+    trendAtrEnabled: true,
+    trendAtrMultiplier: 3,
     atr: { upperColor: "#12ABCD", lowerColor: "#345678", upperLineWidth: 4, lowerLineWidth: 2 },
   });
   assert.deepEqual(settings, {
@@ -20,6 +22,8 @@ test("indicator settings normalize per-symbol ATR values and line styles", () =>
     maLength: 55,
     entryAtrUpper: 1.75,
     entryAtrLower: 0.6,
+    trendAtrEnabled: true,
+    trendAtrMultiplier: 3,
     atr: { upperColor: "#12abcd", lowerColor: "#345678", upperLineWidth: 4, lowerLineWidth: 2 },
     vegas: { enabled: true, fastLength: 144, slowLength: 169, outerFastLength: 576, outerSlowLength: 676, firstColor: "#f59e0b", secondColor: "#ec4899", lineWidth: 2 },
   });
@@ -43,9 +47,12 @@ test("invalid values fall back safely and invalid symbols are rejected", () => {
 test("trade UI persists ATR settings and applies custom line styles", () => {
   assert.match(terminalSource, /api\/trade\/indicator-settings/);
   assert.match(terminalSource, /ATR上方线颜色/);
+  assert.match(terminalSource, /趋势 ATR/);
+  assert.match(terminalSource, /trendAtrMultiplier/);
   assert.match(terminalSource, /ATR下方线粗细/);
   assert.match(chartSource, /indicators\.atr\.upperColor/);
- assert.match(chartSource, /indicators\.atr\.lowerLineWidth/);
+  assert.match(chartSource, /indicators\.atr\.lowerLineWidth/);
+  assert.match(chartSource, /trendAtrEnabled/);
   for (const line of ["vegas144", "vegas169", "vegas576", "vegas676"]) assert.match(chartSource, new RegExp(line));
   assert.match(terminalSource, /EMA144\/EMA169/);
   assert.match(terminalSource, /limit=1000/);

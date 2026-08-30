@@ -19,6 +19,8 @@ export type PersistedIndicatorSettings = {
   maLength: number;
   entryAtrUpper: number;
   entryAtrLower: number;
+  trendAtrEnabled: boolean;
+  trendAtrMultiplier: number;
   atr: {
     upperColor: string;
     lowerColor: string;
@@ -33,6 +35,8 @@ export const defaultPersistedIndicatorSettings = {
   maLength: 30,
   entryAtrUpper: 1,
   entryAtrLower: 1,
+  trendAtrEnabled: true,
+  trendAtrMultiplier: 3,
   atr: {
     upperColor: "#111827",
     lowerColor: "#111827",
@@ -78,6 +82,8 @@ export function normalizeIndicatorSettings(symbolInput: unknown, input: unknown)
     maLength: Math.round(numberInRange(source.maLength, defaultPersistedIndicatorSettings.maLength, 2, 500)),
     entryAtrUpper: numberInRange(source.entryAtrUpper, defaultPersistedIndicatorSettings.entryAtrUpper, 0, 20),
     entryAtrLower: numberInRange(source.entryAtrLower, defaultPersistedIndicatorSettings.entryAtrLower, 0, 20),
+    trendAtrEnabled: source.trendAtrEnabled !== false,
+    trendAtrMultiplier: numberInRange(source.trendAtrMultiplier, defaultPersistedIndicatorSettings.trendAtrMultiplier, 0, 20),
     atr: {
       upperColor: color(atr.upperColor, defaultPersistedIndicatorSettings.atr.upperColor),
       lowerColor: color(atr.lowerColor, defaultPersistedIndicatorSettings.atr.lowerColor),

@@ -10,6 +10,91 @@ let telegramInitialized = false;
 let liveStrategyInitialized = false;
 let liveManualCloseInitialized = false;
 let protectionInitialized = false;
+let orderArchiveInitialized = false;
+
+export async function ensureOrderArchiveSchema() {
+  if (orderArchiveInitialized) return;
+  const db = await getD1();
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_order_archive (
+      id TEXT PRIMARY KEY NOT NULL,
+      account_id TEXT NOT NULL, symbol TEXT NOT NULL, exchange_order_id TEXT NOT NULL,
+      raw_client_order_id TEXT, side TEXT NOT NULL, position_side TEXT, order_type TEXT,
+      time_in_force TEXT, post_only INTEGER, reduce_only INTEGER,
+      price TEXT, stop_price TEXT, original_quantity TEXT, executed_quantity TEXT,
+      status TEXT NOT NULL, order_time TEXT,
+      source_classification TEXT NOT NULL CHECK (source_classification IN ('TELEGRAM', 'WEB', 'ALEX', 'BINANCE_NATIVE', 'UNCLASSIFIED')),
+      original_payload_json TEXT NOT NULL, latest_payload_json TEXT NOT NULL, raw_meta_json TEXT NOT NULL,
+      first_seen_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(account_id, symbol, exchange_order_id)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_order_archive_events (
+      id TEXT PRIMARY KEY NOT NULL, archived_order_id TEXT NOT NULL, status TEXT NOT NULL,
+      event_time TEXT NOT NULL, payload_hash TEXT NOT NULL, payload_json TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(archived_order_id, status, event_time, payload_hash)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_fill_archive (
+      id TEXT PRIMARY KEY NOT NULL,
+      account_id TEXT NOT NULL, symbol TEXT NOT NULL, exchange_order_id TEXT NOT NULL, exchange_trade_id TEXT NOT NULL,
+      raw_client_order_id TEXT, side TEXT NOT NULL, position_side TEXT, role TEXT NOT NULL CHECK (role IN ('ENTRY', 'EXIT')),
+      quantity TEXT NOT NULL, price TEXT NOT NULL, commission TEXT, commission_asset TEXT, realized_pnl TEXT,
+      fill_time TEXT NOT NULL,
+      source_classification TEXT NOT NULL CHECK (source_classification IN ('TELEGRAM', 'WEB', 'ALEX', 'BINANCE_NATIVE', 'UNCLASSIFIED')),
+      initial_confidence TEXT NOT NULL CHECK (initial_confidence IN ('EXACT', 'UNCERTAIN', 'UNPAIRED')),
+      raw_payload_json TEXT NOT NULL, raw_meta_json TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(account_id, symbol, exchange_order_id, exchange_trade_id)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_review_groups (
+      id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, symbol TEXT NOT NULL, side TEXT NOT NULL,
+      group_kind TEXT NOT NULL CHECK (group_kind IN ('STRATEGY', 'MANUAL')),
+      source_classification TEXT NOT NULL CHECK (source_classification IN ('TELEGRAM', 'WEB', 'ALEX', 'BINANCE_NATIVE', 'UNCLASSIFIED')),
+      confidence TEXT NOT NULL CHECK (confidence IN ('EXACT', 'UNCERTAIN', 'UNPAIRED')),
+      timeframe TEXT, user_created INTEGER DEFAULT 0 NOT NULL, note TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_fill_attribution_evidence (
+      id TEXT PRIMARY KEY NOT NULL, fill_id TEXT NOT NULL, review_group_id TEXT NOT NULL,
+      strategy_id TEXT, evidence_type TEXT NOT NULL CHECK (evidence_type IN ('STRATEGY_GROUP', 'MANUAL_GROUP')),
+      confidence TEXT NOT NULL CHECK (confidence IN ('EXACT', 'UNCERTAIN', 'UNPAIRED')),
+      evidence_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(fill_id, review_group_id, evidence_type)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_review_tags (
+      id TEXT PRIMARY KEY NOT NULL, review_group_id TEXT NOT NULL, tag_key TEXT NOT NULL, tag_value TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'SYSTEM', created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(review_group_id, tag_key, tag_value, source)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_review_metrics (
+      id TEXT PRIMARY KEY NOT NULL, review_group_id TEXT NOT NULL, metric_version TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL, calculated_at TEXT NOT NULL,
+      UNIQUE(review_group_id, metric_version, calculated_at)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_archive_sync_cursors (
+      id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, cursor_kind TEXT NOT NULL, symbol TEXT,
+      watermark TEXT, status TEXT NOT NULL, detail_json TEXT NOT NULL DEFAULT '{}', updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(account_id, cursor_kind, symbol)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trade_archive_data_gaps (
+      id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL, symbol TEXT, gap_start TEXT, gap_end TEXT,
+      reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'OPEN', detail_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, resolved_at TEXT
+    )`),
+  ]);
+  await db.batch([
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_order_archive_account_symbol_time ON trade_order_archive(account_id, symbol, order_time DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_order_archive_source_status ON trade_order_archive(source_classification, status, last_seen_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_order_archive_events_order_time ON trade_order_archive_events(archived_order_id, event_time DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_fill_archive_order_time ON trade_fill_archive(account_id, symbol, exchange_order_id, fill_time DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_fill_archive_source_confidence ON trade_fill_archive(source_classification, initial_confidence, fill_time DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_fill_attribution_group ON trade_fill_attribution_evidence(review_group_id, fill_id)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_review_groups_filter ON trade_review_groups(account_id, source_classification, confidence, created_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_review_tags_key_value ON trade_review_tags(tag_key, tag_value)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_archive_gaps_account_status ON trade_archive_data_gaps(account_id, status, created_at DESC)"),
+  ]);
+  orderArchiveInitialized = true;
+}
 
 export async function ensureProtectionSchema() {
   if (protectionInitialized) return;
@@ -24,7 +109,7 @@ export async function ensureProtectionSchema() {
       source_order_id TEXT NOT NULL, source_fill_id TEXT,
       symbol TEXT NOT NULL, side TEXT NOT NULL,
       strategy_type TEXT NOT NULL CHECK (strategy_type IN ('DEFAULT_TP', 'FIXED_TP', 'MA_SL', 'LEVEL_SL')),
-      status TEXT NOT NULL, config_json TEXT NOT NULL,
+      status TEXT NOT NULL, config_json TEXT NOT NULL, error TEXT,
       initial_quantity TEXT NOT NULL, remaining_quantity TEXT NOT NULL,
       entry_price TEXT NOT NULL, leverage TEXT NOT NULL,
       invalid_candle_count INTEGER DEFAULT 0 NOT NULL, last_closed_candle_id TEXT,
@@ -53,6 +138,11 @@ export async function ensureProtectionSchema() {
     db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_protection_orders_strategy_status ON trade_protection_orders(strategy_id, status)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_protection_events_strategy_created ON trade_protection_events(strategy_id, created_at)"),
   ]);
+  try {
+    await db.prepare("ALTER TABLE trade_protection_strategies ADD COLUMN error TEXT").run();
+  } catch (error) {
+    if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+  }
   protectionInitialized = true;
 }
 
@@ -104,12 +194,57 @@ export async function ensureLiveStrategySchema() {
       id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, type TEXT NOT NULL,
       payload_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS live_entry_protection_links (
+      id TEXT PRIMARY KEY NOT NULL, live_order_id TEXT NOT NULL, source_fill_id TEXT NOT NULL,
+      quantity TEXT NOT NULL, protection_strategy_id TEXT, status TEXT NOT NULL, error TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(live_order_id, source_fill_id)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_generations (
+      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, generation INTEGER NOT NULL,
+      anchor_candle_id TEXT, ma_value TEXT, atr_value TEXT, next_refresh_at TEXT,
+      refresh_reason TEXT NOT NULL, status TEXT DEFAULT 'ACTIVE' NOT NULL,
+      lease_token TEXT, lease_expires_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(strategy_id, generation)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_order_attempts (
+      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, generation_id TEXT NOT NULL,
+      generation INTEGER NOT NULL, leg_id TEXT NOT NULL, legacy_live_order_id TEXT UNIQUE,
+      intent TEXT NOT NULL, client_order_id TEXT NOT NULL UNIQUE, exchange_order_id TEXT UNIQUE,
+      side TEXT, type TEXT, time_in_force TEXT, price TEXT, original_quantity TEXT NOT NULL,
+      executed_quantity TEXT DEFAULT '0' NOT NULL, average_fill_price TEXT, status TEXT NOT NULL,
+      cancellation_result TEXT, error TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_execution_fills (
+      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, order_attempt_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('ENTRY', 'EXIT')), binance_fill_id TEXT NOT NULL UNIQUE,
+      quantity TEXT NOT NULL, price TEXT NOT NULL, executed_at TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_lifecycle (
+      strategy_id TEXT PRIMARY KEY NOT NULL,
+      entry_quantity TEXT DEFAULT '0' NOT NULL, entry_vwap TEXT,
+      exit_quantity TEXT DEFAULT '0' NOT NULL, exit_vwap TEXT,
+      first_entry_at TEXT, last_exit_at TEXT,
+      target_status TEXT DEFAULT 'PENDING' NOT NULL,
+      entry_freeze_reason TEXT, status TEXT DEFAULT 'OPEN' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
   ]);
   await db.batch([
     db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategies_status_expires ON live_strategies(status, expires_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_legs_strategy_status ON live_strategy_legs(strategy_id, status)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_orders_strategy_status ON live_strategy_orders(strategy_id, status)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_events_strategy_created ON live_strategy_events(strategy_id, created_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_entry_protection_links_order_status ON live_entry_protection_links(live_order_id, status)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_generations_strategy_status ON live_strategy_generations(strategy_id, status, generation DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_generations_lease ON live_strategy_generations(lease_expires_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_order_attempts_strategy_generation ON live_strategy_order_attempts(strategy_id, generation, created_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_order_attempts_exchange_order ON live_strategy_order_attempts(exchange_order_id)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_execution_fills_strategy_role_time ON live_strategy_execution_fills(strategy_id, role, executed_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_execution_fills_attempt ON live_strategy_execution_fills(order_attempt_id, executed_at)"),
   ]);
   for (const sql of [
     "ALTER TABLE live_strategy_orders ADD COLUMN symbol TEXT",
