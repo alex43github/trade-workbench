@@ -2,19 +2,19 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("ATR band scan exposes the configurable full-market scanner and daily scheduler", async () => {
+test("ATR lifecycle scan exposes the persisted full-market scanner and three-hour scheduler", async () => {
   const [route, maintenance, page] = await Promise.all([
     readFile(new URL("../app/api/radar/atr-band/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/advisory/maintenance/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/radar/page.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(route, /export async function runAtrBandScan/);
-  assert.match(route, /multiplier/);
-  assert.match(maintenance, /runAtrBandScan/);
-  assert.match(maintenance, /MA30 ± 3 ATR 每 4 小时扫描/);
-  assert.match(maintenance, /shanghaiHour\(\) % 4 === 0/);
-  assert.match(page, /MA30 ± ATR 持续/);
-  assert.match(page, /持续 K 线数降序/);
+  assert.match(route, /export async function runAtrLifecycleScan/);
+  assert.match(route, /loadAtrLifecycleDashboard/);
+  assert.match(maintenance, /runAtrLifecycleScan/);
+  assert.match(maintenance, /MA30 ± 3 ATR 生命周期每 3 小时扫描/);
+  assert.match(maintenance, /shanghaiHour\(\) % 3 === 0/);
+  assert.match(page, /MA30 ± 3ATR 生命周期/);
+  assert.match(page, /强势池/);
   assert.match(page, /前一根 K 线/);
 });
 
