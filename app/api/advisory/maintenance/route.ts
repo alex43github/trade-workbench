@@ -3,6 +3,7 @@ import { getD1 } from "@/db";
 import { retryFailedNotifications } from "@/lib/advisory/notification-retry";
 import { POST as scanCrowdingAlerts } from "@/app/api/radar/alerts/route";
 import { runMa30OiScan } from "@/app/api/radar/ma30-oi/route";
+import { runAtrLifecycleScan } from "@/app/api/radar/atr-band/route";
 import { runReversalScan } from "@/app/api/radar/reversal/route";
 import { runMultiTimeframeScan } from "@/app/api/radar/multitimeframe/route";
 import { GET as getRadar } from "@/app/api/radar/route";
@@ -15,12 +16,19 @@ import {
   type CompositeSnapshot,
 } from "@/lib/radar/composite-ranking";
 import { loadLatestMa30OiSnapshot } from "@/lib/radar/ma30-oi-snapshot";
-import { loadReversalDashboard } from "@/lib/radar/reversal-snapshot";
+import { getAtrLifecycleScanBucket, hasAtrLifecycleScanBucket } from "@/lib/radar/atr-band-lifecycle-snapshot";
+import { loadReversalDashboard, REVERSAL_INTERVALS } from "@/lib/radar/reversal-snapshot";
 import { loadLatestMultiTimeframeSnapshot } from "@/lib/radar/multitimeframe";
 import { requireScheduler, schedulerToken } from "@/lib/security/operator-guard";
 
 function shanghaiHour(date = new Date()) {
   return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", hourCycle: "h23" }).format(date));
+}
+
+function shanghaiFourHourBucket(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${value("year")}-${value("month")}-${value("day")}-${String(Math.floor(Number(value("hour")) / 4) * 4).padStart(2, "0")}`;
 }
 
 export async function runCompositeRanking(overrides: {
@@ -61,17 +69,23 @@ export async function POST(request: Request) {
   const crowdingRequest = new Request(new URL("/api/radar/alerts", request.url), { method: "POST", headers: { authorization: `Bearer ${token}` } });
   const crowdingResponse = await scanCrowdingAlerts(crowdingRequest);
   const crowding = await crowdingResponse.json();
-  const reversal = await runReversalScan(["4h"]);
+  const reversal = await runReversalScan(["4h"], undefined, "periodic");
   const reversalOk = true;
   let reversalDaily: unknown = { status: "skipped", reason: "日线破底翻仅在北京时间 08:00 扫描" };
   const reversalDailyOk = true;
   if (shanghaiHour() === 8) {
-    reversalDaily = await runReversalScan(["1d"]);
+    reversalDaily = await runReversalScan([...REVERSAL_INTERVALS], undefined, "daily");
   }
   let ma30Oi: unknown = { status: "skipped", reason: "MA30/OI 仅在北京时间 08:00 扫描" };
   const ma30OiOk = true;
   if (shanghaiHour() === 8) {
     ma30Oi = await runMa30OiScan();
+  }
+  let atrBand: unknown = { status: "skipped", reason: "MA30 ± 3 ATR 生命周期每 3 小时扫描" };
+  const atrBandBucket = getAtrLifecycleScanBucket();
+  const atrBandDue = shanghaiHour() % 3 === 0 && !await hasAtrLifecycleScanBucket(db, atrBandBucket);
+  if (atrBandDue) {
+    atrBand = await runAtrLifecycleScan();
   }
   let composite: CompositeSnapshot | { status: "skipped"; reason: string } = { status: "skipped", reason: "综合榜仅在北京时间 08:00 生成" };
   if (shanghaiHour() === 8) {
@@ -100,5 +114,5 @@ export async function POST(request: Request) {
     const ma30Snapshot = await loadLatestMa30OiSnapshot(await getD1());
     composite = await runCompositeRanking({ ma30Oi: ma30Snapshot, reversal: reversalDashboard, multiTimeframe, radar: radarPayload ?? undefined });
   }
-  return Response.json({ notifications, crowding, reversal, reversalDaily, ma30Oi, composite, realOrderRouteEnabled: false }, { status: crowdingResponse.ok && reversalOk && reversalDailyOk && ma30OiOk ? 200 : 503 });
+  return Response.json({ notifications, crowding, reversal, reversalDaily, ma30Oi, atrBand, composite, realOrderRouteEnabled: false }, { status: crowdingResponse.ok && reversalOk && reversalDailyOk && ma30OiOk ? 200 : 503 });
 }
