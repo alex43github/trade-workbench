@@ -3,8 +3,10 @@ import { binancePublicJson } from "../binance-public.ts";
 import type { Ma30OiFetchers } from "./ma30-oi-snapshot.ts";
 import type { ClosedBar } from "./reversal.ts";
 import type { ReversalInterval, ReversalScanFetchers } from "./reversal-snapshot.ts";
+import type { AtrBandFetchers } from "./atr-band-snapshot.ts";
+import type { AtrLifecycleFetchers } from "./atr-band-lifecycle-snapshot.ts";
 
-type BinanceKlineInterval = ReversalInterval | "15m" | "1h";
+type BinanceKlineInterval = ReversalInterval;
 
 export const BINANCE_FUTURES = "https://fapi.binance.com";
 export const BINANCE_FUTURES_DATA = `${BINANCE_FUTURES}/futures/data`;
@@ -13,7 +15,7 @@ type BinanceExchangeInfo = {
   symbols?: Array<{ symbol?: string; status?: string; contractType?: string; quoteAsset?: string }>;
 };
 export type BinanceExchangeInfoSymbol = NonNullable<BinanceExchangeInfo["symbols"]>[number];
-type BinanceKline = [number, string, string, string, string, string, number, ...unknown[]];
+type BinanceKline = [number, string, string, string, string, string, number, string?, ...unknown[]];
 type BinanceOiHistory = { timestamp?: number; sumOpenInterest?: string };
 
 const pacer = new BinanceRequestPacer({ minIntervalMs: 150 });
@@ -45,8 +47,31 @@ export async function fetchClosedBars(symbol: string, interval: BinanceKlineInte
   const rows = await binanceJson<BinanceKline[]>(url);
   return rows
     .filter((row) => Number(row[6]) <= now.getTime())
-    .map((row) => ({ open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), closeTime: Number(row[6]) }))
+    .map((row) => ({ open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), closeTime: Number(row[6]), volume: Number(row[7] ?? row[5]) }))
     .filter((bar) => [bar.open, bar.high, bar.low, bar.close, bar.closeTime].every(Number.isFinite));
+}
+
+export type BinanceOiPoint = { timestamp: number; openInterest: number };
+
+export async function fetchClosedHourlyOi(symbol: string, now: Date, requestedLimit = 720): Promise<BinanceOiPoint[]> {
+  const limit = Math.min(1_000, Math.max(2, Math.round(requestedLimit)));
+  const pageSize = Math.min(500, limit);
+  const rows = await binanceJson<Array<{ timestamp?: number; sumOpenInterest?: string }>>(
+    `${BINANCE_FUTURES_DATA}/openInterestHist?symbol=${encodeURIComponent(symbol)}&period=1h&limit=${pageSize}`,
+  );
+  if (rows.length >= pageSize && limit > pageSize) {
+    const earliest = rows.map((row) => Number(row.timestamp)).filter(Number.isFinite).sort((left, right) => left - right)[0];
+    if (Number.isFinite(earliest)) {
+      const older = await binanceJson<Array<{ timestamp?: number; sumOpenInterest?: string }>>(
+        `${BINANCE_FUTURES_DATA}/openInterestHist?symbol=${encodeURIComponent(symbol)}&period=1h&limit=${limit - pageSize}&endTime=${Math.max(0, earliest - 1)}`,
+      );
+      rows.push(...older);
+    }
+  }
+  return rows
+    .map((row) => ({ timestamp: Number(row.timestamp), openInterest: Number(row.sumOpenInterest) }))
+    .filter((row) => Number.isFinite(row.timestamp) && Number.isFinite(row.openInterest) && row.openInterest > 0 && row.timestamp + 3_600_000 <= now.getTime())
+    .toSorted((left, right) => left.timestamp - right.timestamp);
 }
 
 export function selectCompleteDailyOi(rows: BinanceOiHistory[], now: Date) {
@@ -74,5 +99,25 @@ export function createMa30OiFetchers(): Ma30OiFetchers {
 }
 
 export function createReversalFetchers(): ReversalScanFetchers {
-  return { listSymbols: listUsdtPerpetualSymbols, fetchClosedBars };
+  return {
+    listSymbols: listUsdtPerpetualSymbols,
+    fetchClosedBars: (symbol, interval, now) => fetchClosedBars(symbol, interval, now, 1_000),
+  };
 }
+
+export function createAtrBandFetchers(): AtrBandFetchers {
+  return {
+    listSymbols: listUsdtPerpetualSymbols,
+    fetchClosedBars: (symbol, interval, now) => fetchClosedBars(symbol, interval, now, 120),
+  };
+}
+
+export function createAtrLifecycleFetchers(): AtrLifecycleFetchers {
+  return {
+    listSymbols: listUsdtPerpetualSymbols,
+    fetchClosedBars: (symbol, now) => fetchClosedBars(symbol, "1h", now, 1_000),
+    fetchClosedHourlyOi,
+  };
+}
+
+export const createAtrBandLifecycleFetchers = createAtrLifecycleFetchers;

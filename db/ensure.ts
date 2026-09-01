@@ -11,6 +11,7 @@ let liveStrategyInitialized = false;
 let liveManualCloseInitialized = false;
 let protectionInitialized = false;
 let orderArchiveInitialized = false;
+let atrBandLifecycleInitialized = false;
 
 export async function ensureOrderArchiveSchema() {
   if (orderArchiveInitialized) return;
@@ -577,6 +578,27 @@ export async function ensureAdvisorySchema() {
      id TEXT PRIMARY KEY NOT NULL, scanned_at TEXT NOT NULL, status TEXT NOT NULL,
      payload_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
    )`),
+   db.prepare(`CREATE TABLE IF NOT EXISTS radar_atr_band_snapshots (
+     id TEXT PRIMARY KEY NOT NULL, scanned_at TEXT NOT NULL, status TEXT NOT NULL,
+     multiplier REAL NOT NULL, payload_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+   )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS radar_atr_band_lifecycles (
+      id TEXT PRIMARY KEY NOT NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL, status TEXT NOT NULL,
+      entry_time INTEGER NOT NULL, warning_time INTEGER, end_time INTEGER, last_updated_time INTEGER NOT NULL,
+      entry_price REAL NOT NULL, current_price REAL NOT NULL, extreme_price REAL NOT NULL,
+      max_favorable_pct REAL NOT NULL, max_atr_multiple REAL NOT NULL,
+      max_signed_atr_distance REAL NOT NULL, max_atr_distance REAL NOT NULL,
+      entry_oi REAL, current_oi REAL, peak_oi REAL, oi_change_pct REAL,
+      previous_close REAL NOT NULL, previous_ma30 REAL NOT NULL, previous_threshold REAL NOT NULL,
+      previous_ma30_deviation_pct REAL NOT NULL, previous_band_deviation_pct REAL NOT NULL,
+      scan_bucket TEXT NOT NULL, payload_json TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(symbol, direction, entry_time)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS radar_atr_band_scan_buckets (
+      scan_bucket TEXT PRIMARY KEY NOT NULL, scanned_at TEXT NOT NULL, status TEXT NOT NULL,
+      payload_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS radar_multitimeframe_snapshots (
       id TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL, scanned_at TEXT NOT NULL,
       symbols_json TEXT NOT NULL, snapshot_json TEXT NOT NULL, warning TEXT,
@@ -587,17 +609,23 @@ export async function ensureAdvisorySchema() {
       payload_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS radar_reversal_scans (
-      id TEXT PRIMARY KEY NOT NULL, interval TEXT NOT NULL, scanned_at TEXT NOT NULL,
+      id TEXT PRIMARY KEY NOT NULL, interval TEXT NOT NULL, scan_source TEXT DEFAULT 'periodic' NOT NULL, scanned_at TEXT NOT NULL,
       status TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS radar_reversal_archives (
       id TEXT PRIMARY KEY NOT NULL, symbol TEXT NOT NULL, interval TEXT NOT NULL,
       direction TEXT NOT NULL, signal_time INTEGER NOT NULL, score REAL NOT NULL,
+      reclaim_level TEXT DEFAULT 'HIGH' NOT NULL, breakout_lookback_bars INTEGER DEFAULT 0 NOT NULL,
+      breakout_lookback_capped INTEGER DEFAULT 0 NOT NULL,
       payload_json TEXT NOT NULL, outcome_json TEXT, outcome_complete INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       UNIQUE(symbol, interval, direction, signal_time)
     )`)
   ]);
+  try { await db.prepare("ALTER TABLE radar_reversal_scans ADD COLUMN scan_source TEXT DEFAULT 'periodic' NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
+  try { await db.prepare("ALTER TABLE radar_reversal_archives ADD COLUMN reclaim_level TEXT DEFAULT 'HIGH' NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
+  try { await db.prepare("ALTER TABLE radar_reversal_archives ADD COLUMN breakout_lookback_bars INTEGER DEFAULT 0 NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
+  try { await db.prepare("ALTER TABLE radar_reversal_archives ADD COLUMN breakout_lookback_capped INTEGER DEFAULT 0 NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
   await db.batch([
     db.prepare("CREATE INDEX IF NOT EXISTS idx_consultations_date_symbol ON consultations(analysis_date, symbol)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_strategy_versions_expert_created ON strategy_versions(expert_id, created_at)"),
@@ -614,13 +642,51 @@ export async function ensureAdvisorySchema() {
     db.prepare("CREATE INDEX IF NOT EXISTS idx_review_tasks_status_due ON review_tasks(status, due_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_review_reports_expert_created ON review_reports(expert_id, created_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_system_alerts_status_created ON system_alerts(status, created_at)"),
-   db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_ma30_oi_scanned_at ON radar_ma30_oi_snapshots(scanned_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_ma30_oi_scanned_at ON radar_ma30_oi_snapshots(scanned_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_scanned_at ON radar_atr_band_snapshots(scanned_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_lifecycles_status_direction ON radar_atr_band_lifecycles(status, direction, last_updated_time DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_lifecycles_symbol_updated ON radar_atr_band_lifecycles(symbol, last_updated_time DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_lifecycles_scan_bucket ON radar_atr_band_lifecycles(scan_bucket)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_scan_buckets_scanned_at ON radar_atr_band_scan_buckets(scanned_at DESC)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_multitimeframe_scanned_at ON radar_multitimeframe_snapshots(scanned_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_composite_generated_at ON radar_composite_snapshots(generated_at)"),
-    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_scans_interval_scanned ON radar_reversal_scans(interval, scanned_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_scans_interval_scanned ON radar_reversal_scans(interval, scan_source, scanned_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_interval_direction_time ON radar_reversal_archives(interval, direction, signal_time)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_archive_sort ON radar_reversal_archives(signal_time, score, breakout_lookback_bars)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_pending ON radar_reversal_archives(outcome_complete, signal_time)")
   ]);
   await db.prepare("PRAGMA optimize").run();
   advisoryInitialized = true;
+  atrBandLifecycleInitialized = true;
+}
+
+export async function ensureAtrBandLifecycleSchema() {
+  if (atrBandLifecycleInitialized) return;
+  const db = await getD1();
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS radar_atr_band_lifecycles (
+      id TEXT PRIMARY KEY NOT NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL, status TEXT NOT NULL,
+      entry_time INTEGER NOT NULL, warning_time INTEGER, end_time INTEGER, last_updated_time INTEGER NOT NULL,
+      entry_price REAL NOT NULL, current_price REAL NOT NULL, extreme_price REAL NOT NULL,
+      max_favorable_pct REAL NOT NULL, max_atr_multiple REAL NOT NULL,
+      max_signed_atr_distance REAL NOT NULL, max_atr_distance REAL NOT NULL,
+      entry_oi REAL, current_oi REAL, peak_oi REAL, oi_change_pct REAL,
+      previous_close REAL NOT NULL, previous_ma30 REAL NOT NULL, previous_threshold REAL NOT NULL,
+      previous_ma30_deviation_pct REAL NOT NULL, previous_band_deviation_pct REAL NOT NULL,
+      scan_bucket TEXT NOT NULL, payload_json TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(symbol, direction, entry_time)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS radar_atr_band_scan_buckets (
+      scan_bucket TEXT PRIMARY KEY NOT NULL, scanned_at TEXT NOT NULL, status TEXT NOT NULL,
+      payload_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`),
+  ]);
+  await db.batch([
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_lifecycles_status_direction ON radar_atr_band_lifecycles(status, direction, last_updated_time DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_lifecycles_symbol_updated ON radar_atr_band_lifecycles(symbol, last_updated_time DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_lifecycles_scan_bucket ON radar_atr_band_lifecycles(scan_bucket)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_atr_band_scan_buckets_scanned_at ON radar_atr_band_scan_buckets(scanned_at DESC)"),
+  ]);
+  atrBandLifecycleInitialized = true;
 }
