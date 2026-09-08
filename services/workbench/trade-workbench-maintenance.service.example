@@ -1,0 +1,11 @@
+[Unit]
+Description=Trade Workbench closed-candle maintenance scheduler
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/trade-workbench
+EnvironmentFile=/etc/trade-workbench/workbench.env
+ExecStart=/usr/bin/node /opt/trade-workbench/services/workbench/maintenance-scheduler.mjs
+NoNewPrivileges=true
+PrivateTmp=true

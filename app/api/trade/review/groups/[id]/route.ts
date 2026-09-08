@@ -1,0 +1,3 @@
+import { requireOperator } from "../../../../../../lib/security/operator-guard.ts";
+import { clean, detail, response } from "../../query.ts";
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) { const denied = await requireOperator(request); if (denied) return denied; const { id } = await context.params; try { const result = await detail(String(id).slice(0, 240), clean(new URL(request.url).searchParams.get("accountId"), "default")); return result ? response(result) : response({ error: "复盘组不存在" }, 404); } catch { return response({ error: "复盘明细暂时不可用" }, 400); } }

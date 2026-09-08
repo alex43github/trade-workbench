@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Trade Workbench live protection strategy scheduler every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+RandomizedDelaySec=10
+Unit=trade-workbench-protection-strategy.service
+
+[Install]
+WantedBy=timers.target

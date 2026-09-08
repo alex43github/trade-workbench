@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Trade Workbench maintenance scheduler after each 1H candle close
+
+[Timer]
+OnCalendar=*-*-* *:05:00 UTC
+Persistent=true
+RandomizedDelaySec=20
+Unit=trade-workbench-maintenance.service
+
+[Install]
+WantedBy=timers.target

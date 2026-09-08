@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.streetlight.structure-radar</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE_BIN__</string>
+    <string>--env-file-if-exists=__PROJECT_DIR__/.env</string>
+    <string>__PROJECT_DIR__/services/structure-radar/main.ts</string>
+  </array>
+  <key>WorkingDirectory</key><string>__PROJECT_DIR__</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__PATH__</string>
+    <key>NODE_ENV</key><string>production</string>
+    <key>RADAR_NOTIFY_ENABLED</key><string>false</string>
+    <key>RADAR_DATA_DIRECTORY</key><string>__PROJECT_DIR__/.data/structure-radar</string>
+  </dict>
+  <key>StandardOutPath</key><string>__PROJECT_DIR__/.data/structure-radar/stdout.log</string>
+  <key>StandardErrorPath</key><string>__PROJECT_DIR__/.data/structure-radar/stderr.log</string>
+</dict>
+</plist>
