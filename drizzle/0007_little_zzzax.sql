@@ -1,0 +1,1 @@
+ALTER TABLE `notification_deliveries` ADD `payload_json` text DEFAULT '{}' NOT NULL;

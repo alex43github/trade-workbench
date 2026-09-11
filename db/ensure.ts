@@ -117,6 +117,12 @@ export async function ensureWatchlistSchema() {
       added_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       PRIMARY KEY(symbol, source)
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS watchlist_position_sources (
+      symbol TEXT NOT NULL,
+      exchange TEXT NOT NULL CHECK (exchange IN ('BINANCE', 'BYBIT')),
+      added_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      PRIMARY KEY(symbol, exchange)
+    )`),
   ]);
   const pinned = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT", "ENAUSDT"];
   await db.batch(pinned.map((symbol) => db.prepare(`INSERT INTO watchlist_entries (symbol, display_name, quote_asset, source, removed_at)
@@ -127,6 +133,8 @@ export async function ensureWatchlistSchema() {
   ]);
   await db.batch([
     db.prepare("CREATE INDEX IF NOT EXISTS idx_watchlist_entries_active_added ON watchlist_entries(removed_at, added_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_watchlist_position_sources_exchange ON watchlist_position_sources(exchange, added_at)"),
+    db.prepare("INSERT OR IGNORE INTO watchlist_position_sources (symbol, exchange, added_at) SELECT symbol, 'BINANCE', added_at FROM watchlist_entry_sources WHERE source = 'POSITION'"),
   ]);
   watchlistInitialized = true;
 }

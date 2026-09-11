@@ -6,7 +6,7 @@ import { requireOperator } from "@/lib/security/operator-guard";
 import { getD1 } from "@/db";
 import { ensureWatchlistSchema } from "@/db/ensure";
 import { sumRealizedPnlBySymbol } from "@/lib/trade/realized-pnl";
-import { syncPositionWatchlist } from "@/lib/watchlist";
+import { syncExchangePositionWatchlist, syncPositionWatchlist } from "@/lib/watchlist";
 import { getBybitGatewayConfig } from "@/lib/trade/bybit-live-adapter";
 import { normalizeLiveExchange, type LiveExchange } from "@/lib/trade/live-exchange";
 import { resolveLiveExchangeAdapter } from "@/lib/trade/live-exchange-adapter";
@@ -170,6 +170,12 @@ async function bybitAccountSnapshot() {
       notional: markPrice > 0 ? quantity * markPrice : null,
     };
   });
+  try {
+    await ensureWatchlistSchema();
+    await syncExchangePositionWatchlist(await getD1(), "BYBIT", positions);
+  } catch {
+    // 自选同步不能影响 Bybit 只读账户数据；下次查询会重试。
+  }
   const normalizedOrders = sourceOrders.map((order) => ({
     orderId: order.orderId, websiteOrderId: order.clientOrderId || `bybit-${order.orderId}`, symbol: order.symbol, side: order.side,
     type: order.type, status: order.status, price: Number(order.price ?? 0), stopPrice: 0, quantity: Number(order.quantity),

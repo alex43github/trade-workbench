@@ -9,7 +9,10 @@ export function parts(date = new Date()) {
 export function dueJobs(date = new Date()) {
   const current = parts(date);
   if (current.minute !== 5) return [];
-  const jobs = ["atr-band", "reversal-hourly"];
+  const jobs = ["reversal-hourly"];
+  // Machine picks begin after the 08:00 Beijing candle and stop after 23:00.
+  // The scan itself consumes closed 1H candles, so :05 is safely post-close.
+  if (current.hour >= 8 && current.hour <= 23) jobs.unshift("atr-band");
   if (current.hour % 4 === 0) jobs.push("reversal-four-hour");
   if (current.hour === 8) jobs.push("daily");
   return jobs;

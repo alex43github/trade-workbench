@@ -11,7 +11,7 @@ export type TelegramConversation = {
     | "MA_KIND" | "MA_LENGTH" | "MA_LENGTH_CUSTOM" | "ATR_LENGTH" | "ATR_MULTIPLIER" | "MARGIN" | "LEG_COUNT"
     | "PARAMETERS" | "STOP" | "TAKE_PROFIT" | "CONFIRM"
     | "QUICK_SYMBOL" | "QUICK_SIDE" | "QUICK_TIMEFRAME" | "QUICK_MARGIN" | "QUICK_MARGIN_CUSTOM" | "QUICK_CONFIRM"
-    | "ALEX_ASSET" | "ALEX_KIND" | "ALEX_TP_MODE" | "ALEX_TP_PRICE" | "ALEX_SL_MODE" | "ALEX_SL_TIMEFRAME" | "ALEX_SL_PRICE" | "ALEX_CONFIRM";
+    | "ALEX_ASSET" | "ALEX_PERCENT" | "ALEX_KIND" | "ALEX_TP_MODE" | "ALEX_TP_PRICE" | "ALEX_SL_MODE" | "ALEX_SL_TIMEFRAME" | "ALEX_SL_PRICE" | "ALEX_CONFIRM";
   draft: Record<string, unknown>;
   confirmNonce: string | null;
   expiresAt: string;
@@ -32,7 +32,7 @@ const steps = new Set<TelegramConversation["step"]>([
   "HOME", "EXCHANGE", "MODE", "SYMBOL", "SIDE", "TIMEFRAME", "TIMEFRAME_CUSTOM", "METHOD", "MA_KIND", "MA_LENGTH",
   "MA_LENGTH_CUSTOM", "ATR_LENGTH", "ATR_MULTIPLIER", "MARGIN", "LEG_COUNT", "PARAMETERS", "STOP", "TAKE_PROFIT", "CONFIRM",
   "QUICK_SYMBOL", "QUICK_SIDE", "QUICK_TIMEFRAME", "QUICK_MARGIN", "QUICK_MARGIN_CUSTOM", "QUICK_CONFIRM",
-  "ALEX_ASSET", "ALEX_KIND", "ALEX_TP_MODE", "ALEX_TP_PRICE", "ALEX_SL_MODE", "ALEX_SL_TIMEFRAME", "ALEX_SL_PRICE", "ALEX_CONFIRM",
+  "ALEX_ASSET", "ALEX_PERCENT", "ALEX_KIND", "ALEX_TP_MODE", "ALEX_TP_PRICE", "ALEX_SL_MODE", "ALEX_SL_TIMEFRAME", "ALEX_SL_PRICE", "ALEX_CONFIRM",
 ]);
 
 function fail(message: string): never {
@@ -116,7 +116,7 @@ function validateConversationInput(input: Record<string, unknown>): void {
   const allowed = new Set([
     "symbol", "exchange", "mode", "side", "timeframe", "method", "maKind", "maLength", "atrLength", "atrMultiplier",
     "totalMarginUsdt", "legCount", "firstGuardExitPct", "useDefaultProfitTargets", "staticEntryPrice", "horizontalGuardPrice",
-    "homeEntry", "quickOrder", "currentLeverage", "step", "confirmNonce", "expiresAt", "alexCandidates", "alexSelectedCandidateId", "alexStrategyType", "alexFixedPrice", "alexTimeframe",
+    "homeEntry", "quickOrder", "currentLeverage", "step", "confirmNonce", "expiresAt", "alexCandidates", "alexSelectedCandidateId", "alexProtectionPercent", "alexStrategyType", "alexFixedPrice", "alexTimeframe",
   ]);
   if (Object.keys(input).some((key) => !allowed.has(key))) fail("Telegram 会话输入不正确");
   if ("symbol" in input && !isBinanceFuturesSymbol(input.symbol)) fail("交易对不正确");
@@ -140,7 +140,7 @@ function validateConversationInput(input: Record<string, unknown>): void {
         || !Array.isArray(item.sourceOrderIds) || item.sourceOrderIds.length < 1
         || item.sourceOrderIds.some((value) => typeof value !== "string" || !/^[.A-Z:/a-z0-9_-]{1,36}$/.test(value) || isProjectClientOrderId(value))) fail("手动持仓候选不正确");
       if (item.sourceFillId !== undefined && (typeof item.sourceFillId !== "string" || !/^[A-Za-z0-9:_-]{1,160}$/.test(item.sourceFillId))) fail("手动持仓候选不正确");
-      if (item.manualAliasIds !== undefined && (!Array.isArray(item.manualAliasIds) || item.manualAliasIds.some((value) => typeof value !== "string" || !/^alex[A-Za-z0-9_-]{1,80}$/i.test(value)))) fail("手动持仓候选不正确");
+      if (item.manualAliasIds !== undefined && (!Array.isArray(item.manualAliasIds) || item.manualAliasIds.some((value) => typeof value !== "string" || !/^ios[A-Za-z0-9_-]{1,80}$/i.test(value)))) fail("手动持仓候选不正确");
       for (const field of ["totalQuantity", "totalNotional", "totalMargin", "otherQuantity", "otherNotional", "otherMargin", "manualNotional", "manualMargin"]) {
         if (item[field] !== undefined && (typeof item[field] !== "number" || !Number.isFinite(item[field]) || item[field] < 0)) fail("手动持仓候选不正确");
       }
@@ -148,6 +148,7 @@ function validateConversationInput(input: Record<string, unknown>): void {
     }
   }
   if ("alexSelectedCandidateId" in input && (typeof input.alexSelectedCandidateId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(input.alexSelectedCandidateId))) fail("手动持仓候选不正确");
+  if ("alexProtectionPercent" in input && ![25, 50, 75, 100].includes(Number(input.alexProtectionPercent))) fail("保护比例不正确");
   if ("alexStrategyType" in input && !["DEFAULT_TP", "FIXED_TP", "MA_SL", "LEVEL_SL"].includes(String(input.alexStrategyType))) fail("保护策略类型不正确");
   if ("alexTimeframe" in input && !STRATEGY_TIMEFRAMES.includes(input.alexTimeframe as typeof STRATEGY_TIMEFRAMES[number])) fail("保护策略周期不正确");
   if ("step" in input && (typeof input.step !== "string" || !steps.has(input.step as TelegramConversation["step"]))) fail("会话步骤不正确");

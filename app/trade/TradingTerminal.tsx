@@ -144,7 +144,7 @@ export default function TradingTerminal({ initialSymbol, initialInterval = "1h" 
   const [indicatorOpen, setIndicatorOpen] = useState(false);
   const { fontScale } = useFontScale();
   const [symbolQuery, setSymbolQuery] = useState("");
-  const { watchlist, add: addWatchlistItem, remove: removeWatchlistItem } = useWatchlist();
+  const { watchlist, sections: watchlistSections, add: addWatchlistItem, remove: removeWatchlistItem } = useWatchlist();
   const [canScrollWatchlistLeft, setCanScrollWatchlistLeft] = useState(false);
   const [canScrollWatchlistRight, setCanScrollWatchlistRight] = useState(false);
   const [symbolSuggestions, setSymbolSuggestions] = useState<SymbolOption[]>([]);
@@ -724,7 +724,7 @@ export default function TradingTerminal({ initialSymbol, initialInterval = "1h" 
 
         <section className={styles.commandBar}>
           <div className={styles.agentState}><span>{selectedPosition ? "持" : "入"}</span><div><strong>{selectedPosition ? `${displayBinanceSymbol(symbol)} 持仓管理` : "建立实盘新仓计划"}</strong><small>PRE-TRADE SCORE · LIVE ONLY</small></div></div>
-          <div className={styles.commandControls}><div className={styles.liveExchangeSwitches} aria-label="各交易所实盘开关">{(["BINANCE", "BYBIT"] as LiveExchange[]).map((exchange) => { const enabled = realOrderRoutes[exchange] && exchangeTradingSwitches[exchange]; return <button type="button" key={exchange} role="switch" aria-checked={enabled} className={enabled ? styles.modeLive : styles.modeLocked} onClick={() => { setSelectedExchange(exchange); toggleExchangeTrading(exchange); }}><i />{exchange === "BINANCE" ? "币安" : "Bybit"}实盘：{enabled ? "开启" : "关闭"}</button>; })}</div></div>
+          <div className={styles.commandControls}><div className={styles.liveExchangeSwitches} aria-label="各交易所实盘开关">{(["BINANCE", "BYBIT"] as LiveExchange[]).map((exchange) => { const enabled = realOrderRoutes[exchange] && exchangeTradingSwitches[exchange]; return <div key={exchange} className={enabled ? styles.modeLive : styles.modeLocked}><button type="button" className={styles.liveExchangeSelect} aria-pressed={selectedExchange === exchange} onClick={() => setSelectedExchange(exchange)}><i />{exchange === "BINANCE" ? "币安" : "Bybit"}实盘</button><button type="button" role="switch" aria-label={`${exchange} 实盘开关`} aria-checked={enabled} className={styles.liveExchangeToggle} onClick={(event) => { event.stopPropagation(); toggleExchangeTrading(exchange); }}>{enabled ? "开启" : "关闭"}</button></div>; })}</div></div>
         </section>
 
         <section className={styles.topDecisionStrip} aria-label="顶部策略决策">
@@ -795,7 +795,7 @@ export default function TradingTerminal({ initialSymbol, initialInterval = "1h" 
               </div>
               <div className={styles.watchlistRow} aria-label="自选币列表">
                 {canScrollWatchlistLeft && <button type="button" className={styles.watchlistArrow} aria-label="向左查看更多自选币" title="向左查看更多自选币" onClick={() => scrollWatchlist("left")}>&lsaquo;</button>}
-                <div ref={watchlistRef} className={styles.symbolPicker}>{watchlist.map((item) => <button type="button" key={item.symbol} className={symbol === item.symbol ? styles.selected : ""} onClick={() => chooseSymbol(item.symbol)}>{displayBinanceSymbol(item.symbol)}</button>)}</div>
+                <div ref={watchlistRef} className={styles.symbolPicker}>{(watchlistSections.length ? watchlistSections : [{ id: "PINNED", title: "主流", items: watchlist }]).map((section, index) => <div className={styles.watchlistSection} key={section.id}>{index > 0 && <i className={styles.watchlistDivider} aria-hidden="true" />}<span>{section.title}</span>{section.items.map((item) => <button type="button" key={item.symbol} className={symbol === item.symbol ? styles.selected : ""} onClick={() => chooseSymbol(item.symbol)}>{displayBinanceSymbol(item.symbol)}</button>)}</div>)}</div>
                 {canScrollWatchlistRight && <button type="button" className={styles.watchlistArrow} aria-label="向右查看更多自选币" title="向右查看更多自选币" onClick={() => scrollWatchlist("right")}>&rsaquo;</button>}
               </div>
             </div>
@@ -925,12 +925,13 @@ function ManualProtectionAction({ exchange, symbol, side, canSubmit, disabledRea
   const [strategyType, setStrategyType] = useState<"DEFAULT_TP" | "FIXED_TP" | "MA_SL" | "LEVEL_SL" | null>(null);
   const [fixedPrice, setFixedPrice] = useState("");
   const [timeframe, setTimeframe] = useState("1h");
+  const [protectionPercent, setProtectionPercent] = useState<25 | 50 | 75 | 100>(100);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
 
   async function loadCandidate() {
-    setOpen(true); setLoading(true); setCandidate(null); setProtectionKind(null); setStrategyType(null); setMessage("");
+    setOpen(true); setLoading(true); setCandidate(null); setProtectionKind(null); setStrategyType(null); setProtectionPercent(100); setMessage("");
     try {
       const response = await fetch(`/api/trade/manual-protection?exchange=${exchange}&symbol=${encodeURIComponent(symbol)}&side=${side}`, { cache: "no-store" });
       const payload = await response.json() as { connected?: boolean; positions?: ManualProtectionCandidate[]; reason?: string; error?: string };
@@ -950,7 +951,7 @@ function ManualProtectionAction({ exchange, symbol, side, canSubmit, disabledRea
     try {
       const response = await fetch("/api/trade/manual-protection", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ exchange, symbol, side, strategyType, ...(strategyType === "FIXED_TP" || strategyType === "LEVEL_SL" ? { fixedPrice: Number(fixedPrice) } : {}), ...(strategyType === "MA_SL" ? { timeframe } : {}), confirmation: "CONFIRM_MANUAL_PROTECTION", idempotencyKey: nextKey }),
+        body: JSON.stringify({ exchange, symbol, side, strategyType, protectionPercent, ...(strategyType === "FIXED_TP" || strategyType === "LEVEL_SL" ? { fixedPrice: Number(fixedPrice) } : {}), ...(strategyType === "MA_SL" ? { timeframe } : {}), confirmation: "CONFIRM_MANUAL_PROTECTION", idempotencyKey: nextKey }),
       });
       const payload = await response.json() as { ok?: boolean; error?: string; strategy?: { id?: string } };
       if (!response.ok || !payload.strategy) throw new Error(payload.error || "保护策略提交失败");
@@ -967,6 +968,7 @@ function ManualProtectionAction({ exchange, symbol, side, canSubmit, disabledRea
       {!loading && candidate && <>
         <p className={styles.manualProtectionIdentity}>{candidate.symbol} · {candidate.side === "LONG" ? "做多" : "做空"} · 本次只保护手动来源</p>
         <div className={styles.manualProtectionBreakdown}><span>估算保证金<strong>{formatMoney(candidate.manualMargin ?? candidate.quantity * candidate.markPrice / Math.max(candidate.leverage, 1))} USDT</strong></span></div>
+        <div className={styles.manualProtectionChoices} aria-label="保护比例">{([25, 50, 75, 100] as const).map((percent) => <button type="button" key={percent} className={protectionPercent === percent ? styles.manualProtectionSelected : ""} onClick={() => setProtectionPercent(percent)}>{percent}%{percent === 100 ? "（默认）" : ""}</button>)}</div>
         {!protectionKind && <div className={styles.manualProtectionChoices}><button type="button" onClick={() => setProtectionKind("TP")}>止盈</button><button type="button" onClick={() => setProtectionKind("SL")}>止损</button></div>}
         {protectionKind === "TP" && !strategyType && <div className={styles.manualProtectionChoices}><button type="button" onClick={() => setStrategyType("DEFAULT_TP")}>默认止盈</button><button type="button" onClick={() => setStrategyType("FIXED_TP")}>固定止盈</button></div>}
         {protectionKind === "SL" && !strategyType && <div className={styles.manualProtectionChoices}><button type="button" onClick={() => setStrategyType("MA_SL")}>均线默认止损</button><button type="button" onClick={() => setStrategyType("LEVEL_SL")}>固定价格止损</button></div>}

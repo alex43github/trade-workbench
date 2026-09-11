@@ -163,6 +163,10 @@ const protectionKindKeyboard = [
   [{ text: "止盈策略", callback_data: "tg:act:alex_kind_tp_01" }],
   [{ text: "止损策略", callback_data: "tg:act:alex_kind_sl_01" }],
 ];
+const protectionPercentKeyboard = [
+  [{ text: "25%", callback_data: "tg:act:alex_pct_25_01" }, { text: "50%", callback_data: "tg:act:alex_pct_50_01" }],
+  [{ text: "75%", callback_data: "tg:act:alex_pct_75_01" }, { text: "100%（默认）", callback_data: "tg:act:alex_pct_100_01" }],
+];
 
 const takeProfitKeyboard = [
   [{ text: "默认止盈", callback_data: "tg:act:alex_tp_default_01" }],
@@ -338,6 +342,7 @@ function renderWizardStep(step: TelegramConversation["step"], session: TelegramC
     case "LEG_COUNT": return { text: "请选择分几笔下单（默认5笔）。", keyboard: withBack(legCountKeyboard) };
     case "PARAMETERS": return { text: "关键位策略暂需在网站端配置，请返回选择均线策略。", keyboard: withBack(methodKeyboard) };
     case "ALEX_ASSET": return { text: `请选择要挂止盈止损的${exchangeOf(session) === "BYBIT" ? "Bybit" : "币安"}手动持仓。`, keyboard: alexCandidateKeyboard(session) };
+    case "ALEX_PERCENT": return { text: "请选择本次保护的手动持仓比例（默认 100%）。", keyboard: withBack(protectionPercentKeyboard) };
     case "ALEX_KIND": return { text: "请选择要挂止盈还是止损策略。", keyboard: withBack(protectionKindKeyboard) };
     case "ALEX_TP_MODE": return { text: "请选择止盈方式。默认止盈按 ROI/保证金收益率执行：100% 卖初始仓25%，200% 卖初始仓40%。", keyboard: withBack(takeProfitKeyboard) };
     case "ALEX_TP_PRICE": return { text: "请输入固定止盈触发价格。", keyboard: cancelAndBackKeyboard };
@@ -493,7 +498,7 @@ function protectionText(result: Awaited<ReturnType<typeof createProtectionStrate
     ? strategy.orders.map((order) => `${order.clientOrderId} · ${order.status}${order.exchangeOrderId ? ` · Binance ${order.exchangeOrderId}` : ""}`).join("\n")
     : "该策略由后台均线监控，不立即创建原生触发单。";
   const aliases = Array.isArray(config.manualAliasIds) && config.manualAliasIds.length
-    ? `\nalex归属：${config.manualAliasIds.join("，")}` : "";
+    ? `\nios归属：${config.manualAliasIds.join("，")}` : "";
   const sources = Array.isArray(config.sourceOrderIds) && config.sourceOrderIds.length
     ? `\n原始订单：${config.sourceOrderIds.join("，")}` : "";
   return `保护策略 ${strategy.id}：${result.ok ? "已提交" : "未全部受理，需要对账"}\n来源 ${strategy.sourceOrderId} · ${strategy.symbol}${aliases}${sources}\n${rows}${result.error ? `\n${result.error}` : ""}`;
@@ -593,7 +598,14 @@ export async function handleAuthorizedTelegramUpdate(update: AuthorizedUpdate, d
       const session = await currentConversation(update.userId, dependencies);
       const candidate = alexCandidates(session)[index];
       if (!candidate || session.step !== "ALEX_ASSET") return screen("持仓候选已失效，请重新打开保护策略入口。", homeOnlyKeyboard);
-      await transitionConversation(update.userId, dependencies, { alexSelectedCandidateId: candidate.candidateId, step: "ALEX_KIND" }, { expectedStep: "ALEX_ASSET" });
+      await transitionConversation(update.userId, dependencies, { alexSelectedCandidateId: candidate.candidateId, alexProtectionPercent: 100, step: "ALEX_PERCENT" }, { expectedStep: "ALEX_ASSET" });
+      return screen("请选择本次保护的手动持仓比例（默认 100%）。", withBack(protectionPercentKeyboard));
+    }
+
+    const percentMatch = /^alex_pct_(25|50|75|100)_01$/.exec(actionId);
+    if (percentMatch) {
+      if (session.step !== "ALEX_PERCENT" || !selectedAlexCandidate(session)) return screen("保护比例选择已失效，请重新选择持仓。", homeOnlyKeyboard);
+      await transitionConversation(update.userId, dependencies, { alexProtectionPercent: Number(percentMatch[1]), step: "ALEX_KIND" }, { expectedStep: "ALEX_PERCENT" });
       return screen("请选择要挂止盈还是止损策略。", withBack(protectionKindKeyboard));
     }
 
@@ -648,7 +660,9 @@ export async function handleAuthorizedTelegramUpdate(update: AuthorizedUpdate, d
         const latest = await findPositions({ exchange } as never);
         const refreshedCandidate = latest.positions.find((item) => item.candidateId === selectedCandidate.candidateId);
         if (!latest.connected || !refreshedCandidate) return screen("持仓来源在确认前已经变化，请返回重新读取并选择。", homeOnlyKeyboard);
-        candidate = refreshedCandidate;
+        const protectionPercent = Number(current.draft.alexProtectionPercent ?? 100);
+        if (![25, 50, 75, 100].includes(protectionPercent)) return screen("保护比例无效，请重新选择。", homeOnlyKeyboard);
+        candidate = { ...refreshedCandidate, quantity: refreshedCandidate.quantity * protectionPercent / 100 };
       } catch { return screen("确认前重新读取手动持仓失败，请稍后重试。", homeOnlyKeyboard); }
       const nonce = current.confirmNonce;
       const consume = dependencies.consumeConfirmation ?? consumeConfirmation;

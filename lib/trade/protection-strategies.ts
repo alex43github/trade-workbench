@@ -18,6 +18,7 @@ import {
   validateFixedProtectionPrice,
 } from "./protection-math.ts";
 import { isProjectClientOrderId } from "./order-source.ts";
+import { getOrCreateManualOrderAlias } from "./order-alias.ts";
 import { marginProfitLimitTargets } from "./default-margin-take-profit.ts";
 import { normalizeQuickLiveTemplateSnapshot, type QuickLiveExitRule, type QuickLiveTemplateId, type QuickLiveTemplateSnapshot } from "./quick-live-template.ts";
 import type {
@@ -259,7 +260,7 @@ function protectionPositionSide(value: unknown, strategySide: "LONG" | "SHORT"):
 }
 
 function originPrefix(origin: ProtectionOrigin) {
-  return origin === "ALEX" ? "alex" : origin === "TELEGRAM" ? "tele" : "web";
+  return origin === "ALEX" ? "ios" : origin === "TELEGRAM" ? "tele" : "str";
 }
 
 function adapterOrigin(origin: ProtectionOrigin): "WEB" | "TELEGRAM" {
@@ -274,7 +275,7 @@ function adapterOrigin(origin: ProtectionOrigin): "WEB" | "TELEGRAM" {
 function protectionClientOrderId(exchange: LiveExchange, origin: ProtectionOrigin, clientOrderId: string) {
   if (exchange !== "BYBIT") return clientOrderId;
   if (/^(web|tele)BY[A-Za-z0-9_-]{1,31}$/i.test(clientOrderId)) return clientOrderId;
-  const match = /^(?:web|tele|alex)(SL|TP)(.*)$/i.exec(clientOrderId);
+  const match = /^(?:web|str|tele|alex|ios)(SL|TP)(.*)$/i.exec(clientOrderId);
   const prefix = origin === "TELEGRAM" ? "tele" : "web";
   if (match) return `${prefix}BY${match[1].toUpperCase()}${match[2]}`.slice(0, 36);
   const suffix = clientOrderId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 31);
@@ -284,7 +285,7 @@ function protectionClientOrderId(exchange: LiveExchange, origin: ProtectionOrigi
 function adapterClientOrderId(exchange: LiveExchange, clientOrderId: string) {
   if (exchange !== "BYBIT") return clientOrderId;
   if (/^(web|tele)BY[A-Za-z0-9_-]{1,31}$/i.test(clientOrderId)) return clientOrderId;
-  const match = /^(?:web|tele|alex)(SL|TP)(.*)$/i.exec(clientOrderId);
+  const match = /^(?:web|str|tele|alex|ios)(SL|TP)(.*)$/i.exec(clientOrderId);
   if (match) {
     const prefix = /^tele/i.test(clientOrderId) ? "tele" : "web";
     return `${prefix}BY${match[1].toUpperCase()}${match[2]}`.slice(0, 36);
@@ -577,9 +578,21 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
     stopPrices.push(normalizeFixedPrice(fixedPrice, Number(filter.tickSize)));
   }
 
+  // A native exchange order keeps its original clientOrderId.  At the moment a
+  // user confirms manual protection, give that source a stable internal ios id
+  // for every Workbench record and retain the original ids in config for audit.
+  const manualAliasIds = input.origin === "ALEX"
+    ? await Promise.all(sourceOrderIds.map((clientOrderId) => getOrCreateManualOrderAlias({
+      externalOrderId: clientOrderId,
+      clientOrderId,
+      symbol,
+    })))
+    : input.source.manualAliasIds ?? [];
+  const registeredSourceOrderId = input.origin === "ALEX" ? manualAliasIds[0] : sourceOrderId;
+
   const prefix = originPrefix(input.origin);
   const id = `${prefix}-ps-${await nextSequence("strategy")}`;
-  const config = planConfig({ ...input, source: { ...input.source, sourceOrderIds } }, stopPrices, exchange, quick);
+  const config = planConfig({ ...input, source: { ...input.source, sourceOrderIds, manualAliasIds } }, stopPrices, exchange, quick);
   const plans: ProtectionOrderPlan[] = [];
   const exitSide = oppositeSide(input.source.side);
   const makePlan = async (kind: "TP" | "SL", stage: string, price: number | undefined, percent: number) => {
@@ -621,7 +634,6 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
     await makePlan("TP", "ROI100", stopPrices[0], 25);
     await makePlan("TP", "ROI200", stopPrices[1], 40);
   } else if (input.strategyType === "FIXED_TP") await makePlan("TP", "FULL", stopPrices[0], 100);
-  else if (input.strategyType === "LEVEL_SL") await makePlan("SL", "FULL", stopPrices[0], 100);
 
   const orderRows = plans.map((plan) => ({
     id: `${prefix}-po-${crypto.randomUUID()}`, exchange, strategyId: id, origin: input.origin, stage: plan.stage,
@@ -633,14 +645,14 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
       (id, exchange, idempotency_key, origin, source_order_id, source_fill_id, symbol, side, strategy_type, status, config_json,
        initial_quantity, remaining_quantity, entry_price, leverage, invalid_candle_count)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, 0)`)
-      .bind(id, exchange, input.idempotencyKey, input.origin, sourceOrderId, sourceFillId, symbol, input.source.side, input.strategyType,
+      .bind(id, exchange, input.idempotencyKey, input.origin, registeredSourceOrderId, sourceFillId, symbol, input.source.side, input.strategyType,
         JSON.stringify(config), String(sourceQuantity), String(sourceQuantity), String(entryPrice), String(leverage)),
     ...orderRows.map((order) => db.prepare(`INSERT INTO trade_protection_orders
       (id, exchange, strategy_id, origin, stage, client_order_id, symbol, side, type, quantity, stop_price, reduce_only, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'RESERVED')`)
       .bind(order.id, order.exchange, order.strategyId, order.origin, order.stage, order.clientOrderId, order.symbol, order.side, order.type, order.quantity, order.stopPrice)),
     db.prepare("INSERT INTO trade_protection_events (id, exchange, strategy_id, type, payload_json) VALUES (?, ?, ?, 'CREATED', ?)")
-      .bind(crypto.randomUUID(), exchange, id, JSON.stringify({ origin: input.origin, exchange, sourceOrderId, sourceFillId, strategyType: input.strategyType })),
+      .bind(crypto.randomUUID(), exchange, id, JSON.stringify({ origin: input.origin, exchange, sourceOrderId: registeredSourceOrderId, sourceClientOrderIds: sourceOrderIds, sourceFillId, strategyType: input.strategyType })),
   ]);
 
   if (!plans.length) {

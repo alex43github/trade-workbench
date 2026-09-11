@@ -119,7 +119,7 @@ function resolveAdapter(exchange: LiveExchange, dependencies: ProtectionExecutor
 }
 function adapterProtectionClientOrderId(exchange: LiveExchange, clientOrderId: string) {
   if (exchange !== "BYBIT") return clientOrderId;
-  const match = /^(web|tele|alex)(SL|TP)(.*)$/i.exec(clientOrderId);
+  const match = /^(web|str|tele|alex|ios)(SL|TP)(.*)$/i.exec(clientOrderId);
   return match ? `${match[1].toLowerCase() === "tele" ? "tele" : "web"}BY${match[2].toUpperCase()}${match[3]}` : clientOrderId;
 }
 function adapterExchangeInfo(instrument: Awaited<ReturnType<LiveExchangeAdapter["instrument"]>>): ExchangeInfo { return { symbols: [{ symbol: instrument.symbol, filters: instrument.filters as ExchangeFilter[] }] }; }
@@ -313,7 +313,7 @@ async function executeProtectionExit(input: ExitExecutionInput): Promise<Protect
     stage: input.stage,
   };
   const db = await getD1();
-  const orderPrefix = strategy.origin === "ALEX" ? "alex" : strategy.origin === "TELEGRAM" ? "tele" : "web";
+  const orderPrefix = strategy.origin === "ALEX" ? "ios" : strategy.origin === "TELEGRAM" ? "tele" : "str";
   const orderId = `${orderPrefix}-po-${crypto.randomUUID()}`;
   await db.prepare(`INSERT INTO trade_protection_orders
     (id, exchange, strategy_id, origin, stage, client_order_id, symbol, side, type, quantity, reduce_only, status)
@@ -615,7 +615,8 @@ async function reconcilePendingProtectionExit(
 ): Promise<ProtectionTickResult | null> {
   if (!strategy) return null;
   const pending = strategy.orders.filter((order) => ["RESERVED", "SUBMITTED", "UNKNOWN"].includes(order.status)
-    && (order.stage.startsWith("MA_") || (order.stage.startsWith("QUICK_") && !order.stage.startsWith("QUICK_MARGIN_TP_"))));
+    && ((order.stage.startsWith("MA_") || order.stage.startsWith("LEVEL_"))
+      || (order.stage.startsWith("QUICK_") && !order.stage.startsWith("QUICK_MARGIN_TP_"))));
   if (!pending.length) return null;
   if (pending.length !== 1 || !["SUBMITTED", "UNKNOWN"].includes(pending[0].status)) {
     await updateStrategy(strategy.id, { status: "RECONCILIATION_REQUIRED", invalidCandleCount: strategy.invalidCandleCount, candleId: strategy.lastClosedCandleId, error: "存在状态不确定的止损市价单" });
@@ -658,7 +659,7 @@ async function reconcilePendingProtectionExit(
 export async function runProtectionStrategyTick(strategyId: string, dependencies: ProtectionExecutorDependencies = {}): Promise<ProtectionTickResult> {
   await ensureProtectionSchema();
   const strategy = await getProtectionStrategy(strategyId);
-  if (!strategy || strategy.strategyType !== "MA_SL" || !["ACTIVE", "PARTIALLY_PROTECTED", "TRIGGERING"].includes(strategy.status)) return { action: "NOOP" };
+  if (!strategy || !["MA_SL", "LEVEL_SL"].includes(strategy.strategyType) || !["ACTIVE", "PARTIALLY_PROTECTED", "TRIGGERING"].includes(strategy.status)) return { action: "NOOP" };
   const exchange = strategyExchange(strategy);
   const timeframeForExchange = String(strategy.config.timeframe ?? "1h");
   assertLiveTimeframe(exchange, timeframeForExchange);
@@ -691,11 +692,16 @@ export async function runProtectionStrategyTick(strategyId: string, dependencies
     await updateStrategy(strategy.id, { status: "RECONCILIATION_REQUIRED", invalidCandleCount: strategy.invalidCandleCount, candleId: candle.id, error: "来源账本数量与交易所当前持仓不一致" });
     return { action: "RECONCILIATION_REQUIRED" };
   }
+  const fixedPrice = strategy.strategyType === "LEVEL_SL" ? Number(strategy.config.fixedPrice) : null;
+  if (strategy.strategyType === "LEVEL_SL" && (!Number.isFinite(fixedPrice) || fixedPrice <= 0)) {
+    await updateStrategy(strategy.id, { status: "RECONCILIATION_REQUIRED", invalidCandleCount: strategy.invalidCandleCount, candleId: candle.id, error: "固定止损价格无效" });
+    return { action: "RECONCILIATION_REQUIRED" };
+  }
   const multiplier = indicatorConfig.atrMultiplier;
-  const boundary = strategy.side === "LONG" ? candle.ma - candle.atr * multiplier : candle.ma + candle.atr * multiplier;
+  const boundary = fixedPrice ?? (strategy.side === "LONG" ? candle.ma - candle.atr * multiplier : candle.ma + candle.atr * multiplier);
   const invalid = strategy.side === "LONG" ? close < boundary : close > boundary;
   if (!invalid) {
-    await updateStrategy(strategy.id, { status: "ACTIVE", invalidCandleCount: 0, candleId: candle.id });
+    await updateStrategy(strategy.id, { status: "ACTIVE", invalidCandleCount: strategy.strategyType === "LEVEL_SL" ? strategy.invalidCandleCount : 0, candleId: candle.id });
     return { action: "NOOP" };
   }
   const invalidCount = strategy.invalidCandleCount + 1;
@@ -705,7 +711,7 @@ export async function runProtectionStrategyTick(strategyId: string, dependencies
     : { frozen: false, reconciliationRequired: false };
   const targetRemaining = invalidCount === 1 ? strategy.initialQuantity * 0.5 : 0;
   const pendingExit = strategy.orders.some((order) => ["RESERVED", "SUBMITTED", "UNKNOWN"].includes(order.status)
-    && order.stage.startsWith("MA_"));
+    && (order.stage.startsWith("MA_") || order.stage.startsWith("LEVEL_")));
   if (pendingExit) return { action: "NOOP" };
   return executeProtectionExit({
     strategy,
@@ -714,7 +720,7 @@ export async function runProtectionStrategyTick(strategyId: string, dependencies
     amount,
     targetRemaining,
     kind: "SL",
-    stage: invalidCount === 1 ? "MA_FIRST" : "MA_SECOND",
+    stage: strategy.strategyType === "LEVEL_SL" ? (invalidCount === 1 ? "LEVEL_FIRST" : "LEVEL_SECOND") : (invalidCount === 1 ? "MA_FIRST" : "MA_SECOND"),
     candleId: candle.id,
     invalidCandleCount: invalidCount,
     entryFrozen: freeze.frozen,

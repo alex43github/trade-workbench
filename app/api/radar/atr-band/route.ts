@@ -15,7 +15,7 @@ export async function runAtrLifecycleScan(now = new Date(), options: { force?: b
   const scanBucket = getAtrLifecycleScanBucket(now);
   if (!options.force && await hasAtrLifecycleScanBucket(db, scanBucket)) return loadAtrLifecycleDashboard(db);
   const previous = await loadAtrLifecycleDashboard(db);
-  const scan = await buildAtrLifecycleScan(createAtrLifecycleFetchers(), previous, now, { db, expectedTotalSymbols: previous.active.length });
+  const scan = await buildAtrLifecycleScan(createAtrLifecycleFetchers(), previous, now, { db, expectedTotalSymbols: previous.active.length, multiplier: 1 });
   await saveAtrLifecycle(db, scan);
   await ensureWatchlistSchema();
   await syncHourlyStrongWatchlist(db, scan);

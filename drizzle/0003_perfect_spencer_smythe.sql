@@ -1,0 +1,2 @@
+ALTER TABLE `consultations` ADD `failures_json` text DEFAULT '[]' NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `uq_expert_orders_account_consultation` ON `expert_orders` (`account_id`,`consultation_id`);

@@ -1,5 +1,5 @@
 import { DEFAULT_ATR_MULTIPLIER, MIN_ATR_BAND_CONSECUTIVE_BARS } from "./atr-band.ts";
-import { transitionAtrBandLifecycle, type AtrBandLifecycle, type AtrBandLifecycleStatus } from "./atr-band-lifecycle.ts";
+import { deriveLifecycleSignal, transitionAtrBandLifecycle, type AtrBandLifecycle, type AtrBandLifecycleStatus } from "./atr-band-lifecycle.ts";
 import type { ClosedBar } from "./reversal.ts";
 import { createRadarDiagnosticFromError, type RadarDiagnostic } from "./scan-diagnostic.ts";
 import { createScanProgress, type RadarScanProgress, type ScanProgressOptions } from "./scan-progress.ts";
@@ -23,6 +23,7 @@ export type AtrLifecycleFetchers = {
   fetchClosedBars: (symbol: string, now: Date) => Promise<ClosedBar[]>;
   fetchClosedHourlyOi?: (symbol: string, now: Date) => Promise<AtrLifecycleOiInput>;
   fetchHourlyOi?: (symbol: string, now: Date) => Promise<AtrLifecycleOiInput>;
+  fetchClosedFourHourBars?: (symbol: string, now: Date) => Promise<ClosedBar[]>;
 };
 
 export type AtrBandLifecycleFetchers = AtrLifecycleFetchers;
@@ -217,9 +218,21 @@ function lifecycleOrder(left: AtrBandLifecycle, right: AtrBandLifecycle) {
     || left.entryTime - right.entryTime;
 }
 
+/** Rank machine picks by persistence first, then by extension beyond 2/3 ATR. */
+function strongLifecycleOrder(left: AtrBandLifecycle, right: AtrBandLifecycle) {
+  const leftStrength = (left.fourHourConfirmed ? 10_000 : 0) + left.outsideBandBars * 100 + Math.max(0, left.maxAtrMultiple - 1) * 10;
+  const rightStrength = (right.fourHourConfirmed ? 10_000 : 0) + right.outsideBandBars * 100 + Math.max(0, right.maxAtrMultiple - 1) * 10;
+  return rightStrength - leftStrength || lifecycleOrder(left, right);
+}
+
+function isFourHourCloseBucket(now: Date) {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", hourCycle: "h23" }).format(now));
+  return Number.isInteger(hour) && hour % 4 === 0;
+}
+
 function groupLifecycles(input: readonly AtrBandLifecycle[]) {
   const lifecycles = [...input].filter(isLifecycle).sort(lifecycleOrder);
-  const strong = lifecycles.filter((lifecycle) => lifecycle.status === "STRONG");
+  const strong = lifecycles.filter((lifecycle) => lifecycle.status === "STRONG").sort(strongLifecycleOrder);
   const warning = lifecycles.filter((lifecycle) => lifecycle.status === "WARNING");
   const history = lifecycles.filter((lifecycle) => lifecycle.status === "HISTORY");
   return { lifecycles, active: [...strong, ...warning].sort(lifecycleOrder), strong, warning, history };
@@ -469,7 +482,20 @@ export async function buildAtrLifecycleScan(
 
   const successfulSymbols = results.filter((result) => result.successful).length;
   const failedSymbols = results.length - successfulSymbols;
-  const grouped = groupLifecycles([...records.values()]);
+  let grouped = groupLifecycles([...records.values()]);
+  // At 00/04/08/12/16/20 Beijing time, read 4H bars only for the already
+  // qualified 1H pool. It confirms and boosts ranking; it never widens the pool.
+  if (isFourHourCloseBucket(currentTime) && fetchers.fetchClosedFourHourBars) {
+    const confirmations = await Promise.all(grouped.strong.map(async (lifecycle) => {
+      try {
+        const bars = normalizeBars(await fetchers.fetchClosedFourHourBars!(lifecycle.symbol, currentTime), currentTime);
+        const signal = deriveLifecycleSignal({ bars, direction: lifecycle.direction, multiplier, minimumBars: MIN_ATR_BAND_CONSECUTIVE_BARS });
+        return { lifecycle, confirmed: Boolean(signal && signal.status === "STRONG" && signal.consecutiveBars >= MIN_ATR_BAND_CONSECUTIVE_BARS) };
+      } catch { return { lifecycle, confirmed: false }; }
+    }));
+    for (const { lifecycle, confirmed } of confirmations) records.set(lifecycleId(lifecycle), { ...lifecycle, fourHourConfirmed: confirmed, fourHourConfirmedAt: currentTime.getTime() });
+    grouped = groupLifecycles([...records.values()]);
+  }
   const degraded = symbols.length === 0 || successfulSymbols === 0 || failedSymbols > symbols.length / 2;
   const progress = createScanProgress(symbols.length, symbols.length, matchedSymbols);
   await options.onProgress?.(progress);

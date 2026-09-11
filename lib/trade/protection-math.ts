@@ -98,7 +98,7 @@ export function nextProtectionClientOrderId({
   sequence: number;
 }) {
   if (!Number.isSafeInteger(sequence) || sequence <= 0) throw new Error("保护单序号不正确");
-  const prefix = origin === "ALEX" ? "alex" : origin === "TELEGRAM" ? "tele" : "web";
+  const prefix = origin === "ALEX" ? "ios" : origin === "TELEGRAM" ? "tele" : "str";
   return `${prefix}${kind}${String(sequence).padStart(8, "0")}`;
 }
 

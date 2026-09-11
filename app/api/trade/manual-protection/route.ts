@@ -62,6 +62,8 @@ export async function POST(request: Request) {
   if (side !== "LONG" && side !== "SHORT") return errorResponse("持仓方向无效");
   if (!PROTECTION_TYPES.has(strategyType)) return errorResponse("保护策略类型不正确");
   if (body.confirmation !== "CONFIRM_MANUAL_PROTECTION") return errorResponse("请先完成手动保护策略二次确认");
+  const protectionPercent = body.protectionPercent === undefined ? 100 : Number(body.protectionPercent);
+  if (![25, 50, 75, 100].includes(protectionPercent)) return errorResponse("保护比例仅支持 25%、50%、75% 或 100%");
   const timeframe = body.timeframe === undefined ? undefined : String(body.timeframe);
   if (timeframe !== undefined && !STRATEGY_TIMEFRAMES.includes(timeframe as typeof STRATEGY_TIMEFRAMES[number])) return errorResponse("保护策略周期不正确");
   try { if (strategyType === "MA_SL") assertLiveTimeframe(exchange, timeframe ?? ""); }
@@ -83,10 +85,12 @@ export async function POST(request: Request) {
     const idempotencyKey = /^[A-Za-z0-9:_-]{8,200}$/.test(suppliedKey)
       ? suppliedKey
       : `web:manual-protection:${crypto.randomUUID()}`;
+    const protectedQuantity = source.quantity * protectionPercent / 100;
+    if (!Number.isFinite(protectedQuantity) || protectedQuantity <= 0) return errorResponse("保护数量无效", 409);
     const submission = await createProtectionStrategy({
       exchange,
       origin: "ALEX",
-      source,
+      source: { ...source, quantity: protectedQuantity },
       strategyType,
       ...(fixedPrice === undefined ? {} : { fixedPrice }),
       ...(timeframe === undefined ? {} : { timeframe }),

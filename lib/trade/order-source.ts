@@ -1,10 +1,10 @@
 // Binance's native web client ids commonly start with `web_`.  Only reserve the
 // concrete id formats that this application has generated, never a broad prefix.
 const PROJECT_CLIENT_ORDER_ID_PATTERNS = [
-  /^(?:alex|tele|web|tw)\d+$/i,
-  /^(?:web|tele)(?:IN|BY|BN|MK)[A-Za-z0-9_-]+$/i,
-  /^(?:web|tele)quick[A-Za-z0-9_-]+$/i,
-  /^(?:alex|tele|web)(?:TP|SL)\d+$/i,
+  /^(?:alex|ios|tele|web|str|tw)\d+$/i,
+  /^(?:web|str|tele)(?:IN|BY|BN|MK)[A-Za-z0-9_-]+$/i,
+  /^(?:web|str|tele)quick[A-Za-z0-9_-]+$/i,
+  /^(?:alex|ios|tele|web|str)(?:TP|SL)\d+$/i,
   /^alexMC[A-Za-z0-9]{16,32}$/i,
 ];
 

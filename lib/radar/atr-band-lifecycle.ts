@@ -64,6 +64,9 @@ export type AtrBandLifecycle = AtrBandLifecycleMetrics & {
   warningTime: number | null;
   endTime: number | null;
   lastUpdatedTime: number;
+  /** 4H confirmation is refreshed only at 4-hour closed-candle boundaries. */
+  fourHourConfirmed?: boolean;
+  fourHourConfirmedAt?: number | null;
 };
 
 type LifecycleBar = ClosedBar & {

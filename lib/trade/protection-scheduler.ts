@@ -56,7 +56,7 @@ export async function runProtectionStrategyScheduler(dependencies: ProtectionSch
   } catch {
     result.failed += 1;
   }
-  const strategies = (await list(100)).filter((strategy) => strategy.strategyType === "MA_SL"
+  const strategies = (await list(100)).filter((strategy) => ["MA_SL", "LEVEL_SL"].includes(strategy.strategyType)
     && ["ACTIVE", "PARTIALLY_PROTECTED", "TRIGGERING"].includes(strategy.status));
   result.scanned = strategies.length;
   for (const strategy of strategies) {

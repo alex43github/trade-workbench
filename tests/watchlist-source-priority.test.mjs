@@ -12,7 +12,9 @@ const { getD1 } = await import("../db/index.ts");
 const { ensureWatchlistSchema } = await import("../db/ensure.ts");
 const {
   listWatchlist,
+  listWatchlistSections,
   removeWatchlistSource,
+  syncExchangePositionWatchlist,
   syncHourlyStrongWatchlist,
   syncWatchlistSource,
 } = await import("../lib/watchlist.ts");
@@ -114,4 +116,16 @@ test("a degraded hourly scan never removes the existing strong source", async ()
 
   await syncHourlyStrongWatchlist(db, { status: "ready", strong: [] });
   assert.equal((await listWatchlist(db)).some((item) => item.symbol === "PEPEUSDT"), false);
+});
+
+test("projects Binance and Bybit positions once in the position section", async () => {
+  await syncExchangePositionWatchlist(db, "BINANCE", [{ symbol: "DOGEUSDT", quantity: 1 }]);
+  await syncExchangePositionWatchlist(db, "BYBIT", [{ symbol: "DOGEUSDT", quantity: 2 }, { symbol: "WIFUSDT", quantity: 1 }]);
+
+  const sections = await listWatchlistSections(db);
+  const positions = sections.find((section) => section.id === "POSITION");
+  assert.deepEqual(positions?.items.map((item) => item.symbol), ["DOGEUSDT", "WIFUSDT"]);
+
+  await syncExchangePositionWatchlist(db, "BINANCE", []);
+  assert.deepEqual((await listWatchlistSections(db)).find((section) => section.id === "POSITION")?.items.map((item) => item.symbol), ["DOGEUSDT", "WIFUSDT"]);
 });

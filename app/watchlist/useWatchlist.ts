@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { displayBinanceSymbol, quoteAssetForSymbol } from "@/lib/trade/symbols";
 
 export type WatchlistItem = { symbol: string; displayName: string; quoteAsset?: "USDT" | "USDC" };
+export type WatchlistSection = { id: "PINNED" | "POSITION" | "MANUAL" | "MACHINE"; title: string; items: WatchlistItem[] };
 
 const STORAGE_KEY = "streetlight-watchlist-v1";
 const MIGRATION_KEY = "streetlight-watchlist-server-migrated-v1";
@@ -34,7 +35,7 @@ function legacyWatchlist(): WatchlistItem[] {
   }
 }
 
-type WatchlistPayload = { items: WatchlistItem[]; initialized: boolean };
+type WatchlistPayload = { items: WatchlistItem[]; sections?: WatchlistSection[]; initialized: boolean };
 
 async function request(method: "GET" | "POST" | "DELETE", body?: unknown): Promise<WatchlistPayload> {
   const response = await fetch("/api/watchlist", body === undefined ? { method, cache: "no-store" } : {
@@ -43,14 +44,15 @@ async function request(method: "GET" | "POST" | "DELETE", body?: unknown): Promi
     body: JSON.stringify(body),
     cache: "no-store",
   });
-  const payload = await response.json() as { items?: WatchlistItem[]; initialized?: boolean; error?: string };
+  const payload = await response.json() as { items?: WatchlistItem[]; sections?: WatchlistSection[]; initialized?: boolean; error?: string };
   if (!response.ok || !Array.isArray(payload.items)) throw new Error(payload.error || "自选同步失败");
-  return { items: payload.items, initialized: payload.initialized === true };
+  return { items: payload.items, sections: Array.isArray(payload.sections) ? payload.sections : undefined, initialized: payload.initialized === true };
 }
 
 export function useWatchlist() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(DEFAULT_WATCHLIST);
   const [ready, setReady] = useState(false);
+  const [sections, setSections] = useState<WatchlistSection[]>([]);
 
   const cache = useCallback((items: WatchlistItem[]) => {
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch { /* cache is optional */ }
@@ -65,7 +67,7 @@ export function useWatchlist() {
           server = await request("POST", { items: legacyWatchlist() });
           window.localStorage.setItem(MIGRATION_KEY, "1");
         }
-        if (!cancelled) { setWatchlist(server.items); cache(server.items); }
+        if (!cancelled) { setWatchlist(server.items); setSections(server.sections ?? []); cache(server.items); }
       } catch {
         if (!cancelled) setWatchlist(legacyWatchlist());
       } finally {
@@ -78,11 +80,11 @@ export function useWatchlist() {
 
   const add = useCallback(async (item: WatchlistItem) => {
     const result = await request("POST", { items: [item] });
-    setWatchlist(result.items); cache(result.items);
+    setWatchlist(result.items); setSections(result.sections ?? []); cache(result.items);
   }, [cache]);
   const remove = useCallback(async (symbol: string) => {
     const result = await request("DELETE", { symbol });
-    setWatchlist(result.items); cache(result.items);
+    setWatchlist(result.items); setSections(result.sections ?? []); cache(result.items);
   }, [cache]);
-  return { watchlist, ready, add, remove };
+  return { watchlist, sections, ready, add, remove };
 }

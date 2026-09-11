@@ -116,6 +116,7 @@ export function createAtrLifecycleFetchers(): AtrLifecycleFetchers {
   return {
     listSymbols: listUsdtPerpetualSymbols,
     fetchClosedBars: (symbol, now) => fetchClosedBars(symbol, "1h", now, 1_000),
+    fetchClosedFourHourBars: (symbol, now) => fetchClosedBars(symbol, "4h", now, 120),
     fetchClosedHourlyOi,
   };
 }

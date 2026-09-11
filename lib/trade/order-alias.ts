@@ -37,7 +37,7 @@ async function nextAliasSequence() {
 }
 
 function alias(value: number) {
-  return `alex${String(value).padStart(4, "0")}`;
+  return `ios${String(value).padStart(4, "0")}`;
 }
 
 export async function getOrCreateManualOrderAlias(input: ManualOrderAliasInput) {

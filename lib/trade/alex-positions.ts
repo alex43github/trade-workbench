@@ -61,8 +61,11 @@ function completedFillQuantity(order: AccountOrderRecord) {
   const executedQty = rawExecutedQuantity(order);
   const expectedQty = number(order.origQty ?? order.qty);
   const status = String(order.status ?? order.orderStatus ?? "").trim().toUpperCase();
-  if (executedQty <= 0 || !["FILLED", "PARTIALLY_FILLED"].includes(status)) return 0;
-  if (expectedQty <= 0 || Math.abs(expectedQty - executedQty) > Number.EPSILON) return 0;
+  if (executedQty <= 0) return 0;
+  if (status && !["FILLED", "PARTIALLY_FILLED"].includes(status)) return 0;
+  // Historical adapters occasionally omit status/original quantity.  A positive
+  // executed quantity is still an immutable fill; only reject a known partial fill.
+  if (expectedQty > 0 && Math.abs(expectedQty - executedQty) > Number.EPSILON) return 0;
   return executedQty;
 }
 
@@ -114,9 +117,15 @@ function remainingManualEntries(
     const quantity = exitQuantity(order);
     return quantity > 0 ? [{ kind: "EXIT" as const, order, quantity, time: orderTime(order) }] : [];
   });
-  if (timeline.some((event) => event.time === null)) return [];
+  // Some read-only history adapters omit timestamps.  They are still safe to
+  // present when there is no native reduce-only fill to reconcile; with an exit
+  // present, refuse the candidate rather than guessing entry/exit order.
+  if (timeline.some((event) => event.time === null)) {
+    if (timeline.some((event) => event.kind === "EXIT")) return [];
+    return timeline.filter((event): event is Extract<typeof event, { kind: "ENTRY" }> => event.kind === "ENTRY")
+      .map((event) => ({ order: event.order, sourceOrderId: event.sourceOrderId, quantity: event.quantity }));
+  }
   timeline.sort((left, right) => left.time! - right.time!);
-  if (timeline.some((event, index) => index > 0 && event.time === timeline[index - 1].time)) return [];
   const entries: Array<{ order: AccountOrderRecord; sourceOrderId: string; quantity: number }> = [];
   for (const event of timeline) {
     if (event.kind === "ENTRY") {

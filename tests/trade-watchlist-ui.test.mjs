@@ -9,7 +9,8 @@ test("trade chart lets custom symbols be added to a persisted watchlist", () => 
   assert.match(terminalSource, /useWatchlist/);
   assert.match(terminalSource, /toggleFavorite/);
   assert.match(terminalSource, /aria-pressed=\{isFavorite\}/);
-  assert.match(terminalSource, /watchlist\.map/);
+  assert.match(terminalSource, /watchlistSections/);
+  assert.match(terminalSource, /watchlistSection/);
   assert.match(terminalSource, /加入.*自选/);
   assert.doesNotMatch(terminalSource, /slice\(0, 12\)/);
   assert.match(stylesSource, /\.favoriteButton/);

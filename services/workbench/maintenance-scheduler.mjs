@@ -92,7 +92,13 @@ async function main() {
   state.latestRun = { startedAt, finishedAt: null, durationMs: null, status: "running", scannerCounts: { crowding: 0, reversalHourly: 0, reversal4h: 0, reversalDaily: 0, ma30Oi: 0 }, bark: { sent: 0, failed: 0, skipped: 0 }, error: null };
   await save();
   try {
-    const response = await fetch(`${baseUrl}/api/advisory/maintenance`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
+    // The full-market MA30/ATR scan can legitimately take several minutes. Dispatch
+    // it independently so it cannot make the unrelated maintenance request time out.
+    if (due.includes("atr-band")) {
+      const atrResponse = await fetch(`${baseUrl}/api/radar/atr-band`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
+      if (!atrResponse.ok && atrResponse.status !== 409) throw new Error(`ATR machine-watchlist endpoint HTTP ${atrResponse.status}`);
+    }
+    const response = await fetch(`${baseUrl}/api/advisory/maintenance`, { method: "POST", headers: { authorization: `Bearer ${token}`, "x-workbench-skip-atr-band": "1" } });
     const payload = await response.json().catch(() => null);
     if (!response.ok) throw new Error(`maintenance endpoint HTTP ${response.status}`);
     const completedAt = new Date().toISOString();

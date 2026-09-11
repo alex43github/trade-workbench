@@ -83,9 +83,9 @@ export async function POST(request: Request) {
   if (shanghaiHour() === 8) {
     ma30Oi = await runMa30OiScan();
   }
-  let atrBand: unknown = { status: "skipped", reason: "MA30 ± 3 ATR 生命周期本小时已扫描" };
+  let atrBand: unknown = { status: "skipped", reason: "MA30 ± 1 ATR 机器自选由独立低频任务扫描" };
   const atrBandBucket = getAtrLifecycleScanBucket();
-  const atrBandDue = !await hasAtrLifecycleScanBucket(db, atrBandBucket);
+  const atrBandDue = request.headers.get("x-workbench-skip-atr-band") !== "1" && !await hasAtrLifecycleScanBucket(db, atrBandBucket);
   if (atrBandDue) {
     atrBand = await runAtrLifecycleScan();
   }
