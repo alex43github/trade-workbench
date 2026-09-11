@@ -1,7 +1,7 @@
 # Trade Workbench — 第三方审计交接文档
 
 更新时间：2026-09-11（Asia/Shanghai）  
-审计代码仓库：`https://github.com/alex43github/trade-workbench`（私有）  
+审计代码仓库：`https://github.com/alex43github/trade-workbench`（公开审计仓库）  
 审计基线提交：`70977423ff6c463cb152010ad3f2e4ff369bd7ce`  
 部署目标：VPS `root@139.59.99.126`，应用目录 `/opt/trade-workbench`
 
