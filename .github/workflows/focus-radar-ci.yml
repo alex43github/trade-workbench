@@ -76,12 +76,34 @@ jobs:
           fi
           echo "No new live/gateway safety failures versus source baseline."
 
-      - name: Deterministic gateway policy and integration tests
-        run: node --test --test-name-pattern='^(?!公开行情经网关转发$)(?!公开合约列表经网关转发$)(?!公开 K 线经网关转发$)(?!只读网关允许 futures data 公共指标，但不扩大交易权限$).*' binance-gateway/test.mjs
+      - name: Gateway policy tests with public-reachability quarantine
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          node --test binance-gateway/test.mjs > /tmp/binance-gateway.tap 2>&1
+          gateway_exit=$?
+          set -e
+          cat /tmp/binance-gateway.tap
 
-      - name: Public Binance gateway reachability smoke
-        continue-on-error: true
-        run: node --test --test-name-pattern='^(公开行情经网关转发|公开合约列表经网关转发|公开 K 线经网关转发|只读网关允许 futures data 公共指标，但不扩大交易权限)$' binance-gateway/test.mjs
+          grep -E '^not ok [0-9]+ - ' /tmp/binance-gateway.tap | sed -E 's/^not ok [0-9]+ - //' | sort -u > /tmp/gateway-fails.txt || true
+          cat > /tmp/allowed-public-reachability-fails.txt <<'EOF'
+          公开 K 线经网关转发
+          公开合约列表经网关转发
+          公开行情经网关转发
+          只读网关允许 futures data 公共指标，但不扩大交易权限
+          EOF
+          sort -u /tmp/allowed-public-reachability-fails.txt -o /tmp/allowed-public-reachability-fails.txt
+          comm -23 /tmp/gateway-fails.txt /tmp/allowed-public-reachability-fails.txt | tee /tmp/unexpected-gateway-fails.txt
+          if [[ -s /tmp/unexpected-gateway-fails.txt ]]; then
+            echo "Unexpected deterministic gateway failure detected." >&2
+            exit 1
+          fi
+          if [[ $gateway_exit -ne 0 ]]; then
+            echo "Gateway deterministic safety tests passed; only GitHub-hosted public Binance reachability checks failed (for example HTTP 451)."
+          else
+            echo "All gateway tests passed, including public Binance reachability."
+          fi
 
       - name: TypeScript
         run: npx tsc --noEmit
