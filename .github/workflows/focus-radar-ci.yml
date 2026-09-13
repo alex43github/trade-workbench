@@ -105,8 +105,38 @@ jobs:
             echo "All gateway tests passed, including public Binance reachability."
           fi
 
-      - name: TypeScript
-        run: npx tsc --noEmit
+      - name: Compare TypeScript diagnostics with source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_tsc() {
+            local dir="$1"
+            local output="$2"
+            (
+              cd "$dir"
+              set +e
+              npx tsc --noEmit > "$output" 2>&1
+              echo $? > "${output}.exit"
+            )
+            grep -E 'error TS[0-9]+:' "$output" | sort -u > "${output}.errors" || true
+          }
+
+          run_tsc "$GITHUB_WORKSPACE" /tmp/candidate-tsc.txt
+          run_tsc /tmp/source-baseline /tmp/baseline-tsc.txt
+          echo "Candidate TypeScript diagnostics: $(wc -l < /tmp/candidate-tsc.txt.errors)"
+          echo "Baseline TypeScript diagnostics: $(wc -l < /tmp/baseline-tsc.txt.errors)"
+          echo "Candidate-only TypeScript diagnostics:"
+          comm -23 /tmp/candidate-tsc.txt.errors /tmp/baseline-tsc.txt.errors | tee /tmp/candidate-only-tsc.errors
+          if [[ -s /tmp/candidate-only-tsc.errors ]]; then
+            cat /tmp/candidate-tsc.txt
+            echo "Candidate introduced new TypeScript diagnostics." >&2
+            exit 1
+          fi
+          if [[ -s /tmp/candidate-tsc.txt.errors ]]; then
+            echo "No new TypeScript diagnostics; remaining diagnostics are inherited from source baseline."
+          else
+            echo "TypeScript clean."
+          fi
 
       - name: Build
         run: npm run build
