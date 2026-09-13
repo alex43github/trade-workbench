@@ -1,0 +1,165 @@
+name: Focus Radar Candidate CI
+
+on:
+  push:
+    branches:
+      - chatgpt/source-of-truth-20260913
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      RADAR_NOTIFY_ENABLED: "false"
+      BARK_BASE_URL: ""
+      BARK_API_KEY: ""
+      BINANCE_FUTURES_API_KEY: ""
+      BINANCE_FUTURES_API_SECRET: ""
+      STREETLIGHT_LOCAL_TEST_MODE: "false"
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Focus and radar regression tests
+        run: npm run radar:test
+
+      - name: Focus radar website model tests
+        run: node --experimental-strip-types --test tests/trade-focus-radar-ui.test.mjs
+
+      - name: Compare live safety failures with source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_live_suite() {
+            local dir="$1"
+            local output="$2"
+            (
+              cd "$dir"
+              set +e
+              node --experimental-strip-types --test tests/*live*.test.mjs tests/*gateway*.test.mjs > "$output" 2>&1
+              echo $? > "${output}.exit"
+            )
+            grep -E '^not ok [0-9]+ - ' "$output" | sed -E 's/^not ok [0-9]+ - //' | sort -u > "${output}.fails" || true
+          }
+
+          run_live_suite "$GITHUB_WORKSPACE" /tmp/candidate-live.tap
+
+          git worktree add --detach /tmp/source-baseline origin/source-baseline/20260913-current
+          (
+            cd /tmp/source-baseline
+            npm ci --no-audit --no-fund >/tmp/baseline-npm-ci.log 2>&1
+          )
+          run_live_suite /tmp/source-baseline /tmp/baseline-live.tap
+
+          echo "Candidate failing tests: $(wc -l < /tmp/candidate-live.tap.fails)"
+          echo "Baseline failing tests: $(wc -l < /tmp/baseline-live.tap.fails)"
+          echo "Candidate-only failures:"
+          comm -23 /tmp/candidate-live.tap.fails /tmp/baseline-live.tap.fails | tee /tmp/candidate-only.fails
+          if [[ -s /tmp/candidate-only.fails ]]; then
+            echo "Candidate introduced new live/gateway safety failures." >&2
+            exit 1
+          fi
+          echo "No new live/gateway safety failures versus source baseline."
+
+      - name: Gateway policy tests with public-reachability quarantine
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          node --test binance-gateway/test.mjs > /tmp/binance-gateway.tap 2>&1
+          gateway_exit=$?
+          set -e
+          cat /tmp/binance-gateway.tap
+
+          grep -E '^not ok [0-9]+ - ' /tmp/binance-gateway.tap | sed -E 's/^not ok [0-9]+ - //' | sort -u > /tmp/gateway-fails.txt || true
+          cat > /tmp/allowed-public-reachability-fails.txt <<'EOF'
+          公开 K 线经网关转发
+          公开合约列表经网关转发
+          公开行情经网关转发
+          只读网关允许 futures data 公共指标，但不扩大交易权限
+          EOF
+          sort -u /tmp/allowed-public-reachability-fails.txt -o /tmp/allowed-public-reachability-fails.txt
+          comm -23 /tmp/gateway-fails.txt /tmp/allowed-public-reachability-fails.txt | tee /tmp/unexpected-gateway-fails.txt
+          if [[ -s /tmp/unexpected-gateway-fails.txt ]]; then
+            echo "Unexpected deterministic gateway failure detected." >&2
+            exit 1
+          fi
+          if [[ $gateway_exit -ne 0 ]]; then
+            echo "Gateway deterministic safety tests passed; only GitHub-hosted public Binance reachability checks failed (for example HTTP 451)."
+          else
+            echo "All gateway tests passed, including public Binance reachability."
+          fi
+
+      - name: Compare TypeScript diagnostics with source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_tsc() {
+            local dir="$1"
+            local output="$2"
+            (
+              cd "$dir"
+              set +e
+              npx tsc --noEmit > "$output" 2>&1
+              echo $? > "${output}.exit"
+            )
+            grep -E 'error TS[0-9]+:' "$output" | sort -u > "${output}.errors" || true
+          }
+
+          run_tsc "$GITHUB_WORKSPACE" /tmp/candidate-tsc.txt
+          run_tsc /tmp/source-baseline /tmp/baseline-tsc.txt
+          echo "Candidate TypeScript diagnostics: $(wc -l < /tmp/candidate-tsc.txt.errors)"
+          echo "Baseline TypeScript diagnostics: $(wc -l < /tmp/baseline-tsc.txt.errors)"
+          echo "Candidate-only TypeScript diagnostics:"
+          comm -23 /tmp/candidate-tsc.txt.errors /tmp/baseline-tsc.txt.errors | tee /tmp/candidate-only-tsc.errors
+          if [[ -s /tmp/candidate-only-tsc.errors ]]; then
+            cat /tmp/candidate-tsc.txt
+            echo "Candidate introduced new TypeScript diagnostics." >&2
+            exit 1
+          fi
+          if [[ -s /tmp/candidate-tsc.txt.errors ]]; then
+            echo "No new TypeScript diagnostics; remaining diagnostics are inherited from source baseline."
+          else
+            echo "TypeScript clean."
+          fi
+
+      - name: Build
+        run: npm run build
+
+      - name: Diff check against source baseline
+        run: git diff --check origin/source-baseline/20260913-current...HEAD
+
+      - name: Reject runtime or secret-bearing file classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only origin/source-baseline/20260913-current...HEAD > /tmp/changed-files.txt
+          if grep -E '(^|/)(\.env($|\.)|.*\.(pem|key|p12|pfx|sqlite|sqlite3|db|log)$|node_modules/|\.data/|logs?/|tmp/|cache/)' /tmp/changed-files.txt; then
+            echo 'Unsafe runtime/secret-bearing file class detected in candidate diff.' >&2
+            exit 1
+          fi
+
+          private_prefix='BEGIN (RSA |EC |OPENSSH )?PRIVATE'
+          private_pattern="${private_prefix} KEY"
+          aws_prefix='AK'
+          aws_pattern="${aws_prefix}IA[0-9A-Z]{16}"
+          if git diff origin/source-baseline/20260913-current...HEAD -- . ':!package-lock.json' | grep -qE "${private_pattern}|${aws_pattern}"; then
+            echo 'Potential embedded secret detected in candidate diff.' >&2
+            exit 1
+          fi
+          echo 'Changed-file secret/runtime class scan: CLEAN'

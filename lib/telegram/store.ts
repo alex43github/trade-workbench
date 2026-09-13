@@ -46,6 +46,12 @@ export async function claimTelegramUpdate(updateId: number) {
   return changes(result) === 1;
 }
 
+export async function releaseTelegramUpdate(updateId: number) {
+  if (!Number.isSafeInteger(updateId) || updateId < 0) throw new Error("Telegram 更新编号不正确");
+  await ensureTelegramSchema();
+  await (await getD1()).prepare("DELETE FROM telegram_updates WHERE update_id = ?").bind(updateId).run();
+}
+
 export async function loadConversation(userId: string) {
   const id = safeUserId(userId);
   await ensureTelegramSchema();

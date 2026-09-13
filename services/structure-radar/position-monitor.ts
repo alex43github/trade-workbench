@@ -46,6 +46,14 @@ export class PositionMonitor {
     }
   }
 
+  snapshot() {
+    return {
+      connected: this.#connected,
+      observedAt: this.#observedAt,
+      positions: this.#positions.map((position) => ({ ...position })),
+    };
+  }
+
   classify(signal: { symbol: string; direction: "LONG" | "SHORT"; candidateAt: number; confirmedAt?: number | null }) {
     const result = classifyPosition(signal, {
       connected: this.#connected,

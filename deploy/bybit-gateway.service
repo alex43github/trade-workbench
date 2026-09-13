@@ -1,0 +1,26 @@
+[Unit]
+Description=Trade Workbench Bybit V5 fixed-IP gateway (loopback only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trade-workbench
+Group=trade-workbench
+WorkingDirectory=/opt/trade-workbench
+EnvironmentFile=/etc/trade-workbench/workbench.env
+# server.mjs binds internally to 127.0.0.1 and reads BYBIT_GATEWAY_UPSTREAM_BASE_URL.
+# BYBIT_GATEWAY_BASE_URL is the Workbench client address and is never used as the Bybit upstream.
+ExecStart=/usr/bin/node /opt/trade-workbench/bybit-gateway/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/trade-workbench
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
