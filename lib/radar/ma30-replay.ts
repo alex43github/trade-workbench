@@ -1,5 +1,5 @@
 import { computeMa30AccelerationSnapshot, type Ma30AccelerationStage } from "./ma30-acceleration.ts";
-import { computeSmaSeries } from "./ma30-slope.ts";
+import { simpleMovingAverageSeries } from "./ma30-slope.ts";
 import { computeMa30NewHighBars } from "./ma30-ranking.ts";
 
 export type Ma30ReplayPoint = {
@@ -29,20 +29,14 @@ function forwardMfe(closes: readonly number[], index: number, bars: number): num
   return ((high / entry) - 1) * 100;
 }
 
-/**
- * Strict no-lookahead replay. Every signal at i is computed only from closes[0..i].
- * Forward MFE is attached only as an outcome label and is never passed to the classifier.
- */
-export function replayMa30Acceleration(
-  closes: readonly number[],
-  times?: readonly number[],
-): Ma30ReplayPoint[] {
+/** Strict no-lookahead replay: signal at i only sees closes[0..i]. */
+export function replayMa30Acceleration(closes: readonly number[], times?: readonly number[]): Ma30ReplayPoint[] {
   const out: Ma30ReplayPoint[] = [];
   for (let i = 49; i < closes.length; i += 1) {
     const prefix = closes.slice(0, i + 1);
     const snapshot = computeMa30AccelerationSnapshot(prefix);
     if (!snapshot) continue;
-    const maSeries = computeSmaSeries(prefix, 30);
+    const maSeries = simpleMovingAverageSeries(prefix, 30);
     out.push({
       index: i,
       time: times?.[i],
