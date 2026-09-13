@@ -72,15 +72,19 @@ export function createLiveStrategyPost(dependencies: LiveStrategySubmitDependenc
       return invalid(safeError(error));
     }
 
-    const result = await submitLiveStrategy({
-      origin: "WEB",
-      draft: requestDraft(body),
-      confirmation: body.confirmation,
-      confirmationNonce: body.confirmationNonce,
-      liveSwitchOn: body.liveSwitchOn,
-    }, dependencies);
-    const { status, ...payload } = result;
-    return Response.json(payload, { status, headers: { "cache-control": "no-store" } });
+    try {
+      const result = await submitLiveStrategy({
+        origin: "WEB",
+        draft: requestDraft(body),
+        confirmation: body.confirmation,
+        confirmationNonce: body.confirmationNonce,
+        liveSwitchOn: body.liveSwitchOn,
+      }, dependencies);
+      const { status, ...payload } = result;
+      return Response.json(payload, { status, headers: { "cache-control": "no-store" } });
+    } catch (error) {
+      return Response.json({ ok: false, error: `实盘策略提交失败：${safeError(error)}` }, { status: 500, headers: { "cache-control": "no-store" } });
+    }
   };
 }
 
