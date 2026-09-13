@@ -50,7 +50,7 @@ function FocusRow({ row }: { row: FocusUiRow }) {
   </a>;
 }
 
-export default function FocusRadarPanel() {
+export default function FocusRadarPanel({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const [mode, setMode] = useState<ViewMode>("hourly");
   const [focusPayload, setFocusPayload] = useState<Payload>({ connected: false, reason: "正在连接重点雷达", focusPool: [] });
   const [hourlyPayload, setHourlyPayload] = useState<Payload>({ connected: false, reason: "正在连接每小时雷达", strongTrendCandidates: [], squeezeCandidates: [] });
@@ -83,7 +83,7 @@ export default function FocusRadarPanel() {
   const disconnected = mode === "hourly" ? hourlyView.status !== "live" : focusView.status !== "live";
   const reason = mode === "hourly" ? hourlyView.reason : focusView.reason;
 
-  return <section className={styles.shell} aria-label="强趋势与挤压重点雷达">
+  return <section className={`${styles.shell} ${theme === "light" ? styles.light : ""}`} aria-label="强趋势与挤压重点雷达">
     <header className={styles.header}>
       <div><small>FOCUS RADAR · READ ONLY</small><h2>强趋势 / 轧空重点雷达</h2><p>1H 全市场发现 → 重点池 5m/15m/1H 跟踪。只做监控与提醒，不自动下单。</p></div>
       <div className={styles.tabs} role="tablist" aria-label="雷达视图">
