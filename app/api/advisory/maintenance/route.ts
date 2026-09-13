@@ -1,4 +1,4 @@
-import { ensureAdvisorySchema } from "@/db/ensure";
+import { ensureAdvisorySchema, ensureWatchlistSchema } from "@/db/ensure";
 import { getD1 } from "@/db";
 import { retryFailedNotifications } from "@/lib/advisory/notification-retry";
 import { POST as scanCrowdingAlerts } from "@/app/api/radar/alerts/route";
@@ -20,7 +20,9 @@ import { getAtrLifecycleScanBucket, hasAtrLifecycleScanBucket } from "@/lib/rada
 import { loadReversalDashboard, REVERSAL_INTERVALS } from "@/lib/radar/reversal-snapshot";
 import { loadLatestMultiTimeframeSnapshot } from "@/lib/radar/multitimeframe";
 import { requireScheduler, schedulerToken } from "@/lib/security/operator-guard";
+import { syncCanonicalFocusWatchlist } from "@/lib/structure-radar/focus-maintenance";
 import { syncGatewayPositionWatchlist } from "@/lib/trade/watchlist-position-sync";
+import { listWatchlist } from "@/lib/watchlist";
 
 function shanghaiHour(date = new Date()) {
   return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", hourCycle: "h23" }).format(date));
@@ -65,9 +67,15 @@ export async function POST(request: Request) {
   const token = schedulerToken();
   if (!token) return Response.json({ error: "scheduler is not configured", realOrderRouteEnabled: false }, { status: 503 });
   await ensureAdvisorySchema();
+  await ensureWatchlistSchema();
   const db = await getD1();
   const notifications = await retryFailedNotifications(db, { barkBaseUrl: process.env.BARK_BASE_URL });
   const watchlistPositions = await syncGatewayPositionWatchlist();
+  const focusWatchlist = await syncCanonicalFocusWatchlist({
+    loadWatchlist: () => listWatchlist(db),
+    token: process.env.RADAR_LOCAL_TOKEN ?? "",
+    baseUrl: process.env.STRUCTURE_RADAR_BASE_URL,
+  });
   const crowdingRequest = new Request(new URL("/api/radar/alerts", request.url), { method: "POST", headers: { authorization: `Bearer ${token}` } });
   const crowdingResponse = await scanCrowdingAlerts(crowdingRequest);
   const crowding = await crowdingResponse.json();
@@ -117,5 +125,5 @@ export async function POST(request: Request) {
     const ma30Snapshot = await loadLatestMa30OiSnapshot(await getD1());
     composite = await runCompositeRanking({ ma30Oi: ma30Snapshot, reversal: reversalDashboard, multiTimeframe, radar: radarPayload ?? undefined });
   }
-  return Response.json({ notifications, watchlistPositions, crowding, reversal, reversalDaily, ma30Oi, atrBand, composite, realOrderRouteEnabled: false }, { status: crowdingResponse.ok && reversalOk && reversalDailyOk && ma30OiOk ? 200 : 503 });
+  return Response.json({ notifications, watchlistPositions, focusWatchlist, crowding, reversal, reversalDaily, ma30Oi, atrBand, composite, realOrderRouteEnabled: false }, { status: crowdingResponse.ok && reversalOk && reversalDailyOk && ma30OiOk ? 200 : 503 });
 }
