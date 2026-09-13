@@ -8,6 +8,10 @@ type RadarApiOptions = {
   repository: Repository;
   health: () => unknown;
   rescan: () => Promise<unknown>;
+  listFocusPool?: () => Promise<unknown>;
+  getFocusPool?: (symbol: string) => Promise<unknown | null>;
+  getHourlyRadar?: () => Promise<unknown>;
+  syncFocusSources?: (watchlist: string[]) => Promise<unknown>;
 };
 
 import { createServer } from "node:http";
@@ -66,6 +70,39 @@ export function createRadarHttpServer(options: RadarApiOptions) {
         const id = decodeURIComponent(url.pathname.slice("/signals/".length));
         const signal = await options.repository.get(id);
         return signal ? json(signal) : json({ error: "not_found" }, 404);
+      }
+      if (request.method === "GET" && url.pathname === "/focus-pool") {
+        if (!options.listFocusPool) return json({ error: "focus_pool_unavailable" }, 503);
+        return json({ updatedAt: new Date().toISOString(), focusPool: await options.listFocusPool() });
+      }
+      if (request.method === "GET" && url.pathname.startsWith("/focus-pool/")) {
+        if (!options.getFocusPool) return json({ error: "focus_pool_unavailable" }, 503);
+        const symbol = decodeURIComponent(url.pathname.slice("/focus-pool/".length)).trim().toUpperCase();
+        if (!/^[A-Z0-9]{2,30}$/.test(symbol)) return json({ error: "invalid_symbol" }, 400);
+        const record = await options.getFocusPool(symbol);
+        return record ? json(record) : json({ error: "not_found" }, 404);
+      }
+      if (request.method === "GET" && url.pathname === "/hourly-radar") {
+        if (!options.getHourlyRadar) return json({ error: "hourly_radar_unavailable" }, 503);
+        return json(await options.getHourlyRadar());
+      }
+      if (request.method === "POST" && url.pathname === "/focus-pool/sources") {
+        if (!options.token || request.headers.get("authorization") !== `Bearer ${options.token}`) {
+          return json({ error: "unauthorized" }, 401);
+        }
+        if (!options.syncFocusSources) return json({ error: "focus_source_sync_unavailable" }, 503);
+        let payload: unknown;
+        try { payload = await request.json(); } catch { return json({ error: "invalid_json" }, 400); }
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) return json({ error: "invalid_payload" }, 400);
+        const entries = Object.entries(payload as Record<string, unknown>);
+        if (entries.length !== 1 || entries[0]?.[0] !== "watchlist" || !Array.isArray(entries[0]?.[1])) {
+          return json({ error: "only_watchlist_is_accepted" }, 400);
+        }
+        const raw = entries[0][1] as unknown[];
+        if (raw.some((value) => typeof value !== "string")) return json({ error: "watchlist_must_be_strings" }, 400);
+        const normalized = [...new Set(raw.map((value) => String(value).trim().toUpperCase()))];
+        if (normalized.some((symbol) => !/^[A-Z0-9]{2,30}$/.test(symbol))) return json({ error: "invalid_symbol" }, 400);
+        return json(await options.syncFocusSources(normalized), 202);
       }
       if (request.method === "POST" && url.pathname === "/rescan") {
         if (!options.token || request.headers.get("authorization") !== `Bearer ${options.token}`) {
