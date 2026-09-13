@@ -1,7 +1,7 @@
 import { listManualFocusSymbols } from "./focus-source-store.ts";
 
 type Queryable = Parameters<typeof listManualFocusSymbols>[0];
-type Dependencies = { token: string; db: Queryable; ensure: () => Promise<void> };
+type Dependencies = { token: string; getDb: () => Promise<Queryable>; ensure: () => Promise<void> };
 
 function safeEqual(expected: string, actual: string) {
   let difference = expected.length ^ actual.length;
@@ -18,7 +18,8 @@ export async function handleFocusSourcesGet(request: Request, dependencies: Depe
   }
   try {
     await dependencies.ensure();
-    return Response.json({ symbols: await listManualFocusSymbols(dependencies.db) }, { headers: { "cache-control": "no-store" } });
+    const db = await dependencies.getDb();
+    return Response.json({ symbols: await listManualFocusSymbols(db) }, { headers: { "cache-control": "no-store" } });
   } catch {
     return Response.json({ error: "focus sources unavailable" }, { status: 503, headers: { "cache-control": "no-store" } });
   }
