@@ -1,0 +1,18 @@
+--- a/app/trade/EquityChart.tsx
++++ b/app/trade/EquityChart.tsx
+@@ -14,7 +14,7 @@
+   return [...byTime.values()].sort((left, right) => left.time - right.time);
+ }
+
+-export default function EquityChart({ points, theme }: { points: EquityPoint[]; theme: "dark" | "light" }) {
++export default function EquityChart({ exchange, points, theme }: { exchange: "BINANCE" | "BYBIT"; points: EquityPoint[]; theme: "dark" | "light" }) {
+   const containerRef = useRef<HTMLDivElement | null>(null);
+   const chartRef = useRef<{ chart: IChartApi; series: ISeriesApi<"Area"> } | null>(null);
+
+@@ -45,5 +45,5 @@
+     if (normalizedPoints.length) refs.chart.timeScale().fitContent();
+   }, [points, theme]);
+
+-  return <div className="equity-chart-canvas" ref={containerRef} aria-label="币安账户资金曲线" />;
++  return <div className="equity-chart-canvas" ref={containerRef} aria-label={`${exchange}账户资金曲线`} />;
+ }

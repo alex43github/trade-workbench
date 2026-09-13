@@ -1,0 +1,10 @@
+--- a/lib/radar/binance-public.ts
++++ b/lib/radar/binance-public.ts
+@@ -116,6 +116,7 @@
+   return {
+     listSymbols: listUsdtPerpetualSymbols,
+     fetchClosedBars: (symbol, now) => fetchClosedBars(symbol, "1h", now, 1_000),
++    fetchClosedFourHourBars: (symbol, now) => fetchClosedBars(symbol, "4h", now, 120),
+     fetchClosedHourlyOi,
+   };
+ }

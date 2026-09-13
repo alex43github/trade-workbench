@@ -1,0 +1,422 @@
+--- a/lib/telegram/handler.ts
++++ b/lib/telegram/handler.ts
+@@ -11,6 +11,7 @@
+ import { createProtectionStrategy, listProtectionStrategies, type PersistedProtectionStrategy, type ProtectionCreateInput } from "../trade/protection-strategies.ts";
+ import type { ProtectionPosition, ProtectionStrategyType } from "../trade/protection-contracts.ts";
+ import { isBinanceFuturesSymbol, normalizeBinanceFuturesSymbol } from "../trade/symbols.ts";
++import { allowedLiveTimeframes, normalizeLiveExchange, type LiveExchange } from "../trade/live-exchange.ts";
+
+ export type TelegramReply = {
+   text: string;
+@@ -97,14 +98,9 @@
+   [{ text: "做空", callback_data: "tg:act:quick_side_short_01" }],
+ ];
+
+-const timeframeKeyboard = [
+-  [{ text: "5分钟", callback_data: "tg:act:tf_5m_01" }],
+-  [{ text: "15分钟", callback_data: "tg:act:tf_15m_01" }],
+-  [{ text: "1小时", callback_data: "tg:act:tf_1h_01" }],
+-  [{ text: "4小时", callback_data: "tg:act:tf_4h_01" }],
+-  [{ text: "1天", callback_data: "tg:act:tf_1d_01" }],
+-  [{ text: "1周", callback_data: "tg:act:tf_1w_01" }],
+-  [{ text: "其他", callback_data: "tg:act:tf_other_01" }],
++const exchangeKeyboard = [
++  [{ text: "Binance", callback_data: "tg:act:exchange_binance_01" }],
++  [{ text: "Bybit（仅 1h / 4h / 1d）", callback_data: "tg:act:exchange_bybit_01" }],
+ ];
+
+ const quickTimeframeKeyboard = [
+@@ -167,6 +163,10 @@
+   [{ text: "止盈策略", callback_data: "tg:act:alex_kind_tp_01" }],
+   [{ text: "止损策略", callback_data: "tg:act:alex_kind_sl_01" }],
+ ];
++const protectionPercentKeyboard = [
++  [{ text: "25%", callback_data: "tg:act:alex_pct_25_01" }, { text: "50%", callback_data: "tg:act:alex_pct_50_01" }],
++  [{ text: "75%", callback_data: "tg:act:alex_pct_75_01" }, { text: "100%（默认）", callback_data: "tg:act:alex_pct_100_01" }],
++];
+
+ const takeProfitKeyboard = [
+   [{ text: "默认止盈", callback_data: "tg:act:alex_tp_default_01" }],
+@@ -178,13 +178,6 @@
+   [{ text: "支撑阻力线止损", callback_data: "tg:act:alex_sl_level_01" }],
+ ];
+
+-const protectionTimeframeKeyboard = [
+-  [{ text: "5分钟", callback_data: "tg:act:alex_tf_5m_01" }],
+-  [{ text: "15分钟", callback_data: "tg:act:alex_tf_15m_01" }],
+-  [{ text: "1小时（默认）", callback_data: "tg:act:alex_tf_1h_01" }],
+-  [{ text: "4小时", callback_data: "tg:act:alex_tf_4h_01" }],
+-  [{ text: "1天", callback_data: "tg:act:alex_tf_1d_01" }],
+-];
+
+ const cancelKeyboard = [[{ text: "取消", callback_data: "tg:act:cancel_01" }]];
+ const backKeyboard = [[{ text: "返回上一级", callback_data: "tg:act:back_001" }]];
+@@ -199,6 +192,21 @@
+ const homeOnlyKeyboard = [[{ text: "返回主菜单", callback_data: "tg:act:home_menu_01" }]];
+
+ type TelegramKeyboard = Array<Array<{ text: string; callback_data: string }>>;
++
++function exchangeOf(session: TelegramConversation): LiveExchange { return normalizeLiveExchange(session.draft.exchange); }
++function requiredExchange(session: TelegramConversation): LiveExchange {
++  if (session.draft.exchange === undefined) throw new Error("请先选择实盘交易所");
++  return normalizeLiveExchange(session.draft.exchange);
++}
++function timeframeKeyboardFor(exchange: LiveExchange): TelegramKeyboard {
++  const labels: Record<string, string> = { "5m": "5分钟", "15m": "15分钟", "1h": "1小时", "4h": "4小时", "1d": "1天", "1w": "1周" };
++  const buttons = allowedLiveTimeframes(exchange).map((timeframe) => [{ text: labels[timeframe] ?? timeframe, callback_data: `tg:act:tf_${timeframe}_01` }]);
++  return exchange === "BINANCE" ? [...buttons, [{ text: "其他", callback_data: "tg:act:tf_other_01" }]] : buttons;
++}
++function protectionTimeframeKeyboardFor(exchange: LiveExchange): TelegramKeyboard {
++  const labels: Record<string, string> = { "5m": "5分钟", "15m": "15分钟", "1h": "1小时（默认）", "4h": "4小时", "1d": "1天" };
++  return allowedLiveTimeframes(exchange).map((timeframe) => [{ text: labels[timeframe] ?? timeframe, callback_data: `tg:act:alex_tf_${timeframe}_01` }]);
++}
+
+ function screen(text: string, replyMarkup: TelegramReplyMarkup | TelegramKeyboard = homeKeyboard): TelegramReply {
+   return {
+@@ -271,10 +279,10 @@
+   return `实盘挂单\n${snapshot.orders.map((item) => `${item.websiteOrderId} · ${item.symbol} · ${item.side === "BUY" ? "买入" : "卖出"} · ${item.type} · ${item.quantity} @ ${item.price || item.stopPrice}`).join("\n")}`;
+ }
+
+-async function readSymbolLeverage(symbol: string, dependencies: TelegramHandlerDependencies): Promise<LiveSymbolLeverage> {
++async function readSymbolLeverage(symbol: string, dependencies: TelegramHandlerDependencies, exchange?: LiveExchange): Promise<LiveSymbolLeverage> {
+   const read = dependencies.getLiveSymbolLeverage ?? getLiveSymbolLeverage;
+   try {
+-    return await read(symbol);
++    return await (read as (item: string, options?: { exchange: LiveExchange }) => Promise<LiveSymbolLeverage>)(symbol, exchange === undefined ? undefined : { exchange });
+   } catch {
+     return { connected: false, symbol, leverage: null, reason: "币安当前杠杆查询暂时不可用" };
+   }
+@@ -287,7 +295,8 @@
+ }
+
+ function previousStep(session: TelegramConversation): TelegramConversation["step"] | null {
+-  if (session.step === "SYMBOL" && session.draft.homeEntry === true) return "HOME";
++  if (session.step === "EXCHANGE") return "HOME";
++  if (session.step === "SYMBOL" && session.draft.homeEntry === true) return "EXCHANGE";
+   const quickPrevious: Partial<Record<TelegramConversation["step"], TelegramConversation["step"]>> = {
+     QUICK_SYMBOL: "HOME", QUICK_SIDE: "QUICK_SYMBOL", QUICK_TIMEFRAME: "QUICK_SIDE", QUICK_MARGIN: "QUICK_TIMEFRAME",
+     QUICK_MARGIN_CUSTOM: "QUICK_MARGIN", QUICK_CONFIRM: "QUICK_MARGIN",
+@@ -296,11 +305,11 @@
+   if (session.step === "ALEX_CONFIRM") {
+     const type = session.draft.alexStrategyType;
+     if (type === "DEFAULT_TP" || type === "FIXED_TP") return type === "FIXED_TP" ? "ALEX_TP_PRICE" : "ALEX_TP_MODE";
+-    if (type === "MA_SL") return "ALEX_SL_TIMEFRAME";
++    if (type === "MA_SL" || type === "LEVEL_SL") return "ALEX_SL_TIMEFRAME";
+     return "ALEX_SL_PRICE";
+   }
+   const previous: Partial<Record<TelegramConversation["step"], TelegramConversation["step"]>> = {
+-    SYMBOL: "HOME", SIDE: "SYMBOL", TIMEFRAME: "SIDE", TIMEFRAME_CUSTOM: "TIMEFRAME", METHOD: "TIMEFRAME",
++    SYMBOL: "EXCHANGE", SIDE: "SYMBOL", TIMEFRAME: "SIDE", TIMEFRAME_CUSTOM: "TIMEFRAME", METHOD: "TIMEFRAME",
+     MA_KIND: "METHOD", MA_LENGTH: "MA_KIND", MA_LENGTH_CUSTOM: "MA_LENGTH", ATR_LENGTH: "MA_LENGTH",
+     ATR_MULTIPLIER: "ATR_LENGTH", MARGIN: "ATR_MULTIPLIER", LEG_COUNT: "MARGIN", PARAMETERS: "METHOD", CONFIRM: "LEG_COUNT",
+     ALEX_ASSET: "HOME", ALEX_KIND: "ALEX_ASSET", ALEX_TP_MODE: "ALEX_KIND", ALEX_TP_PRICE: "ALEX_TP_MODE",
+@@ -318,9 +327,10 @@
+     case "QUICK_MARGIN": return { text: "请选择总保证金金额。金额按总保证金计算，系统会读取 Binance 当前杠杆后换算名义金额。", keyboard: withBack(quickMarginKeyboard) };
+     case "QUICK_MARGIN_CUSTOM": return { text: "请输入其他总保证金金额（USDT）。", keyboard: cancelAndBackKeyboard };
+     case "QUICK_CONFIRM": return { text: quickOrderSummary(session), keyboard: quickConfirmationKeyboard };
+-    case "SYMBOL": return { text: "建立实盘策略。请输入币种，例如 BTCUSDT 或 BTCUSDC。", keyboard: cancelAndBackKeyboard };
++    case "EXCHANGE": return { text: "请选择本次实盘操作使用的交易所。", keyboard: withBack(exchangeKeyboard) };
++    case "SYMBOL": return { text: `建立 ${exchangeOf(session)} 实盘策略。请输入币种，例如 BTCUSDT 或 BTCUSDC。`, keyboard: cancelAndBackKeyboard };
+     case "SIDE": return { text: "已记录币种。请选择做多还是做空。", keyboard: withBack(sideKeyboard) };
+-    case "TIMEFRAME": return { text: "请选择参与周期，默认是1小时。", keyboard: withBack(timeframeKeyboard) };
++    case "TIMEFRAME": return { text: "请选择参与周期，默认是1小时。", keyboard: withBack(timeframeKeyboardFor(exchangeOf(session))) };
+     case "TIMEFRAME_CUSTOM": return { text: "请输入 Binance 支持的 K 线周期，例如 3m、30m、2h、6h、12h、3d 或 1M。", keyboard: cancelAndBackKeyboard };
+     case "METHOD": return { text: "请选择均线策略或关键位策略。", keyboard: withBack(methodKeyboard) };
+     case "MA_KIND": return { text: "请选择均线类型。", keyboard: withBack(maKindKeyboard) };
+@@ -331,12 +341,13 @@
+     case "MARGIN": return { text: "请输入总保证金（USDT），例如 100。", keyboard: cancelAndBackKeyboard };
+     case "LEG_COUNT": return { text: "请选择分几笔下单（默认5笔）。", keyboard: withBack(legCountKeyboard) };
+     case "PARAMETERS": return { text: "关键位策略暂需在网站端配置，请返回选择均线策略。", keyboard: withBack(methodKeyboard) };
+-    case "ALEX_ASSET": return { text: "请选择要挂止盈止损的币安手动持仓。", keyboard: alexCandidateKeyboard(session) };
++    case "ALEX_ASSET": return { text: `请选择要挂止盈止损的${exchangeOf(session) === "BYBIT" ? "Bybit" : "币安"}手动持仓。`, keyboard: alexCandidateKeyboard(session) };
++    case "ALEX_PERCENT": return { text: "请选择本次保护的手动持仓比例（默认 100%）。", keyboard: withBack(protectionPercentKeyboard) };
+     case "ALEX_KIND": return { text: "请选择要挂止盈还是止损策略。", keyboard: withBack(protectionKindKeyboard) };
+     case "ALEX_TP_MODE": return { text: "请选择止盈方式。默认止盈按 ROI/保证金收益率执行：100% 卖初始仓25%，200% 卖初始仓40%。", keyboard: withBack(takeProfitKeyboard) };
+     case "ALEX_TP_PRICE": return { text: "请输入固定止盈触发价格。", keyboard: cancelAndBackKeyboard };
+     case "ALEX_SL_MODE": return { text: "请选择止损方式。", keyboard: withBack(stopLossKeyboard) };
+-    case "ALEX_SL_TIMEFRAME": return { text: "请选择均线止损使用的 K 线周期。", keyboard: withBack(protectionTimeframeKeyboard) };
++    case "ALEX_SL_TIMEFRAME": return { text: "请选择止损使用的 K 线周期。", keyboard: withBack(protectionTimeframeKeyboardFor(exchangeOf(session))) };
+     case "ALEX_SL_PRICE": return { text: "请输入支撑阻力线触发价格。", keyboard: cancelAndBackKeyboard };
+     case "ALEX_CONFIRM": return { text: protectionSummary(session), keyboard: withBack([[{ text: "确认挂策略单", callback_data: "tg:act:confirm_protection_01" }], ...cancelKeyboard]) };
+     default: return { text: "请选择当前步骤。", keyboard: homeKeyboard };
+@@ -345,6 +356,7 @@
+
+ function liveStrategyDraft(session: TelegramConversation): LiveStrategyDraft & { atr: { length: number; multiplier: number } } {
+   const draft = session.draft;
++  const exchange = requiredExchange(session);
+   const symbol = String(draft.symbol ?? "").trim().toUpperCase();
+   const side = draft.side === "LONG" || draft.side === "SHORT" ? draft.side : null;
+   const timeframe = String(draft.timeframe ?? "");
+@@ -354,13 +366,13 @@
+   const atrMultiplier = Number(draft.atrMultiplier);
+   const totalMarginUsdt = Number(draft.totalMarginUsdt);
+   const legCount = Number(draft.legCount);
+-  if (!isBinanceFuturesSymbol(symbol) || !side || !STRATEGY_TIMEFRAMES.includes(timeframe as typeof STRATEGY_TIMEFRAMES[number])
++  if (!isBinanceFuturesSymbol(symbol) || !side || !allowedLiveTimeframes(exchange).includes(timeframe as typeof STRATEGY_TIMEFRAMES[number])
+     || !maKind || !Number.isSafeInteger(maLength) || maLength < 2 || !Number.isSafeInteger(atrLength) || atrLength < 1
+     || !Number.isFinite(atrMultiplier) || atrMultiplier <= 0 || !Number.isFinite(totalMarginUsdt) || totalMarginUsdt <= 0
+     || !Number.isSafeInteger(legCount) || legCount < 1 || legCount > 10) throw new Error("实盘策略参数不完整，入场单数量必须是1到10笔");
+   const marginPerLeg = totalMarginUsdt / legCount;
+   return {
+-    symbol, side, timeframe, style: "MA", mode: "LIVE_ARMED", totalMarginUsdt,
++    exchange, symbol, side, timeframe, style: "MA", mode: "LIVE_ARMED", totalMarginUsdt,
+     ma: { kind: maKind, length: maLength }, atr: { length: atrLength, multiplier: atrMultiplier },
+     legs: evenlySpacedAtrOffsets(legCount, atrMultiplier).map((atrOffset, index) => ({
+       atrOffset,
+@@ -368,7 +380,7 @@
+     })),
+     execution: "LIMIT_POST_ONLY", refreshOn: "CLOSED_CANDLE", expiryDays: 7,
+     dynamicGuard: { atrMultiplier }, firstGuardExitPct: 50, useDefaultProfitTargets: true,
+-  };
++  } as LiveStrategyDraft & { atr: { length: number; multiplier: number } };
+ }
+
+ function quickOrderSummary(session: TelegramConversation) {
+@@ -472,7 +484,9 @@
+     : type === "FIXED_TP"
+       ? `固定点位止盈：${session.draft.alexFixedPrice}`
+       : type === "MA_SL"
+-        ? `均线止损：SMA30 + ATR14 + 1 ATR，周期 ${session.draft.alexTimeframe ?? "1h"}；首根失效 K 线减仓50%，第二根连续失效退出。`
++        ? candidate.side === "LONG"
++          ? `均线止损：多单收盘跌破 SMA30 - ATR14 × 1 ATR，周期 ${session.draft.alexTimeframe ?? "1h"}；首根失效 K 线减仓50%，第二根连续失效退出。`
++          : `均线止损：空单收盘突破 SMA30 + ATR14 × 1 ATR，周期 ${session.draft.alexTimeframe ?? "1h"}；首根失效 K 线减仓50%，第二根连续失效退出。`
+         : `支撑阻力线止损：${session.draft.alexFixedPrice}`;
+   return `请确认保护策略\n${candidate.symbol} · ${candidate.side === "LONG" ? "做多" : "做空"}\n手动保护数量：${numberText(candidate.quantity)} · 名义 ${numberText(candidateManualNotional(candidate))} USDT · 估算保证金 ${numberText(candidate.manualMargin ?? candidateManualNotional(candidate) / Math.max(candidate.leverage, 1))} USDT\n其他来源数量：${numberText(candidate.otherQuantity ?? 0)} · 名义 ${numberText(candidateOtherNotional(candidate))} USDT\n总持仓：${numberText(candidate.totalQuantity ?? candidate.quantity)} · 名义 ${numberText(candidateTotalNotional(candidate))} USDT\n${candidateSourceText(candidate)}\n${candidate.reconciliationRequired ? "⚠️ 手动来源数量与当前持仓无法安全对账，本次不可提交。\n" : ""}${detail}\n点击确认后才会向 Binance 提交只减仓实盘保护单。`;
+ }
+@@ -484,7 +498,7 @@
+     ? strategy.orders.map((order) => `${order.clientOrderId} · ${order.status}${order.exchangeOrderId ? ` · Binance ${order.exchangeOrderId}` : ""}`).join("\n")
+     : "该策略由后台均线监控，不立即创建原生触发单。";
+   const aliases = Array.isArray(config.manualAliasIds) && config.manualAliasIds.length
+-    ? `\nalex归属：${config.manualAliasIds.join("，")}` : "";
++    ? `\nios归属：${config.manualAliasIds.join("，")}` : "";
+   const sources = Array.isArray(config.sourceOrderIds) && config.sourceOrderIds.length
+     ? `\n原始订单：${config.sourceOrderIds.join("，")}` : "";
+   return `保护策略 ${strategy.id}：${result.ok ? "已提交" : "未全部受理，需要对账"}\n来源 ${strategy.sourceOrderId} · ${strategy.symbol}${aliases}${sources}\n${rows}${result.error ? `\n${result.error}` : ""}`;
+@@ -519,16 +533,16 @@
+     }
+
+     if (actionId === "home_new_live_01" || actionId === "home_new_01") {
+-      await transitionConversation(update.userId, dependencies, { mode: "LIVE_ARMED", homeEntry: true, step: "SYMBOL" }, { reset: true });
+-      return screen("建立实盘策略。请输入币种，例如 BTCUSDT 或 BTCUSDC。", cancelAndBackKeyboard);
++      await transitionConversation(update.userId, dependencies, { mode: "LIVE_ARMED", homeEntry: true, step: "EXCHANGE" }, { reset: true });
++      return screen("建立实盘策略前，请先选择交易所。", withBack(exchangeKeyboard));
+     }
+
+     if (actionId === "quick_order_01") {
+       await transitionConversation(update.userId, dependencies, {
+         mode: "LIVE_ARMED", quickOrder: true, maKind: "SMA", maLength: 30, atrLength: 14, atrMultiplier: 1, legCount: QUICK_DEFAULT_LEG_COUNT,
+-        step: "QUICK_SYMBOL", confirmNonce: null,
++        step: "EXCHANGE", confirmNonce: null,
+       }, { reset: true });
+-      return screen("默认快速下单。请输入币种，例如 BTCUSDT 或 BTCUSDC。", cancelAndBackKeyboard);
++      return screen("默认快速下单前，请先选择交易所。", withBack(exchangeKeyboard));
+     }
+
+     if (["home_positions_01", "home_live_positions_01"].includes(actionId)) {
+@@ -554,27 +568,47 @@
+     }
+
+     if (actionId === "home_protection_01") {
+-      try {
+-        const findPositions = dependencies.getAlexManualPositions ?? getAlexManualPositions;
+-        const result: AlexPositionsResult = await findPositions();
+-        if (!result.connected) return screen(`币安手动持仓查询未连接：${result.reason ?? "未知原因"}。`, homeKeyboard);
+-        if (!result.positions.length) return screen("当前没有可挂保护策略的币安手动持仓。", homeKeyboard);
+-        await transitionConversation(update.userId, dependencies, { alexCandidates: result.positions, step: "ALEX_ASSET", confirmNonce: null }, { reset: true });
+-        const session = await currentConversation(update.userId, dependencies);
+-        return screen(alexCandidateText(session), alexCandidateKeyboard(session));
+-      } catch (error) { return screen(`币安手动持仓查询失败：${error instanceof Error ? error.message : "未知错误"}`, homeKeyboard); }
++      await transitionConversation(update.userId, dependencies, { homeEntry: "PROTECTION", step: "EXCHANGE" }, { reset: true });
++      return screen("挂止盈止损策略前，请先选择交易所。", withBack(exchangeKeyboard));
+     }
+
++    const session = await currentConversation(update.userId, dependencies);
++    if (actionId === "exchange_binance_01" || actionId === "exchange_bybit_01") {
++      if (session.step !== "EXCHANGE") return screen("交易所选择已失效，请从主菜单重新开始。", homeOnlyKeyboard);
++      const exchange: LiveExchange = actionId === "exchange_bybit_01" ? "BYBIT" : "BINANCE";
++      if (session.draft.homeEntry === "PROTECTION") {
++        try {
++          const findPositions = dependencies.getAlexManualPositions ?? getAlexManualPositions;
++          const result: AlexPositionsResult = await findPositions({ exchange } as never);
++          const name = exchange === "BYBIT" ? "Bybit" : "币安";
++          if (!result.connected) return screen(`${name}手动持仓查询未连接：${result.reason ?? "未知原因"}。`, homeKeyboard);
++          if (!result.positions.length) return screen(`当前没有可挂保护策略的${name}手动持仓。`, homeKeyboard);
++          await transitionConversation(update.userId, dependencies, { exchange, alexCandidates: result.positions, step: "ALEX_ASSET", confirmNonce: null }, { expectedStep: "EXCHANGE" });
++          const current = await currentConversation(update.userId, dependencies);
++          return screen(alexCandidateText(current), alexCandidateKeyboard(current));
++        } catch (error) { return screen(`手动持仓查询失败：${error instanceof Error ? error.message : "未知错误"}`, homeKeyboard); }
++      }
++      const quick = session.draft.quickOrder === true;
++      await transitionConversation(update.userId, dependencies, { exchange, step: quick ? "QUICK_SYMBOL" : "SYMBOL" }, { expectedStep: "EXCHANGE" });
++      return screen(`已选择 ${exchange}。请输入币种，例如 BTCUSDT。`, cancelAndBackKeyboard);
++    }
++
+     if (actionId.startsWith("alex_asset_") && actionId.endsWith("_01")) {
+       const index = Number(actionId.slice("alex_asset_".length, -3));
+       const session = await currentConversation(update.userId, dependencies);
+       const candidate = alexCandidates(session)[index];
+       if (!candidate || session.step !== "ALEX_ASSET") return screen("持仓候选已失效，请重新打开保护策略入口。", homeOnlyKeyboard);
+-      await transitionConversation(update.userId, dependencies, { alexSelectedCandidateId: candidate.candidateId, step: "ALEX_KIND" }, { expectedStep: "ALEX_ASSET" });
++      await transitionConversation(update.userId, dependencies, { alexSelectedCandidateId: candidate.candidateId, alexProtectionPercent: 100, step: "ALEX_PERCENT" }, { expectedStep: "ALEX_ASSET" });
++      return screen("请选择本次保护的手动持仓比例（默认 100%）。", withBack(protectionPercentKeyboard));
++    }
++
++    const percentMatch = /^alex_pct_(25|50|75|100)_01$/.exec(actionId);
++    if (percentMatch) {
++      if (session.step !== "ALEX_PERCENT" || !selectedAlexCandidate(session)) return screen("保护比例选择已失效，请重新选择持仓。", homeOnlyKeyboard);
++      await transitionConversation(update.userId, dependencies, { alexProtectionPercent: Number(percentMatch[1]), step: "ALEX_KIND" }, { expectedStep: "ALEX_PERCENT" });
+       return screen("请选择要挂止盈还是止损策略。", withBack(protectionKindKeyboard));
+     }
+
+-    const session = await currentConversation(update.userId, dependencies);
+     if (actionId === "alex_kind_tp_01" || actionId === "alex_kind_sl_01") {
+       if (session.step !== "ALEX_KIND" || !selectedAlexCandidate(session)) return screen("保护策略来源已失效，请重新选择持仓。", homeOnlyKeyboard);
+       await transitionConversation(update.userId, dependencies, { step: actionId.endsWith("tp_01") ? "ALEX_TP_MODE" : "ALEX_SL_MODE" }, { expectedStep: "ALEX_KIND" });
+@@ -592,14 +626,22 @@
+     }
+     if (actionId === "alex_sl_ma_01") {
+       await transitionConversation(update.userId, dependencies, { alexStrategyType: "MA_SL", step: "ALEX_SL_TIMEFRAME" }, { expectedStep: "ALEX_SL_MODE" });
+-      return screen("请选择均线止损使用的 K 线周期。", withBack(protectionTimeframeKeyboard));
++      return screen("请选择止损使用的 K 线周期。", withBack(protectionTimeframeKeyboardFor(exchangeOf(session))));
+     }
+     if (actionId === "alex_sl_level_01") {
+-      await transitionConversation(update.userId, dependencies, { alexStrategyType: "LEVEL_SL", step: "ALEX_SL_PRICE", confirmNonce: null }, { expectedStep: "ALEX_SL_MODE" });
+-      return screen("请输入支撑阻力线触发价格。", cancelAndBackKeyboard);
++      await transitionConversation(update.userId, dependencies, { alexStrategyType: "LEVEL_SL", step: "ALEX_SL_TIMEFRAME", confirmNonce: null }, { expectedStep: "ALEX_SL_MODE" });
++      return screen("请选择固定价格止损使用的 K 线周期。", withBack(protectionTimeframeKeyboardFor(exchangeOf(session))));
+     }
+     const alexTimeframes: Record<string, string> = { alex_tf_5m_01: "5m", alex_tf_15m_01: "15m", alex_tf_1h_01: "1h", alex_tf_4h_01: "4h", alex_tf_1d_01: "1d" };
+     if (alexTimeframes[actionId]) {
++      const exchange = exchangeOf(session);
++      if (!allowedLiveTimeframes(exchange).includes(alexTimeframes[actionId] as typeof STRATEGY_TIMEFRAMES[number])) {
++        return screen("Bybit 只支持 1h、4h、1d 周期。", withBack(protectionTimeframeKeyboardFor(exchange)));
++      }
++      if (session.draft.alexStrategyType === "LEVEL_SL") {
++        await transitionConversation(update.userId, dependencies, { alexTimeframe: alexTimeframes[actionId], step: "ALEX_SL_PRICE", confirmNonce: null }, { expectedStep: "ALEX_SL_TIMEFRAME" });
++        return screen("请输入支撑阻力线触发价格。", cancelAndBackKeyboard);
++      }
+       await transitionConversation(update.userId, dependencies, { alexTimeframe: alexTimeframes[actionId], step: "ALEX_CONFIRM", confirmNonce: crypto.randomUUID() }, { expectedStep: "ALEX_SL_TIMEFRAME" });
+       const current = await currentConversation(update.userId, dependencies);
+       return screen(protectionSummary(current), renderWizardStep("ALEX_CONFIRM", current).keyboard);
+@@ -615,23 +657,28 @@
+       }
+       const findPositions = dependencies.getAlexManualPositions ?? getAlexManualPositions;
+       let candidate: ProtectionPosition;
++      let exchange: LiveExchange;
++      try { exchange = requiredExchange(current); }
++      catch { return screen("当前保护策略缺少交易所，请重新选择交易所和持仓。", homeOnlyKeyboard); }
+       try {
+-        const latest = await findPositions();
++        const latest = await findPositions({ exchange } as never);
+         const refreshedCandidate = latest.positions.find((item) => item.candidateId === selectedCandidate.candidateId);
+         if (!latest.connected || !refreshedCandidate) return screen("持仓来源在确认前已经变化，请返回重新读取并选择。", homeOnlyKeyboard);
+-        candidate = refreshedCandidate;
++        const protectionPercent = Number(current.draft.alexProtectionPercent ?? 100);
++        if (![25, 50, 75, 100].includes(protectionPercent)) return screen("保护比例无效，请重新选择。", homeOnlyKeyboard);
++        candidate = { ...refreshedCandidate, quantity: refreshedCandidate.quantity * protectionPercent / 100 };
+       } catch { return screen("确认前重新读取手动持仓失败，请稍后重试。", homeOnlyKeyboard); }
+       const nonce = current.confirmNonce;
+       const consume = dependencies.consumeConfirmation ?? consumeConfirmation;
+       if (!await consume(update.userId, nonce)) return screen("该保护策略确认已经使用或已过期，没有重复提交。", homeOnlyKeyboard);
+       try {
+         const create = dependencies.createProtectionStrategy ?? createProtectionStrategy;
+-        const input: ProtectionCreateInput = {
+-          origin: "ALEX", source: candidate, strategyType: type as ProtectionStrategyType,
++        const input = {
++          exchange, origin: "ALEX", source: candidate, strategyType: type as ProtectionStrategyType,
+           ...(current.draft.alexFixedPrice === undefined ? {} : { fixedPrice: Number(current.draft.alexFixedPrice) }),
+           ...(current.draft.alexTimeframe === undefined ? {} : { timeframe: String(current.draft.alexTimeframe) }),
+           idempotencyKey: `telegram:alex:${update.userId}:${nonce}`,
+-        };
++        } as unknown as ProtectionCreateInput;
+         const result = await create(input);
+         return screen(protectionText(result), homeOnlyKeyboard);
+       } catch (error) {
+@@ -675,10 +722,13 @@
+
+     if (actionId === "quick_side_long_01" || actionId === "quick_side_short_01") {
+       await transitionConversation(update.userId, dependencies, { side: actionId === "quick_side_long_01" ? "LONG" : "SHORT", step: "QUICK_TIMEFRAME" }, { expectedStep: "QUICK_SIDE" });
+-      return screen("已记录方向。请选择 K 线周期：15分钟、1小时、4小时或日线。", withBack(quickTimeframeKeyboard));
++      const selected = await currentConversation(update.userId, dependencies);
++      return screen("已记录方向。请选择 K 线周期。", withBack(timeframeKeyboardFor(exchangeOf(selected)).filter((row) => row[0].callback_data !== "tg:act:tf_5m_01" && row[0].callback_data !== "tg:act:tf_other_01").map((row) => [{ ...row[0], callback_data: row[0].callback_data.replace("tg:act:tf_", "tg:act:quick_tf_") }])));
+     }
+-    const quickTimeframes: Record<string, string> = { quick_tf_15m_01: "15m", quick_tf_1h_01: "1h", quick_tf_4h_01: "4h", quick_tf_1d_01: "1d" };
++    const quickTimeframes: Record<string, string> = { quick_tf_15m_01: "15m", quick_tf_1h_01: "1h", quick_tf_4h_01: "4h", quick_tf_1d_01: "1d", quick_tf_1w_01: "1w" };
+     if (quickTimeframes[actionId]) {
++      const exchange = exchangeOf(session);
++      if (!allowedLiveTimeframes(exchange).includes(quickTimeframes[actionId] as typeof STRATEGY_TIMEFRAMES[number])) return screen("Bybit 只支持 1h、4h、1d 周期。", withBack(timeframeKeyboardFor(exchange)));
+       await transitionConversation(update.userId, dependencies, { timeframe: quickTimeframes[actionId], step: "QUICK_MARGIN" }, { expectedStep: "QUICK_TIMEFRAME" });
+       return screen("已记录周期。请选择总保证金金额。", withBack(quickMarginKeyboard));
+     }
+@@ -695,14 +745,18 @@
+
+     if (actionId === "side_long_01" || actionId === "side_short_01") {
+       await transitionConversation(update.userId, dependencies, { side: actionId === "side_long_01" ? "LONG" : "SHORT", step: "TIMEFRAME" }, { expectedStep: "SIDE" });
+-      return screen("已记录方向。请选择参与周期。", withBack(timeframeKeyboard));
++      const selected = await currentConversation(update.userId, dependencies);
++      return screen("已记录方向。请选择参与周期。", withBack(timeframeKeyboardFor(exchangeOf(selected))));
+     }
+     const timeframes: Record<string, string> = { tf_5m_01: "5m", tf_15m_01: "15m", tf_1h_01: "1h", tf_4h_01: "4h", tf_1d_01: "1d", tf_1w_01: "1w" };
+     if (timeframes[actionId]) {
++      const exchange = exchangeOf(session);
++      if (!allowedLiveTimeframes(exchange).includes(timeframes[actionId] as typeof STRATEGY_TIMEFRAMES[number])) return screen("Bybit 只支持 1h、4h、1d 周期。", withBack(timeframeKeyboardFor(exchange)));
+       await transitionConversation(update.userId, dependencies, { timeframe: timeframes[actionId], step: "METHOD" }, { expectedStep: "TIMEFRAME" });
+       return screen("已选择周期。请选择策略类型。", withBack(methodKeyboard));
+     }
+     if (actionId === "tf_other_01") {
++      if (exchangeOf(session) === "BYBIT") return screen("Bybit 只支持 1h、4h、1d 周期。", withBack(timeframeKeyboardFor("BYBIT")));
+       await transitionConversation(update.userId, dependencies, { step: "TIMEFRAME_CUSTOM" }, { expectedStep: "TIMEFRAME" });
+       return screen("请输入其他 Binance K 线周期。", cancelAndBackKeyboard);
+     }
+@@ -761,13 +815,13 @@
+     if (command === QUICK_ORDER_BUTTON) {
+       await transitionConversation(update.userId, dependencies, {
+         mode: "LIVE_ARMED", quickOrder: true, maKind: "SMA", maLength: 30, atrLength: 14, atrMultiplier: 1, legCount: QUICK_DEFAULT_LEG_COUNT,
+-        step: "QUICK_SYMBOL", confirmNonce: null,
++        step: "EXCHANGE", confirmNonce: null,
+       }, { reset: true });
+-      return screen("默认快速下单。请输入币种，例如 BTCUSDT 或 BTCUSDC。", cancelAndBackKeyboard);
++      return screen("默认快速下单前，请先选择交易所。", withBack(exchangeKeyboard));
+     }
+     if (command === QUICK_FULL_STRATEGY_BUTTON) {
+-      await transitionConversation(update.userId, dependencies, { mode: "LIVE_ARMED", homeEntry: true, step: "SYMBOL" }, { reset: true });
+-      return screen("建立实盘策略。请输入币种，例如 BTCUSDT 或 BTCUSDC。", cancelAndBackKeyboard);
++      await transitionConversation(update.userId, dependencies, { mode: "LIVE_ARMED", homeEntry: true, step: "EXCHANGE" }, { reset: true });
++      return screen("建立实盘策略前，请先选择交易所。", withBack(exchangeKeyboard));
+     }
+     if (command === QUICK_POSITIONS_BUTTON) {
+       try {
+@@ -789,21 +843,14 @@
+       } catch { return screen("实盘策略管理暂时不可用，请稍后重试。", homeKeyboard); }
+     }
+     if (command === QUICK_PROTECTION_BUTTON) {
+-      try {
+-        const findPositions = dependencies.getAlexManualPositions ?? getAlexManualPositions;
+-        const result: AlexPositionsResult = await findPositions();
+-        if (!result.connected) return screen(`币安手动持仓查询未连接：${result.reason ?? "未知原因"}。`, homeKeyboard);
+-        if (!result.positions.length) return screen("当前没有可挂保护策略的币安手动持仓。", homeKeyboard);
+-        await transitionConversation(update.userId, dependencies, { alexCandidates: result.positions, step: "ALEX_ASSET", confirmNonce: null }, { reset: true });
+-        const session = await currentConversation(update.userId, dependencies);
+-        return screen(alexCandidateText(session), alexCandidateKeyboard(session));
+-      } catch (error) { return screen(`币安手动持仓查询失败：${error instanceof Error ? error.message : "未知错误"}`, homeKeyboard); }
++      await transitionConversation(update.userId, dependencies, { homeEntry: "PROTECTION", step: "EXCHANGE", confirmNonce: null }, { reset: true });
++      return screen("挂止盈止损策略前，请先选择交易所。", withBack(exchangeKeyboard));
+     }
+     const session = await currentConversation(update.userId, dependencies);
+     if (session.step === "QUICK_SYMBOL") {
+       try {
+         const symbol = normalizeSymbol(update.text);
+-        const leverage = await readSymbolLeverage(symbol, dependencies);
++        const leverage = await readSymbolLeverage(symbol, dependencies, exchangeOf(session));
+         await transitionConversation(update.userId, dependencies, {
+           symbol,
+           currentLeverage: leverage.leverage,
+@@ -822,7 +869,7 @@
+     if (session.step === "SYMBOL") {
+       try {
+         const symbol = normalizeSymbol(update.text);
+-        const leverage = await readSymbolLeverage(symbol, dependencies);
++        const leverage = await readSymbolLeverage(symbol, dependencies, exchangeOf(session));
+         await transitionConversation(update.userId, dependencies, {
+           symbol,
+           currentLeverage: leverage.leverage,

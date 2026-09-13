@@ -1,0 +1,313 @@
+--- a/db/ensure.ts
++++ b/db/ensure.ts
+@@ -1,3 +1,4 @@
++import crypto from "node:crypto";
+ import { getD1 } from "./index.ts";
+
+ let initialized = false;
+@@ -10,12 +11,94 @@
+ let liveStrategyInitialized = false;
+ let liveStrategyInitialization: Promise<void> | null = null;
+ let liveManualCloseInitialized = false;
+-let liveExitLedgerInitialized = false;
+ let protectionInitialized = false;
+ let orderArchiveInitialized = false;
+ let atrBandLifecycleInitialized = false;
+ let watchlistInitialized = false;
+
++type SchemaRow = Record<string, unknown>;
++type ExchangeTable =
++  | "live_strategies" | "live_strategy_legs" | "live_strategy_orders" | "live_strategy_events"
++  | "live_entry_protection_links" | "live_strategy_generations" | "live_strategy_order_attempts"
++  | "live_strategy_execution_fills" | "live_strategy_lifecycle"
++  | "trade_protection_strategies" | "trade_protection_orders" | "trade_protection_events";
++
++const LIVE_EXCHANGE_TABLES: ExchangeTable[] = [
++  "live_strategies", "live_strategy_legs", "live_strategy_orders", "live_strategy_events",
++  "live_entry_protection_links", "live_strategy_generations", "live_strategy_order_attempts",
++  "live_strategy_execution_fills", "live_strategy_lifecycle",
++];
++const PROTECTION_EXCHANGE_TABLES: ExchangeTable[] = [
++  "trade_protection_strategies", "trade_protection_orders", "trade_protection_events",
++];
++
++/** Adds a durable exchange discriminator without rewriting existing Binance records. */
++async function ensureExchangeColumns(tables: readonly ExchangeTable[]) {
++  const db = await getD1();
++  const names = tables.map((table) => `'${table}'`).join(", ");
++  const existingRows = await db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${names})`).all<SchemaRow>();
++  const existing = new Set(existingRows.results.map((row) => String(row.name)));
++  const available = tables.filter((table) => existing.has(table));
++  if (!available.length) return;
++  const inspected = await Promise.all(available.map(async (table) => {
++    const columns = await db.prepare(`PRAGMA table_info(${table})`).all<SchemaRow>();
++    return { table, present: columns.results.some((row) => String(row.name) === "exchange") };
++  }));
++  const missing = inspected.filter((item) => !item.present);
++  if (missing.length) await db.batch(missing.map(({ table }) => db.prepare(`ALTER TABLE ${table} ADD COLUMN exchange TEXT NOT NULL DEFAULT 'BINANCE'`)));
++  await db.batch([
++    ...available.map((table) => db.prepare(`UPDATE ${table} SET exchange = 'BINANCE' WHERE exchange IS NULL`)),
++    ...available.flatMap((table) => [
++      db.prepare(`CREATE TRIGGER IF NOT EXISTS trg_${table}_exchange_insert BEFORE INSERT ON ${table}
++        WHEN NEW.exchange IS NULL OR NEW.exchange NOT IN ('BINANCE', 'BYBIT') BEGIN SELECT RAISE(ABORT, 'invalid exchange'); END`),
++      db.prepare(`CREATE TRIGGER IF NOT EXISTS trg_${table}_exchange_update BEFORE UPDATE OF exchange ON ${table}
++        WHEN NEW.exchange IS NULL OR NEW.exchange NOT IN ('BINANCE', 'BYBIT') BEGIN SELECT RAISE(ABORT, 'invalid exchange'); END`),
++    ]),
++  ]);
++}
++
++/** SQLite cannot alter the legacy global fill-id uniqueness in place. */
++async function ensureExecutionFillExchangeUniqueness() {
++  const db = await getD1();
++  const tables = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('live_strategy_execution_fills', 'live_strategy_execution_fills_exchange_migration')").all<SchemaRow>();
++  const existing = new Set(tables.results.map((row) => String(row.name)));
++  // A prior process may have completed the copy and stopped before the final rename.
++  if (!existing.has("live_strategy_execution_fills")) {
++    if (existing.has("live_strategy_execution_fills_exchange_migration")) {
++      await db.prepare("ALTER TABLE live_strategy_execution_fills_exchange_migration RENAME TO live_strategy_execution_fills").run();
++    }
++    return;
++  }
++  const indexes = await db.prepare("PRAGMA index_list(live_strategy_execution_fills)").all<SchemaRow>();
++  let legacyUnique = false;
++  for (const index of indexes.results) {
++    if (Number(index.unique) !== 1) continue;
++    const name = String(index.name ?? "").replaceAll("'", "''");
++    const columns = await db.prepare(`PRAGMA index_info('${name}')`).all<SchemaRow>();
++    if (columns.results.map((column) => String(column.name)).join(",") === "binance_fill_id") {
++      legacyUnique = true;
++      break;
++    }
++  }
++  if (!legacyUnique) return;
++  if (!existing.has("live_strategy_execution_fills_exchange_migration")) {
++    await db.prepare(`CREATE TABLE live_strategy_execution_fills_exchange_migration (
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')),
++      strategy_id TEXT NOT NULL, order_attempt_id TEXT NOT NULL,
++      role TEXT NOT NULL CHECK (role IN ('ENTRY', 'EXIT')), binance_fill_id TEXT NOT NULL,
++      quantity TEXT NOT NULL, price TEXT NOT NULL, executed_at TEXT NOT NULL,
++      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, UNIQUE(exchange, binance_fill_id)
++    )`).run();
++  }
++  // Keep this copy/replace sequential: D1 batches prepare statements before execution.
++  await db.prepare(`INSERT OR IGNORE INTO live_strategy_execution_fills_exchange_migration
++    (id, exchange, strategy_id, order_attempt_id, role, binance_fill_id, quantity, price, executed_at, created_at)
++    SELECT id, COALESCE(exchange, 'BINANCE'), strategy_id, order_attempt_id, role, binance_fill_id, quantity, price, executed_at, created_at
++    FROM live_strategy_execution_fills`).run();
++  await db.prepare("DROP TABLE live_strategy_execution_fills").run();
++  await db.prepare("ALTER TABLE live_strategy_execution_fills_exchange_migration RENAME TO live_strategy_execution_fills").run();
++}
++
+ export async function ensureWatchlistSchema() {
+   if (watchlistInitialized) return;
+   const db = await getD1();
+@@ -34,6 +117,12 @@
+       added_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+       PRIMARY KEY(symbol, source)
+     )`),
++    db.prepare(`CREATE TABLE IF NOT EXISTS watchlist_position_sources (
++      symbol TEXT NOT NULL,
++      exchange TEXT NOT NULL CHECK (exchange IN ('BINANCE', 'BYBIT')),
++      added_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
++      PRIMARY KEY(symbol, exchange)
++    )`),
+   ]);
+   const pinned = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT", "ENAUSDT"];
+   await db.batch(pinned.map((symbol) => db.prepare(`INSERT INTO watchlist_entries (symbol, display_name, quote_asset, source, removed_at)
+@@ -44,6 +133,8 @@
+   ]);
+   await db.batch([
+     db.prepare("CREATE INDEX IF NOT EXISTS idx_watchlist_entries_active_added ON watchlist_entries(removed_at, added_at DESC)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_watchlist_position_sources_exchange ON watchlist_position_sources(exchange, added_at)"),
++    db.prepare("INSERT OR IGNORE INTO watchlist_position_sources (symbol, exchange, added_at) SELECT symbol, 'BINANCE', added_at FROM watchlist_entry_sources WHERE source = 'POSITION'"),
+   ]);
+   watchlistInitialized = true;
+ }
+@@ -140,7 +231,7 @@
+       name TEXT PRIMARY KEY NOT NULL, value INTEGER DEFAULT 0 NOT NULL
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS trade_protection_strategies (
+-      id TEXT PRIMARY KEY NOT NULL, idempotency_key TEXT UNIQUE,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), idempotency_key TEXT UNIQUE,
+       origin TEXT NOT NULL CHECK (origin IN ('ALEX', 'TELEGRAM', 'WEB')),
+       source_order_id TEXT NOT NULL, source_fill_id TEXT,
+       symbol TEXT NOT NULL, side TEXT NOT NULL,
+@@ -157,7 +248,7 @@
+       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS trade_protection_orders (
+-      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), strategy_id TEXT NOT NULL,
+       origin TEXT NOT NULL, stage TEXT NOT NULL,
+       client_order_id TEXT NOT NULL UNIQUE, exchange_order_id TEXT UNIQUE,
+       symbol TEXT NOT NULL, side TEXT NOT NULL, type TEXT NOT NULL,
+@@ -167,7 +258,7 @@
+       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS trade_protection_events (
+-      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), strategy_id TEXT NOT NULL,
+       type TEXT NOT NULL, payload_json TEXT DEFAULT '{}' NOT NULL,
+       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+     )`),
+@@ -195,55 +286,30 @@
+       if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+     }
+   }
++  await ensureExchangeColumns(PROTECTION_EXCHANGE_TABLES);
++  await db.batch([
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_protection_strategies_exchange_symbol_status ON trade_protection_strategies(exchange, symbol, status)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_protection_orders_exchange_symbol_status ON trade_protection_orders(exchange, symbol, status)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_trade_protection_events_exchange_created ON trade_protection_events(exchange, created_at)"),
++  ]);
+   protectionInitialized = true;
+ }
+
+ export async function ensureLiveManualCloseSchema() {
+   if (liveManualCloseInitialized) return;
+   const db = await getD1();
+-  await db.prepare(`CREATE TABLE IF NOT EXISTS live_manual_closes (
++  await db.batch([
++    db.prepare(`CREATE TABLE IF NOT EXISTS live_manual_closes (
+       id TEXT PRIMARY KEY NOT NULL, symbol TEXT NOT NULL, position_side TEXT NOT NULL,
+       requested_percent INTEGER NOT NULL, quantity TEXT NOT NULL, client_order_id TEXT NOT NULL UNIQUE,
+-      idempotency_key TEXT UNIQUE, semantics_json TEXT,
+       exchange_order_id TEXT, status TEXT NOT NULL, recovered INTEGER DEFAULT 0 NOT NULL,
+       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+-    )`).run();
+-  for (const sql of [
+-    "ALTER TABLE live_manual_closes ADD COLUMN idempotency_key TEXT",
+-    "ALTER TABLE live_manual_closes ADD COLUMN semantics_json TEXT",
+-  ]) {
+-    try {
+-      await db.prepare(sql).run();
+-    } catch (error) {
+-      if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+-    }
+-  }
+-  await db.batch([
++    )`),
+     db.prepare("CREATE INDEX IF NOT EXISTS idx_live_manual_closes_symbol_created ON live_manual_closes(symbol, created_at)"),
+-    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_manual_closes_idempotency_created ON live_manual_closes(idempotency_key, created_at)"),
+   ]);
+   liveManualCloseInitialized = true;
+ }
+
+-export async function ensureLiveExitLedgerSchema() {
+-  if (liveExitLedgerInitialized) return;
+-  const db = await getD1();
+-  await db.prepare(`CREATE TABLE IF NOT EXISTS live_owned_exit_orders (
+-      id TEXT PRIMARY KEY NOT NULL, event_key TEXT NOT NULL UNIQUE, strategy_id TEXT NOT NULL,
+-      generation_identity TEXT NOT NULL, client_order_id TEXT NOT NULL UNIQUE,
+-      symbol TEXT NOT NULL, position_side TEXT NOT NULL, side TEXT NOT NULL, type TEXT NOT NULL,
+-      time_in_force TEXT, intended_quantity TEXT NOT NULL, intended_price TEXT, intended_stop_price TEXT,
+-      exchange_order_id TEXT UNIQUE, status TEXT NOT NULL, terminal_at TEXT,
+-      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+-    )`).run();
+-  await db.batch([
+-    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_owned_exit_orders_symbol_side_status ON live_owned_exit_orders(symbol, position_side, status, created_at)"),
+-    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_owned_exit_orders_strategy_generation ON live_owned_exit_orders(strategy_id, generation_identity, status)"),
+-    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_owned_exit_orders_terminal ON live_owned_exit_orders(terminal_at)"),
+-  ]);
+-  liveExitLedgerInitialized = true;
+-}
+-
+ async function ensureLiveStrategySchemaInner() {
+   const db = await getD1();
+   await db.batch([
+@@ -251,7 +317,7 @@
+       name TEXT PRIMARY KEY NOT NULL, value INTEGER DEFAULT 0 NOT NULL
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategies (
+-      id TEXT PRIMARY KEY NOT NULL, confirmation_nonce TEXT NOT NULL UNIQUE,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), confirmation_nonce TEXT NOT NULL UNIQUE,
+       origin TEXT NOT NULL CHECK (origin IN ('TELEGRAM', 'WEB')),
+       status TEXT NOT NULL CHECK (status IN ('DRAFT', 'WAITING', 'ACTIVE', 'RECONCILIATION_REQUIRED', 'CANCELED', 'EXPIRED', 'CLOSED')),
+       symbol TEXT NOT NULL, side TEXT NOT NULL, timeframe TEXT NOT NULL, expires_at TEXT NOT NULL,
+@@ -259,13 +325,13 @@
+       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_legs (
+-      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, website_order_id TEXT NOT NULL UNIQUE,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), strategy_id TEXT NOT NULL, website_order_id TEXT NOT NULL UNIQUE,
+       atr_offset REAL NOT NULL, margin_usdt REAL NOT NULL, status TEXT DEFAULT 'WAITING' NOT NULL,
+       revision INTEGER DEFAULT 1 NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+       updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_orders (
+-      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, leg_id TEXT NOT NULL, intent TEXT NOT NULL,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), strategy_id TEXT NOT NULL, leg_id TEXT NOT NULL, intent TEXT NOT NULL,
+       client_order_id TEXT NOT NULL UNIQUE, exchange_order_id TEXT UNIQUE, status TEXT NOT NULL,
+       symbol TEXT, side TEXT, type TEXT, time_in_force TEXT, price TEXT, quantity TEXT,
+       executed_quantity TEXT DEFAULT '0' NOT NULL, error TEXT,
+@@ -273,17 +339,17 @@
+       updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, UNIQUE(strategy_id, leg_id, intent)
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_events (
+-      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, type TEXT NOT NULL,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), strategy_id TEXT NOT NULL, type TEXT NOT NULL,
+       payload_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_entry_protection_links (
+-      id TEXT PRIMARY KEY NOT NULL, live_order_id TEXT NOT NULL, source_fill_id TEXT NOT NULL,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), live_order_id TEXT NOT NULL, source_fill_id TEXT NOT NULL,
+       quantity TEXT NOT NULL, protection_strategy_id TEXT, status TEXT NOT NULL, error TEXT,
+       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+       UNIQUE(live_order_id, source_fill_id)
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_generations (
+-      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, generation INTEGER NOT NULL,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), strategy_id TEXT NOT NULL, generation INTEGER NOT NULL,
+       anchor_candle_id TEXT, ma_value TEXT, atr_value TEXT, next_refresh_at TEXT,
+       refresh_reason TEXT NOT NULL, status TEXT DEFAULT 'ACTIVE' NOT NULL,
+       lease_token TEXT, lease_expires_at TEXT, last_error TEXT,
+@@ -291,7 +357,7 @@
+       UNIQUE(strategy_id, generation)
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_order_attempts (
+-      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, generation_id TEXT NOT NULL,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), strategy_id TEXT NOT NULL, generation_id TEXT NOT NULL,
+       generation INTEGER NOT NULL, leg_id TEXT NOT NULL, legacy_live_order_id TEXT UNIQUE,
+       intent TEXT NOT NULL, client_order_id TEXT NOT NULL UNIQUE, exchange_order_id TEXT UNIQUE,
+       side TEXT, type TEXT, time_in_force TEXT, price TEXT, original_quantity TEXT NOT NULL,
+@@ -300,13 +366,14 @@
+       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_execution_fills (
+-      id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, order_attempt_id TEXT NOT NULL,
+-      role TEXT NOT NULL CHECK (role IN ('ENTRY', 'EXIT')), binance_fill_id TEXT NOT NULL UNIQUE,
++      id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE' CHECK (exchange IN ('BINANCE', 'BYBIT')), strategy_id TEXT NOT NULL, order_attempt_id TEXT NOT NULL,
++      role TEXT NOT NULL CHECK (role IN ('ENTRY', 'EXIT')), binance_fill_id TEXT NOT NULL,
+       quantity TEXT NOT NULL, price TEXT NOT NULL, executed_at TEXT NOT NULL,
+-      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
++      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
++      UNIQUE(exchange, binance_fill_id)
+     )`),
+     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_lifecycle (
+-      strategy_id TEXT PRIMARY KEY NOT NULL,
++      strategy_id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL DEFAULT 'BINANCE',
+       entry_quantity TEXT DEFAULT '0' NOT NULL, entry_vwap TEXT,
+       exit_quantity TEXT DEFAULT '0' NOT NULL, exit_vwap TEXT,
+       first_entry_at TEXT, last_exit_at TEXT,
+@@ -345,6 +412,22 @@
+       if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+     }
+   }
++  await ensureExchangeColumns(LIVE_EXCHANGE_TABLES);
++  await ensureExecutionFillExchangeUniqueness();
++  // The fill-id migration replaces the table, so restore its exchange guards too.
++  await ensureExchangeColumns(LIVE_EXCHANGE_TABLES);
++  await db.batch([
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategies_exchange_symbol_status ON live_strategies(exchange, symbol, status)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_orders_exchange_symbol_status ON live_strategy_orders(exchange, symbol, status)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_events_exchange_created ON live_strategy_events(exchange, created_at)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_entry_protection_links_exchange_status ON live_entry_protection_links(exchange, status)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_generations_exchange_status ON live_strategy_generations(exchange, status, generation DESC)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_order_attempts_exchange_status ON live_strategy_order_attempts(exchange, status)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_execution_fills_strategy_role_time ON live_strategy_execution_fills(strategy_id, role, executed_at)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_execution_fills_attempt ON live_strategy_execution_fills(order_attempt_id, executed_at)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_execution_fills_exchange_role_time ON live_strategy_execution_fills(exchange, role, executed_at)"),
++    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_strategy_lifecycle_exchange_status ON live_strategy_lifecycle(exchange, status)"),
++  ]);
+   liveStrategyInitialized = true;
+ }

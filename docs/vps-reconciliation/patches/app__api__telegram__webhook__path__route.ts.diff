@@ -1,0 +1,39 @@
+--- a/app/api/telegram/webhook/[path]/route.ts
++++ b/app/api/telegram/webhook/[path]/route.ts
+@@ -1,7 +1,7 @@
+ import { parseTelegramUpdate } from "../../../../../lib/telegram/contracts.ts";
+ import { createTelegramClient } from "../../../../../lib/telegram/client.ts";
+ import { handleAuthorizedTelegramUpdate } from "../../../../../lib/telegram/handler.ts";
+-import { claimTelegramUpdate } from "../../../../../lib/telegram/store.ts";
++import { claimTelegramUpdate, releaseTelegramUpdate } from "../../../../../lib/telegram/store.ts";
+
+ function safeEqual(expected: string | undefined, actual: string | null) {
+   if (!expected || !actual) return false;
+@@ -21,10 +21,12 @@
+   const { path } = await context.params;
+   if (!safeEqual(process.env.TELEGRAM_WEBHOOK_PATH, path)
+     || !safeEqual(process.env.TELEGRAM_WEBHOOK_SECRET, request.headers.get("x-telegram-bot-api-secret-token"))) return denied();
++  let claimedUpdateId: number | null = null;
+   try {
+     const update = parseTelegramUpdate(await request.json());
+     if (!safeEqual(process.env.TELEGRAM_ALLOWED_USER_ID, update.userId)) return denied();
+     const claimed = await claimTelegramUpdate(update.updateId);
++    if (claimed) claimedUpdateId = update.updateId;
+     if (claimed && process.env.TELEGRAM_BOT_TOKEN) {
+       const reply = await handleAuthorizedTelegramUpdate(update);
+       const client = createTelegramClient(process.env.TELEGRAM_BOT_TOKEN);
+@@ -36,7 +38,12 @@
+       });
+     }
+     return Response.json({ ok: true, duplicate: !claimed }, { headers: { "cache-control": "no-store" } });
+-  } catch {
+-    return Response.json({ error: "Telegram update rejected" }, { status: 400, headers: { "cache-control": "no-store" } });
++  } catch (error) {
++    if (claimedUpdateId !== null) await releaseTelegramUpdate(claimedUpdateId).catch(() => undefined);
++    console.error("Telegram webhook processing failed", {
++      updateId: claimedUpdateId,
++      reason: error instanceof Error ? error.name : "unknown",
++    });
++    return Response.json({ error: "Telegram webhook unavailable" }, { status: 500, headers: { "cache-control": "no-store" } });
+   }
+ }

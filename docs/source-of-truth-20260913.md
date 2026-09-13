@@ -13,6 +13,7 @@
 - Reconciliation branch: `source-reconcile/20260913-vps`
 - VPS source root: `/opt/trade-workbench`（只读捕获）
 - Sensitive/runtime files: 未读取、未纳入 manifest
+- Handoff scope: 不做 29 个 `MERGE_REQUIRED` 语义合并；仅提供可审计 unified diff bundle。
 
 ## VPS-only 纳入结果
 
@@ -24,7 +25,13 @@
 | `bybit-gateway/order-policy.mjs` | `1068d3624154390512562389d8ab1946256ae4eceaf24f973b9bc6c53a5c3e1a` | clean |
 | `bybit-gateway/signing.mjs` | `6f3d9db75e4326548701124d7bfde1a555c23e884535791876487925dd2dd7e5` | clean |
 
-未纳入 VPS unit 文件；`/etc/systemd/system/bybit-gateway.service` 仍需后续单独治理。
+同时只读捕获 `/etc/systemd/system/bybit-gateway.service` 的安全 unit 内容，纳入 `deploy/bybit-gateway.service`；EnvironmentFile 仅保留路径，未读取值。
+
+## Handoff bundle
+
+- `docs/vps-reconciliation/INDEX.md`：29 个文件的路径、双方 SHA-256、`MERGE_REQUIRED` 分类和逐文件 patch 索引。
+- `docs/vps-reconciliation/VPS_MERGE_REQUIRED.patch`：完整 unified diff；未覆盖 GitHub 源码，供后续 GitHub 审计使用。
+- bundle secret scan：clean；不含 `.env`、数据库、日志、runtime state 或 credential。
 
 ## 61 个 production DIFF 分类
 
@@ -58,6 +65,7 @@
 ## 验证记录
 
 - Secret scan：3 个 VPS-only Bybit 文件 clean；未读取任何 secret value。
+- Handoff bundle/unit targeted secret scan：clean（37 个新增/交接文件）；仓库既有测试 fixture 中的示例 credential 字面量未作为生产 secret 处理。
 - `npm run build`：通过（exit 0；仅有既有 Vite/Vinext future-config 与动态 API 分类提示）。
 - Binance relevant tests：通过，31/31（`binance-gateway/test.mjs`、`order-policy.test.mjs`、`exit-lock.test.mjs`）。
 - Bybit relevant tests：未运行；baseline 与本地工作树均没有 `bybit-gateway/test.mjs`，按本任务“只抢救三份已确认源码”的范围未从 VPS 额外读取测试文件。
@@ -68,7 +76,6 @@
 ## 未解决项目
 
 1. 29 个 `MERGE_REQUIRED` 生产差异仍需逐文件语义合并。
-2. VPS 的 `bybit-gateway.service` unit 在 baseline 中没有对应 deploy unit；本轮按最小授权未纳入。
-3. 进程内 lock 不解决跨进程/跨实例竞态；Binance 最后 snapshot 到交易所接收之间仍存在 TOCTOU residual risk。
+2. 进程内 lock 不解决跨进程/跨实例竞态；Binance 最后 snapshot 到交易所接收之间仍存在 TOCTOU residual risk。
 
 在上述项目清零并完成验证前，不宣称 `SOURCE_OF_TRUTH_READY=YES`。

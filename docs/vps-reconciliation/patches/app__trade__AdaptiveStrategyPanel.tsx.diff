@@ -1,0 +1,43 @@
+--- a/app/trade/AdaptiveStrategyPanel.tsx
++++ b/app/trade/AdaptiveStrategyPanel.tsx
+@@ -2,14 +2,17 @@
+
+ import StrategyWizard, { type StrategyWizardPosition } from "./StrategyWizard";
+ import type { QuickLiveTemplateId } from "@/lib/trade/quick-live-template";
++import type { LiveExchange } from "@/lib/trade/live-exchange";
+
+ type Props = {
+   symbol: string;
+   position?: StrategyWizardPosition;
+-  positionSource?: "binance";
++  positionSource?: "binance" | "bybit";
++  exchange: LiveExchange;
+   interval: string;
+   accountConnected: boolean;
+   liveTradingAvailable: boolean;
++  liveSwitchOn: boolean;
+   currentLeverage: number | null;
+   currentPrice: number;
+   maLength: number;
+@@ -25,14 +28,16 @@
+   onAccountChanged: () => void;
+ };
+
+-export default function AdaptiveStrategyPanel({ symbol, position, interval, accountConnected, liveTradingAvailable, currentLeverage, currentPrice, maValue, totalEquityUsdt, strategySymbol, selectedQuickTemplate, selectedQuickTotalMarginUsdt, accountBalance, onAccountChanged }: Props) {
++export default function AdaptiveStrategyPanel({ symbol, position, exchange, interval, accountConnected, liveTradingAvailable, liveSwitchOn, currentLeverage, currentPrice, maValue, totalEquityUsdt, strategySymbol, selectedQuickTemplate, selectedQuickTotalMarginUsdt, accountBalance, onAccountChanged }: Props) {
+   return <StrategyWizard
+     symbol={strategySymbol ?? symbol}
+     position={position}
+-      accountConnected={accountConnected}
+-      currentLeverage={currentLeverage}
+-      currentPrice={currentPrice}
+-      chartTimeframe={interval}
++    exchange={exchange}
++    liveSwitchOn={liveSwitchOn}
++    accountConnected={accountConnected}
++    currentLeverage={currentLeverage}
++    currentPrice={currentPrice}
++    chartTimeframe={interval}
+     chartMa={maValue}
+     availableBalance={accountBalance}
+     totalEquityUsdt={totalEquityUsdt}

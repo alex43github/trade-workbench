@@ -1,0 +1,11 @@
+--- a/app/trade/TradeChart.tsx
++++ b/app/trade/TradeChart.tsx
+@@ -421,7 +421,7 @@
+       if (!Number.isFinite(overlay.price) || overlay.price <= 0) continue;
+       const color = overlay.kind === "position" ? "#45a9ff" : overlay.kind === "cost" ? "#111827" : overlay.kind === "limit" ? "#f0a84a" : overlay.kind === "tpsl" ? "#ef646b" : overlay.kind === "manual" ? "#ef646b" : "#b57cff";
+       const options = {
+-        price: overlay.price, color, lineWidth: overlay.kind === "manual" || overlay.kind === "cost" ? 2 : 1, lineStyle: overlay.kind === "manual" ? LineStyle.Solid : LineStyle.Dashed,
++        price: overlay.price, color, lineWidth: (overlay.kind === "manual" || overlay.kind === "cost" ? 2 : 1) as 1 | 2, lineStyle: overlay.kind === "manual" ? LineStyle.Solid : LineStyle.Dashed,
+         axisLabelVisible: true,
+       };
+       const existing = refs.priceLines.get(overlay.id);

@@ -1,0 +1,39 @@
+--- a/app/api/trade/live-strategies/[id]/cancel/route.ts
++++ b/app/api/trade/live-strategies/[id]/cancel/route.ts
+@@ -8,7 +8,6 @@
+   type LiveStrategy,
+   type LiveStrategyOrder,
+ } from "../../../../../../lib/trade/live-strategies.ts";
+-import { cleanupLiveStrategyOwnedExits } from "../../../../../../lib/trade/live-exit-reconciliation.ts";
+
+ type RuntimeEnv = Record<string, string | undefined>;
+ type BinanceCancelResult = { status?: string; executedQty?: string | number };
+@@ -24,7 +23,6 @@
+   recordOrder?: typeof recordLiveOrder;
+   markStrategyStatus?: typeof markLiveStrategyStatus;
+   cancelStrategy?: typeof cancelLiveStrategy;
+-  cleanupOwnedExits?: (input: { strategyId: string; strategyTerminal: boolean }) => Promise<{ ok: boolean; reason?: string }>;
+ };
+
+ function liveTradingEnabled(env: RuntimeEnv) {
+@@ -77,7 +75,6 @@
+   const markStrategyStatus = dependencies.markStrategyStatus ?? markLiveStrategyStatus;
+   const finishStrategy = dependencies.cancelStrategy
+     ?? (dependencies.markStrategyStatus ? null : cancelLiveStrategy);
+-  const cleanupOwnedExits = dependencies.cleanupOwnedExits ?? cleanupLiveStrategyOwnedExits;
+
+   return async function POST(request: Request) {
+     const denied = await requireOperatorMutation(request, env);
+@@ -130,12 +127,6 @@
+       }
+     }
+
+-    const cleanup = await cleanupOwnedExits({ strategyId: strategy.id, strategyTerminal: true });
+-    if (!cleanup.ok) {
+-      const updated = await markStrategyStatus(strategy.id, "RECONCILIATION_REQUIRED");
+-      return Response.json({ ok: false, strategy: updated, orders: updated.orders,
+-        error: `EXIT_ONLY 生命周期清理未确认：${cleanup.reason ?? "未知状态"}` } satisfies LiveStrategyCancelResult, { status: 409, headers: { "cache-control": "no-store" } });
+-    }
+     const updated = finishStrategy
+       ? await finishStrategy(strategy.id)
+       : await markStrategyStatus(strategy.id, "CANCELED");

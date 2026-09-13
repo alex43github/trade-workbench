@@ -1,0 +1,10 @@
+--- a/lib/structure-radar/state-machine.ts
++++ b/lib/structure-radar/state-machine.ts
+@@ -26,7 +26,6 @@
+   expiresAfterBars: number;
+   lastProcessedBarTime: number;
+   processedBars?: number;
+-  score?: number;
+   reason?: string;
+   consensusGrade?: string;
+   planHash?: string;

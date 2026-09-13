@@ -1,0 +1,98 @@
+--- a/app/trade/LiveStrategyStatusList.tsx
++++ b/app/trade/LiveStrategyStatusList.tsx
+@@ -5,6 +5,7 @@
+ import { displayBinanceSymbol } from "@/lib/trade/symbols";
+ import { activeEntryQuantity, orderFailureReason, shouldShowHistoricalAttempt, strategyRiskLabel } from "@/lib/trade/live-strategy-display";
+ import { formatTradeNumber } from "@/lib/trade/display-number";
++import type { LiveExchange } from "@/lib/trade/live-exchange";
+
+ type LiveOrderStatus = "RESERVED" | "SUBMITTED" | "UNKNOWN" | "FILLED" | "CANCELED" | "REJECTED";
+ type LiveStrategyStatus = "DRAFT" | "WAITING" | "ACTIVE" | "RECONCILIATION_REQUIRED" | "CANCELED" | "EXPIRED" | "CLOSED";
+@@ -28,6 +29,7 @@
+ type LiveStrategy = {
+   id: string;
+   status: LiveStrategyStatus;
++  exchange?: LiveExchange;
+   expiresAt: string;
+   config: { symbol: string; side: "LONG" | "SHORT"; timeframe: string; mode: "LIVE_ARMED"; totalMarginUsdt: number; execution: { entry: "LIMIT_POST_ONLY" } };
+   displayLeverage?: number | null;
+@@ -41,7 +43,7 @@
+     averageFillPrice: string | null; cancellationResult: string | null; error: string | null;
+   }>;
+ };
+-type Props = { onChanged?: () => void; refreshToken?: number };
++type Props = { exchange?: LiveExchange; onChanged?: () => void; refreshToken?: number };
+ type ToastKind = "success" | "warning";
+ type Toast = { id: string; message: string; kind: ToastKind };
+ type OrderSnapshot = { status: LiveOrderStatus; protectionStatus?: NonNullable<LiveOrder["protection"]>["status"]; symbol: string | null };
+@@ -65,13 +67,13 @@
+   CLOSED: "已结束",
+ };
+
+-export function orderSourceLabel(value: string | null | undefined) {
++export function orderSourceLabel(value: string | null | undefined, exchange: LiveExchange = "BINANCE") {
+   const clientOrderId = String(value ?? "").trim().toLowerCase();
+   if (clientOrderId.startsWith("tele")) return "tele";
+   if (clientOrderId.startsWith("web")) return "web";
+   if (clientOrderId.startsWith("ios") || clientOrderId.startsWith("iphone")) return "ios";
+   if (clientOrderId.startsWith("alex")) return "alex";
+-  return "Binance";
++  return exchange === "BYBIT" ? "Bybit" : "Binance";
+ }
+
+ function protectionIndicator(protection?: LiveOrder["protection"]) {
+@@ -165,7 +167,7 @@
+   return `/trade?symbol=${encodeURIComponent(symbol)}`;
+ }
+
+-export default function LiveStrategyStatusList({ onChanged, refreshToken = 0 }: Props) {
++export default function LiveStrategyStatusList({ exchange = "BINANCE", onChanged, refreshToken = 0 }: Props) {
+   const [strategies, setStrategies] = useState<LiveStrategy[]>([]);
+   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+   const [message, setMessage] = useState("");
+@@ -206,7 +208,7 @@
+   async function load(signal?: AbortSignal) {
+     setState("loading");
+     try {
+-      const response = await fetch("/api/trade/live-strategies?limit=20", { cache: "no-store", signal });
++      const response = await fetch(`/api/trade/live-strategies?limit=20&exchange=${encodeURIComponent(exchange)}`, { cache: "no-store", signal });
+       const payload = await response.json() as { error?: string; strategies?: LiveStrategy[] };
+       if (!response.ok) throw new Error(payload.error || "实盘策略读取失败");
+       const nextStrategies = (Array.isArray(payload.strategies) ? payload.strategies : []).filter((strategy) => !(strategy.status === "CANCELED" && strategy.orders.every((order) => nonNegative(order.executedQuantity) <= 0)));
+@@ -224,7 +226,7 @@
+     void load(controller.signal);
+     const interval = window.setInterval(() => void load(), 15_000);
+     return () => { controller.abort(); window.clearInterval(interval); };
+-  }, [refreshToken]);
++  }, [exchange, refreshToken]);
+
+   useEffect(() => {
+     const handler = (event: Event) => {
+@@ -269,7 +271,7 @@
+           <a className={styles.liveStrategySymbolLink} href={tradeHref(strategy.config.symbol)} aria-label={`查看 ${displayBinanceSymbol(strategy.config.symbol)} K线与挂单`} title={`查看 ${displayBinanceSymbol(strategy.config.symbol)} K线与挂单`}>
+             {displayBinanceSymbol(strategy.config.symbol)}
+           </a>
+-          <span className={styles.liveStrategyRiskBadge} title={strategy.displayLeverageSource === "CURRENT_ACCOUNT" ? "旧策略未保存下单时杠杆，显示当前 Binance 合约杠杆" : strategy.displayLeverageSource === "UNAVAILABLE" ? "杠杆暂时无法读取" : "下单时记录的杠杆快照"}>{strategyRiskLabel(strategy.config.totalMarginUsdt, strategy.displayLeverage)}</span>
++          <span className={styles.liveStrategyRiskBadge} title={strategy.displayLeverageSource === "CURRENT_ACCOUNT" ? `旧策略未保存下单时杠杆，显示当前 ${exchange} 合约杠杆` : strategy.displayLeverageSource === "UNAVAILABLE" ? "杠杆暂时无法读取" : "下单时记录的杠杆快照"}>{strategyRiskLabel(strategy.config.totalMarginUsdt, strategy.displayLeverage)}</span>
+         </div>
+         <span>{strategy.config.side === "LONG" ? "做多" : "做空"} · {strategy.config.timeframe} · {strategyStatusLabel[strategy.status]}</span>
+       </div>
+@@ -279,14 +281,14 @@
+       <div><strong>已成交 / 待补齐</strong><small> · 累计数量 {strategy.lifecycle?.entryQuantity ?? "0"} {strategy.lifecycle?.entryVwap ? `· 均价 ${strategy.lifecycle.entryVwap}` : ""} · 当前轮待补齐 {activeEntryQuantity(strategy.attempts ?? [], strategy.currentGeneration?.generation ?? null) || "—"}</small></div>
+       {lifecycleLabel(strategy) && <p className={strategy.status === "RECONCILIATION_REQUIRED" || strategy.lifecycle?.entryFreezeReason ? styles.liveStrategyWarning : undefined}>{lifecycleLabel(strategy)}</p>}
+       {strategy.status === "RECONCILIATION_REQUIRED" && <p className={styles.liveStrategyWarning}>有订单拒绝或超时未知；不会自动补单或撤单，先查看每笔订单的问号错误详情。</p>}
+-      <ol>{strategy.orders.map((order) => <li key={order.id} className={order.status === "FILLED" ? styles.liveOrderFilled : ""}><span>{orderSourceLabel(order.clientOrderId)} · {orderStatusLabel[order.status]}</span><small>{formatOrder(order)}</small>{orderFailureIndicator(orderFailureReason(order))}{protectionIndicator(order.protection)}</li>)}</ol>
+-      {visibleHistoricalAttempts(strategy).length > 0 && <details><summary>历史订单尝试（只读）</summary><ol>{visibleHistoricalAttempts(strategy).map((attempt) => <li key={attempt.id}><span>第 {attempt.generation} 轮 · {orderSourceLabel(attempt.clientOrderId)} · {attemptTransition(attempt, strategy.currentGeneration?.generation ?? null)}</span><small>{attempt.side ?? "—"} · 价格 {attempt.price ?? "待定"}</small>{orderFailureIndicator(orderFailureReason(attempt))}</li>)}</ol></details>}
++      <ol>{strategy.orders.map((order) => <li key={order.id} className={order.status === "FILLED" ? styles.liveOrderFilled : ""}><span>{orderSourceLabel(order.clientOrderId, exchange)} · {orderStatusLabel[order.status]}</span><small>{formatOrder(order)}</small>{orderFailureIndicator(orderFailureReason(order))}{protectionIndicator(order.protection)}</li>)}</ol>
++      {visibleHistoricalAttempts(strategy).length > 0 && <details><summary>历史订单尝试（只读）</summary><ol>{visibleHistoricalAttempts(strategy).map((attempt) => <li key={attempt.id}><span>第 {attempt.generation} 轮 · {orderSourceLabel(attempt.clientOrderId, exchange)} · {attemptTransition(attempt, strategy.currentGeneration?.generation ?? null)}</span><small>{attempt.side ?? "—"} · 价格 {attempt.price ?? "待定"}</small>{orderFailureIndicator(orderFailureReason(attempt))}</li>)}</ol></details>}
+       {(["WAITING", "ACTIVE", "RECONCILIATION_REQUIRED"] as LiveStrategyStatus[]).includes(strategy.status) && <button type="button" disabled={cancellingId === strategy.id} onClick={() => void cancel(strategy)}>{cancellingId === strategy.id ? "正在撤销…" : "撤销未成交实盘单"}</button>}
+     </article>;
+   }
+
+-  return <section aria-label="LIVE 实盘策略状态" className={styles.strategyStatusList}>
+-    <div className={styles.strategyStatusListHeader}><div><small>LIVE STRATEGIES</small><h2>实盘策略</h2></div><button type="button" onClick={() => void load()} disabled={state === "loading"}>刷新</button></div>
++  return <section aria-label={`${exchange} LIVE 实盘策略状态`} className={styles.strategyStatusList}>
++    <div className={styles.strategyStatusListHeader}><div><small>{exchange} · LIVE STRATEGIES</small><h2>实盘策略</h2></div><button type="button" onClick={() => void load()} disabled={state === "loading"}>刷新</button></div>
+     <p className={styles.liveStrategyNotice}>限价模板提交 LIMIT · GTX；市价均衡损仅在独立最终确认后提交一笔 MARKET 新仓。</p>
+     {state === "loading" && strategies.length === 0 && <p>正在读取实盘策略…</p>}
+     {state === "error" && <p className={styles.inlineError} role="alert">{message}</p>}

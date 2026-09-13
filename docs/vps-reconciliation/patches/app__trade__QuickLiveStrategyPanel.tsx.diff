@@ -1,0 +1,163 @@
+--- a/app/trade/QuickLiveStrategyPanel.tsx
++++ b/app/trade/QuickLiveStrategyPanel.tsx
+@@ -13,7 +13,7 @@
+   availableBalanceUsdt: number;
+   accountConnected: boolean;
+   liveTradingAvailable: boolean;
+-  onStrategyCreated: () => void;
++  onTemplateSelect: (templateId: QuickLiveTemplateId, symbol: string, totalMarginUsdt: number | null) => void;
+ };
+
+ type TemplateOption = {
+@@ -24,14 +24,14 @@
+ };
+
+ const TEMPLATE_OPTIONS: TemplateOption[] = [
+-  { id: "BALANCED_LONG_1H", label: "1h 均衡策略做多", entryMode: "LIMIT", description: "入场：价格回落到 MA30 + 1 ATR 附近分五笔限价买入；止损：收盘跌破 MA30 - 1 ATR，首次减半、第二次全出；止盈：复用均衡策略止盈规则。" },
+-  { id: "BALANCED_SHORT_1H", label: "1h 均衡策略做空", entryMode: "LIMIT", description: "入场：价格反弹到 MA30 - 1 ATR 附近分五笔限价卖出；止损：收盘突破 MA30 + 1 ATR，首次回补一半、第二次全部回补；止盈：复用均衡策略止盈规则。" },
+-  { id: "MARKET_BALANCED_LONG_1H", label: "市价多均衡损", entryMode: "MARKET", description: "市价新开仓：按整笔保证金立即开一笔多仓；只保护本次新仓，1h 收盘跌破 MA30 - 1 ATR 首次减仓50%，第二次再跌破平剩余；无止盈；仅双向持仓模式。" },
+-  { id: "MARKET_BALANCED_SHORT_1H", label: "市价空均衡损", entryMode: "MARKET", description: "市价新开仓：按整笔保证金立即开一笔空仓；只保护本次新仓，1h 收盘突破 MA30 + 1 ATR 首次回补50%，第二次再突破平剩余；无止盈；仅双向持仓模式。" },
+-  { id: "BULL_CHASE_1H", label: "1h 追牛策略", entryMode: "LIMIT", description: "入场：价格回落到 MA30 + 3.3 至 +2.7 ATR 之间分五笔限价买入；止损：收盘跌破 MA30 + 2.5 ATR 全平；止盈：触及 MA30 + 5 ATR 止盈50%，+7 ATR 平剩余。" },
+-  { id: "BEAR_CHASE_1H", label: "1h 追熊策略", entryMode: "LIMIT", description: "入场：价格反弹到 MA30 - 3.3 至 -2.7 ATR 之间分五笔限价卖出；止损：收盘突破 MA30 - 2.5 ATR 全平；止盈：触及 MA30 - 5 ATR 止盈50%，-7 ATR 平剩余。" },
+-  { id: "RANGE_LONG_1H", label: "1h 震荡策略看多", entryMode: "LIMIT", description: "入场：价格回落到 MA30 - 5 至 -4 ATR 之间分五笔限价买入；止损：跌破 MA30 - 5 ATR 全平；止盈：到达 MA30 + 4 ATR 全平。" },
+-  { id: "RANGE_SHORT_1H", label: "1h 震荡策略看空", entryMode: "LIMIT", description: "入场：价格反弹到 MA30 + 4 至 +5 ATR 之间分五笔限价卖出；止损：突破 MA30 + 5 ATR 全平；止盈：到达 MA30 - 4 ATR 全平。" },
++  { id: "BALANCED_LONG_1H", label: "1h 均衡策略做多", entryMode: "LIMIT", description: "入场：价格回落到 MA30 +1 ATR 至 -1 ATR 通道内五档等距限价买入；止损：每根新 1h 已收盘 K 线按最新 MA30、ATR14 刷新止损通道，首次减半、第二次全出；止盈：成交价 +9%/+10%/+11% 限价单完成后，剩余仓位随最新 MA30 跟踪。" },
++  { id: "BALANCED_SHORT_1H", label: "1h 均衡策略做空", entryMode: "LIMIT", description: "入场：价格反弹到 MA30 +1 ATR 至 -1 ATR 通道内五档等距限价卖出；止损：每根新 1h 已收盘 K 线按最新 MA30、ATR14 刷新止损通道，首次回补一半、第二次全部回补；止盈：成交价 -9%/-10%/-11% 限价单完成后，剩余仓位随最新 MA30 跟踪。" },
++  { id: "MARKET_BALANCED_LONG_1H", label: "市价多均衡损", entryMode: "MARKET", description: "市价新开仓：按整笔保证金立即开一笔多仓；只保护本次新仓，止损通道按每根新 1h 已收盘 K 线的最新 MA30、ATR14 刷新，首次减仓50%，第二次再跌破平剩余；无止盈；仅双向持仓模式。" },
++  { id: "MARKET_BALANCED_SHORT_1H", label: "市价空均衡损", entryMode: "MARKET", description: "市价新开仓：按整笔保证金立即开一笔空仓；只保护本次新仓，止损通道按每根新 1h 已收盘 K 线的最新 MA30、ATR14 刷新，首次回补50%，第二次再突破平剩余；无止盈；仅双向持仓模式。" },
++  { id: "BULL_CHASE_1H", label: "1h 追牛策略", entryMode: "LIMIT", description: "入场：价格回落到 MA30 +3.3 至 +2.7 ATR 通道内五档等距限价买入；止损/止盈：每根新 1h 已收盘 K 线按最新 MA30、ATR14 刷新 +2.5、+5、+7 ATR 通道，触发后分别止损或分批止盈。" },
++  { id: "BEAR_CHASE_1H", label: "1h 追熊策略", entryMode: "LIMIT", description: "入场：价格反弹到 MA30 -3.3 至 -2.7 ATR 通道内五档等距限价卖出；止损/止盈：每根新 1h 已收盘 K 线按最新 MA30、ATR14 刷新 -2.5、-5、-7 ATR 通道，触发后分别止损或分批止盈。" },
++  { id: "RANGE_LONG_1H", label: "1h 震荡策略看多", entryMode: "LIMIT", description: "入场：价格回落到 MA30 -5 至 -4 ATR 通道内五档等距限价买入；止损/止盈：每根新 1h 已收盘 K 线按最新 MA30、ATR14 刷新 -5 与 +4 ATR 通道，触发后止损或止盈。" },
++  { id: "RANGE_SHORT_1H", label: "1h 震荡策略看空", entryMode: "LIMIT", description: "入场：价格反弹到 MA30 +4 至 +5 ATR 通道内五档等距限价卖出；止损/止盈：每根新 1h 已收盘 K 线按最新 MA30、ATR14 刷新 +5 与 -4 ATR 通道，触发后止损或止盈。" },
+ ];
+
+ function compactSymbol(value: string) {
+@@ -46,12 +46,9 @@
+
+ export default function QuickLiveStrategyPanel({
+   symbol,
+-  chartMa,
+-  chartAtr,
+-  totalEquityUsdt,
+   accountConnected,
+   liveTradingAvailable,
+-  onStrategyCreated,
++  onTemplateSelect,
+ }: QuickLiveStrategyPanelProps) {
+   const inputARef = useRef<HTMLInputElement | null>(null);
+   const marginInputRef = useRef<HTMLInputElement | null>(null);
+@@ -60,9 +57,6 @@
+   const [totalMarginDraft, setTotalMarginDraft] = useState("");
+   const [marginError, setMarginError] = useState("");
+   const [selectedTemplate, setSelectedTemplate] = useState<QuickLiveTemplateId | null>(null);
+-  const [reviewOpen, setReviewOpen] = useState(false);
+-  const [submissionState, setSubmissionState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+-  const [submissionMessage, setSubmissionMessage] = useState("");
+
+   useEffect(() => {
+     setSymbolDraft(symbol);
+@@ -70,9 +64,6 @@
+     setTotalMarginDraft("");
+     setMarginError("");
+     setSelectedTemplate(null);
+-    setReviewOpen(false);
+-    setSubmissionState("idle");
+-    setSubmissionMessage("");
+   }, [symbol]);
+
+   useEffect(() => {
+@@ -128,12 +119,9 @@
+       return;
+     }
+     setSelectedTemplate(templateId);
+-    setReviewOpen(false);
+-    setSubmissionState("idle");
+-    setSubmissionMessage("");
+   }
+
+-  function openReview() {
++  function useTemplate() {
+     if (!selectedTemplate) return;
+     const nextSymbol = commitSymbol(symbolDraft);
+     if (!nextSymbol) return;
+@@ -143,48 +131,13 @@
+       marginInputRef.current?.focus();
+       return;
+     }
+-    setSymbolDraft(nextSymbol);
+-    setReviewOpen(true);
+-    setSubmissionState("idle");
+-    setSubmissionMessage("");
++    onTemplateSelect(selectedTemplate, nextSymbol, totalMarginUsdt);
+   }
+
+-  async function submitStrategy() {
+-    if (!selectedTemplate || !normalizedSymbol || !reviewOpen || submissionState === "saving") return;
+-    const totalMarginUsdt = parseTotalMargin(totalMarginDraft);
+-    if (totalMarginDraft.trim() && totalMarginUsdt === null) {
+-      setMarginError("本次总保证金必须大于0");
+-      return;
+-    }
+-    setSubmissionState("saving");
+-    setSubmissionMessage("");
+-    const confirmation = selectedMarketTemplate ? "CREATE_QUICK_MARKET_STRATEGY" : "CREATE_LIVE_STRATEGY";
+-    try {
+-      const response = await fetch("/api/trade/live-strategies", {
+-        method: "POST",
+-        headers: { "content-type": "application/json" },
+-        body: JSON.stringify({
+-          draft: { symbol: normalizedSymbol, quickTemplateId: selectedTemplate, ...(totalMarginUsdt === null ? {} : { totalMarginUsdt }) },
+-          confirmation,
+-          confirmationNonce: crypto.randomUUID(),
+-          liveSwitchOn: true,
+-        }),
+-      });
+-      const payload = await response.json().catch(() => ({})) as { error?: string; strategy?: { id?: string; status?: string } };
+-      if (!response.ok || !payload.strategy?.id) throw new Error(payload.error || "策略提交失败，请重试");
+-      setSubmissionState("saved");
+-      setSubmissionMessage(`策略编号 ${payload.strategy.id} 已提交${selectedMarketTemplate ? "市价新仓并建立保护" : "五笔限价单并建立保护"}。`);
+-      onStrategyCreated();
+-    } catch (error) {
+-      setSubmissionState("error");
+-      setSubmissionMessage(error instanceof Error ? error.message : "策略提交失败，请重试");
+-    }
+-  }
+-
+   return <section id="quick-live-strategy" className={styles.quickLivePanel} aria-label="快捷策略单">
+     <header className={styles.quickLiveHeader}>
+       <div><small>QUICK LIVE STRATEGIES</small><h3>快捷策略单</h3></div>
+-      <span>仅预填 · 仍需最终确认</span>
++      <span>两次确认后下单</span>
+     </header>
+     <label className={styles.quickLiveSymbolField}>
+       <span>输入框 A · 币种</span>
+@@ -218,7 +171,7 @@
+       />
+       {marginError && <small className={styles.inlineError} role="alert">{marginError}</small>}
+     </label>
+-    <p className={styles.quickLiveHint}>固定使用已收盘 1h MA30、ATR14；留空按账户总权益5%计算，填写后作为本次整笔保证金，服务端确认时再校验。{selectedMarketTemplate ? "当前为一笔市价新开仓，只保护本次新仓，不会改动既有仓位；必须双向持仓模式，且无止盈。" : "限价模板会将本次保证金固定分为五笔。"}</p>
++    <p className={styles.quickLiveHint}>固定使用已收盘 1h MA30、ATR14；留空按账户总权益5%计算，填写后作为本次整笔保证金，服务端确认时再校验。{selectedMarketTemplate ? "当前为一笔市价新开仓，只保护本次新仓，不会改动既有仓位；止损通道随每根新 1h 已收盘 K 线的最新 MA30、ATR14 刷新；必须双向持仓模式，且无止盈。" : "限价模板会将本次保证金固定分为五笔，入场与通道止损/止盈随每根新 1h 已收盘 K 线的最新 MA30、ATR14 刷新。"}</p>
+     <div className={styles.quickLiveTemplates}>
+       {TEMPLATE_OPTIONS.map((option) => {
+         const selected = selectedTemplate === option.id;
+@@ -229,17 +182,9 @@
+       })}
+     </div>
+     <div className={styles.quickLiveActions}>
+-      <span>{selectedOption ? `已选择：${selectedOption.label}` : "先选择一个模板查看预览"}</span>
+-      <button type="button" className={styles.quickLivePrimary} disabled={!selectedTemplate || !normalizedSymbol || !liveTradingAvailable || !accountConnected} onClick={openReview}>下单并建立保护</button>
++      <span>{selectedOption ? `已选择：${selectedOption.label}` : "先选择一个策略查看下单条件"}</span>
++      <button type="button" className={styles.quickLivePrimary} disabled={!selectedTemplate || !normalizedSymbol || !liveTradingAvailable || !accountConnected} onClick={useTemplate}>确认下单</button>
+     </div>
+-    {reviewOpen && selectedOption && normalizedSymbol && <section className={styles.quickLiveReview} aria-label="快捷策略最终确认">
+-      <strong>确认本次实盘策略</strong>
+-      <p>{normalizedSymbol} · {selectedOption.label} · 1h 已收盘 MA30 {chartMa.toFixed(6)} / ATR14 {chartAtr.toFixed(6)}</p>
+-      <p>{totalMarginDraft.trim() ? `本次总保证金 ${totalMarginDraft} USDT` : `留空按总权益 5%（当前约 ${(totalEquityUsdt * 0.05).toFixed(2)} USDT）`}；{selectedMarketTemplate ? "一笔 MARKET 新仓，成交后只保护本次新仓。" : "五笔 LIMIT · GTX，按当前 1h 指标建立并保护。"}</p>
+-      <p>{selectedOption.description}</p>
+-      <div className={styles.quickLiveReviewActions}><button type="button" onClick={() => setReviewOpen(false)} disabled={submissionState === "saving"}>返回修改</button><button type="button" className={styles.quickLivePrimary} disabled={!liveTradingAvailable || !accountConnected || submissionState === "saving"} onClick={() => void submitStrategy()}>{submissionState === "saving" ? "正在提交实盘订单…" : "确认提交实盘订单"}</button></div>
+-      {submissionMessage && <p className={submissionState === "error" ? styles.inlineError : styles.quickLiveResult} role={submissionState === "error" ? "alert" : "status"}>{submissionMessage}</p>}
+-    </section>}
+-    <small className={styles.quickLiveSafety}>点击模板不会创建订单；侧栏会在最终确认后直接复用既有实盘策略和保护链路。{selectedMarketTemplate ? "市价模板只提交一笔市价新仓并只保护本次实际成交量。" : "限价模板提交五笔 GTX 限价单。"}不会跳转到中间下单区。</small>
++    <small className={styles.quickLiveSafety}>点击“确认下单”只展示本次订单条件，不会创建订单；你仍须在条件页再次确认。{selectedMarketTemplate ? "市价策略最终只提交一笔新仓，并仅保护本次实际成交量。" : "限价策略最终提交五笔限价单，入场与通道止损/止盈随每根新 1h 已收盘 K 线按最新 MA30、ATR14 刷新。"}</small>
+   </section>;
+ }

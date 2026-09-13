@@ -1,0 +1,70 @@
+--- a/lib/watchlist.ts
++++ b/lib/watchlist.ts
+@@ -2,6 +2,8 @@
+
+ export type WatchlistSource = "PINNED" | "POSITION" | "MANUAL" | "ATR_STRONG_1H";
+ export type WatchlistItem = { symbol: string; displayName: string; quoteAsset: BinanceFuturesQuoteAsset };
++export type WatchlistSection = { id: "PINNED" | "POSITION" | "MANUAL" | "MACHINE"; title: string; items: WatchlistItem[] };
++export type WatchlistPositionExchange = "BINANCE" | "BYBIT";
+ type WatchlistRow = { symbol: string; display_name: string; quote_asset: BinanceFuturesQuoteAsset };
+ const pinnedSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT", "ENAUSDT"];
+
+@@ -43,6 +45,30 @@
+   return (result.results ?? []).map((row) => ({ symbol: row.symbol, displayName: row.display_name, quoteAsset: row.quote_asset }));
+ }
+
++export async function listWatchlistSections(db: D1Database): Promise<WatchlistSection[]> {
++  const rows = await db.prepare(`SELECT symbol, source FROM watchlist_entry_sources`).all<{ symbol: string; source: WatchlistSource }>();
++  const sourcesBySymbol = new Map<string, Set<WatchlistSource>>();
++  for (const row of rows.results ?? []) {
++    const sources = sourcesBySymbol.get(row.symbol) ?? new Set<WatchlistSource>();
++    sources.add(row.source);
++    sourcesBySymbol.set(row.symbol, sources);
++  }
++  const sections: WatchlistSection[] = [
++    { id: "PINNED", title: "主流", items: [] },
++    { id: "POSITION", title: "持仓", items: [] },
++    { id: "MANUAL", title: "手动自选", items: [] },
++    { id: "MACHINE", title: "机器自选", items: [] },
++  ];
++  for (const item of await listWatchlist(db)) {
++    const sources = sourcesBySymbol.get(item.symbol) ?? new Set<WatchlistSource>();
++    const section = sources.has("PINNED") ? sections[0]
++      : sources.has("POSITION") ? sections[1]
++        : sources.has("MANUAL") ? sections[2] : sections[3];
++    section.items.push(item);
++  }
++  return sections.filter((section) => section.items.length > 0);
++}
++
+ export async function syncWatchlistSource(db: D1Database, source: Exclude<WatchlistSource, "PINNED">, values: unknown) {
+   const items = normalizeWatchlistItems(values);
+   await db.batch(items.map((item) => db.prepare(`INSERT INTO watchlist_entries (symbol, display_name, quote_asset, source, removed_at) VALUES (?, ?, ?, 'MANUAL', NULL)
+@@ -94,5 +120,26 @@
+ }
+
+ export async function syncPositionWatchlist(db: D1Database, positions: Array<{ symbol: string; quantity: number }>) {
+-  return syncWatchlistSource(db, "POSITION", positions.filter((position) => Number.isFinite(position.quantity) && position.quantity > 0));
++  return syncExchangePositionWatchlist(db, "BINANCE", positions);
+ }
++
++export async function syncExchangePositionWatchlist(
++  db: D1Database,
++  exchange: WatchlistPositionExchange,
++  positions: Array<{ symbol: string; quantity: number }>,
++) {
++  const items = normalizeWatchlistItems(positions
++    .filter((position) => Number.isFinite(position.quantity) && position.quantity > 0)
++    .map((position) => ({ symbol: position.symbol })));
++  await db.batch(items.map((item) => db.prepare(`INSERT INTO watchlist_entries (symbol, display_name, quote_asset, source, removed_at) VALUES (?, ?, ?, 'MANUAL', NULL)
++    ON CONFLICT(symbol) DO UPDATE SET display_name = excluded.display_name, quote_asset = excluded.quote_asset, removed_at = NULL`).bind(item.symbol, item.displayName, item.quoteAsset)));
++  await db.prepare(`DELETE FROM watchlist_position_sources WHERE exchange = ? AND symbol NOT IN (${items.map(() => "?").join(",") || "''"})`)
++    .bind(exchange, ...items.map((item) => item.symbol)).run();
++  await db.batch(items.map((item) => db.prepare("INSERT OR IGNORE INTO watchlist_position_sources (symbol, exchange) VALUES (?, ?)").bind(item.symbol, exchange)));
++  const combined = await db.prepare(`SELECT e.symbol, e.display_name, e.quote_asset
++    FROM watchlist_entries e JOIN watchlist_position_sources p ON p.symbol = e.symbol
++    GROUP BY e.symbol, e.display_name, e.quote_asset ORDER BY MIN(p.added_at), e.symbol`).all<WatchlistRow>();
++  return syncWatchlistSource(db, "POSITION", (combined.results ?? []).map((item) => ({
++    symbol: item.symbol, displayName: item.display_name, quoteAsset: item.quote_asset,
++  })));
++}

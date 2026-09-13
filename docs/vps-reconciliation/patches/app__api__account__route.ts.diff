@@ -1,0 +1,80 @@
+--- a/app/api/account/route.ts
++++ b/app/api/account/route.ts
+@@ -6,7 +6,10 @@
+ import { getD1 } from "@/db";
+ import { ensureWatchlistSchema } from "@/db/ensure";
+ import { sumRealizedPnlBySymbol } from "@/lib/trade/realized-pnl";
+-import { syncPositionWatchlist } from "@/lib/watchlist";
++import { syncExchangePositionWatchlist, syncPositionWatchlist } from "@/lib/watchlist";
++import { getBybitGatewayConfig } from "@/lib/trade/bybit-live-adapter";
++import { normalizeLiveExchange, type LiveExchange } from "@/lib/trade/live-exchange";
++import { resolveLiveExchangeAdapter } from "@/lib/trade/live-exchange-adapter";
+
+ const CONDITIONAL_TYPES = new Set([
+   "STOP", "STOP_MARKET", "TAKE_PROFIT", "TAKE_PROFIT_MARKET", "TRAILING_STOP_MARKET",
+@@ -135,6 +138,7 @@
+
+ function disconnected(reason = "尚未配置币安只读 API") {
+   return {
++    exchange: "BINANCE" as const,
+     connected: false,
+     reason,
+     updatedAt: new Date().toISOString(),
+@@ -147,9 +151,58 @@
+   };
+ }
+
++async function bybitAccountSnapshot() {
++  const gateway = getBybitGatewayConfig();
++  if (!gateway.configured) return { ...disconnected("固定 IP Bybit 网关未配置；已安全断开，未直连交易所"), exchange: "BYBIT" as const };
++  const adapter = resolveLiveExchangeAdapter("BYBIT");
++  const [account, sourcePositions, sourceOrders, executions] = await Promise.all([
++    adapter.account(), adapter.allPositions(), adapter.allOpenOrders(), adapter.executionHistory?.() ?? Promise.resolve([]),
++  ]);
++  const positions = sourcePositions.filter((position) => Math.abs(Number(position.positionAmt ?? position.size)) > 0).map((position) => {
++    const quantity = Math.abs(Number(position.positionAmt ?? position.size));
++    const markPrice = Number(position.markPrice ?? 0);
++    return {
++      symbol: position.symbol, side: Number(position.positionAmt) >= 0 ? "LONG" as const : "SHORT" as const, quantity,
++      entryPrice: Number(position.entryPrice ?? 0), breakEvenPrice: Number(position.entryPrice ?? 0), markPrice,
++      unrealizedPnl: Number(position.unrealizedPnl ?? 0), liquidationPrice: 0, leverage: Number(position.leverage ?? 0),
++      marginType: "—", positionSide: position.positionSide,
++      occupiedMargin: Number(position.positionIM) > 0 ? Number(position.positionIM) : null,
++      notional: markPrice > 0 ? quantity * markPrice : null,
++    };
++  });
++  try {
++    await ensureWatchlistSchema();
++    await syncExchangePositionWatchlist(await getD1(), "BYBIT", positions);
++  } catch {
++    // 自选同步不能影响 Bybit 只读账户数据；下次查询会重试。
++  }
++  const normalizedOrders = sourceOrders.map((order) => ({
++    orderId: order.orderId, websiteOrderId: order.clientOrderId || `bybit-${order.orderId}`, symbol: order.symbol, side: order.side,
++    type: order.type, status: order.status, price: Number(order.price ?? 0), stopPrice: 0, quantity: Number(order.quantity),
++    executedQuantity: Number(order.executedQty ?? order.executedQuantity ?? 0), reduceOnly: Boolean(order.reduceOnly),
++    positionSide: order.positionSide ?? "BOTH", time: 0, updateTime: 0,
++  }));
++  const realizedPnlBySymbol = sumRealizedPnlBySymbol(executions);
++  return {
++    exchange: "BYBIT" as const, connected: true, reason: null, updatedAt: new Date().toISOString(),
++    account: { totalBalance: Number(account.totalWalletBalance ?? account.availableBalance), availableBalance: Number(account.availableBalance), unrealizedPnl: positions.reduce((sum, item) => sum + item.unrealizedPnl, 0), currency: "USDT" },
++    currentLeverage: positions[0]?.leverage || null,
++    positions: positions.map((position) => ({ ...position, realizedPnl: realizedPnlBySymbol.get(position.symbol) ?? 0 })),
++    limitOrders: normalizedOrders.filter((order) => order.type === "LIMIT"),
++    conditionalOrders: normalizedOrders.filter((order) => order.type !== "LIMIT" || order.reduceOnly), fills: [],
++  };
++}
++
+ export async function GET(request: Request) {
+   const denied = await requireOperator(request);
+   if (denied) return denied;
++  let requestedExchange: LiveExchange;
++  try { requestedExchange = normalizeLiveExchange(new URL(request.url).searchParams.get("exchange") ?? undefined); }
++  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "交易所参数不正确" }, { status: 400, headers: { "cache-control": "no-store" } }); }
++  if (requestedExchange === "BYBIT") {
++    try { return NextResponse.json(await bybitAccountSnapshot(), { headers: { "cache-control": "no-store" } }); }
++    catch { return NextResponse.json({ ...disconnected("Bybit 只读查询暂时不可用"), exchange: "BYBIT" as const }, { headers: { "cache-control": "no-store" } }); }
++  }
+   const gateway = getGatewayConfig();
+   if (!gateway.configured) return NextResponse.json(disconnected("固定 IP Binance 网关未配置；已安全断开，未直连交易所"), { headers: { "cache-control": "no-store" } });
