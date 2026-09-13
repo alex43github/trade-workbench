@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import TradingTerminal from "./TradingTerminal";
+import TradeWorkspace from "./TradeWorkspace";
 import { normalizeBinanceFuturesSymbol } from "@/lib/trade/symbols";
 
 export const metadata: Metadata = {
@@ -18,5 +18,5 @@ function normalizeInterval(value: string | undefined) {
 
 export default async function TradePage({ searchParams }: { searchParams: Promise<{ symbol?: string; interval?: string }> }) {
   const params = await searchParams;
-  return <TradingTerminal initialSymbol={normalizeSymbol(params.symbol)} initialInterval={normalizeInterval(params.interval)} />;
+  return <TradeWorkspace initialSymbol={normalizeSymbol(params.symbol)} initialInterval={normalizeInterval(params.interval)} />;
 }
