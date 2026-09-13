@@ -1,12 +1,13 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { TrackedSignal } from "../../lib/structure-radar/state-machine.ts";
+import type { FocusPoolRecord } from "../../lib/structure-radar/focus-pool.ts";
 
 type SignalRecord = TrackedSignal & Record<string, unknown>;
 type ConsultationRecord = Record<string, unknown> & { signalId: string; createdAt?: string };
 type SqueezeRecord = Record<string, unknown> & { id: string; symbol: string; stage: string };
 type TrendRecord = Record<string, unknown> & { id: string; symbol: string; timeframe: string; stage: string };
-type Stored = { signals: SignalRecord[]; consultations: ConsultationRecord[]; squeezes: SqueezeRecord[]; trends: TrendRecord[] };
+type Stored = { signals: SignalRecord[]; consultations: ConsultationRecord[]; squeezes: SqueezeRecord[]; trends: TrendRecord[]; focus: FocusPoolRecord[] };
 
 function signals(value: unknown): SignalRecord[] {
   return Array.isArray(value) ? value.filter((item): item is SignalRecord =>
@@ -32,6 +33,12 @@ function trends(value: unknown): TrendRecord[] {
     "stage" in item && typeof item.stage === "string") : [];
 }
 
+function focus(value: unknown): FocusPoolRecord[] {
+  return Array.isArray(value) ? value.filter((item): item is FocusPoolRecord =>
+    Boolean(item) && typeof item === "object" && "symbol" in item && typeof item.symbol === "string" &&
+    "sources" in item && Array.isArray(item.sources) && "lastDecision" in item && typeof item.lastDecision === "string") : [];
+}
+
 export class RadarRepository {
   readonly #directory: string;
   readonly #path: string;
@@ -47,9 +54,17 @@ export class RadarRepository {
       const value: unknown = JSON.parse(await readFile(this.#path, "utf8"));
       if (!value || typeof value !== "object") throw new Error("radar repository root is invalid");
       const root = value as Record<string, unknown>;
-      return { signals: signals(root.signals), consultations: consultations(root.consultations), squeezes: squeezes(root.squeezes), trends: trends(root.trends) };
+      return {
+        signals: signals(root.signals),
+        consultations: consultations(root.consultations),
+        squeezes: squeezes(root.squeezes),
+        trends: trends(root.trends),
+        focus: focus(root.focus),
+      };
     } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { signals: [], consultations: [], squeezes: [], trends: [] };
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+        return { signals: [], consultations: [], squeezes: [], trends: [], focus: [] };
+      }
       throw error;
     }
   }
@@ -110,6 +125,29 @@ export class RadarRepository {
       const record: TrendRecord = { ...trend };
       if (index >= 0) stored.trends[index] = record;
       else stored.trends.push(record);
+    });
+  }
+
+  async getFocus(symbol: string) {
+    const normalized = symbol.toUpperCase();
+    return (await this.#read()).focus.find((item) => item.symbol === normalized) ?? null;
+  }
+
+  async listFocus() { return (await this.#read()).focus; }
+
+  async saveFocus(record: FocusPoolRecord) {
+    await this.#update((stored) => {
+      const index = stored.focus.findIndex((item) => item.symbol === record.symbol);
+      const value = structuredClone(record);
+      if (index >= 0) stored.focus[index] = value;
+      else stored.focus.push(value);
+    });
+  }
+
+  async deleteFocus(symbol: string) {
+    const normalized = symbol.toUpperCase();
+    await this.#update((stored) => {
+      stored.focus = stored.focus.filter((item) => item.symbol !== normalized);
     });
   }
 }
