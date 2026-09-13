@@ -97,8 +97,8 @@ export function mergeFocusPoolRecord(previous: FocusPoolRecord, input: FocusPool
       : input.classifications,
     CLASSIFICATION_ORDER,
   );
-  const incomingDirectional = input.bias !== "UNKNOWN" && input.bias !== "NEUTRAL";
-  const bias = incomingDirectional ? input.bias : retainsDiscoveryContext ? previous.bias : input.bias;
+  const incomingBiasIsAuthoritative = input.bias === "LONG" || input.bias === "SHORT" || (meaningful && input.bias === "NEUTRAL");
+  const bias = incomingBiasIsAuthoritative ? input.bias : retainsDiscoveryContext ? previous.bias : input.bias;
   const firstDetectedAt = meaningful ? previous.firstDetectedAt ?? now : previous.firstDetectedAt;
   const lastQualifiedAt = meaningful ? now : previous.lastQualifiedAt;
 
