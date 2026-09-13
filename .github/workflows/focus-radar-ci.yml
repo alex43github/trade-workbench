@@ -153,7 +153,12 @@ jobs:
             echo 'Unsafe runtime/secret-bearing file class detected in candidate diff.' >&2
             exit 1
           fi
-          if git diff origin/source-baseline/20260913-current...HEAD -- . ':!package-lock.json' | grep -E 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}|-----BEGIN PRIVATE KEY-----'; then
+
+          private_prefix='BEGIN (RSA |EC |OPENSSH )?PRIVATE'
+          private_pattern="${private_prefix} KEY"
+          aws_prefix='AK'
+          aws_pattern="${aws_prefix}IA[0-9A-Z]{16}"
+          if git diff origin/source-baseline/20260913-current...HEAD -- . ':!package-lock.json' | grep -qE "${private_pattern}|${aws_pattern}"; then
             echo 'Potential embedded secret detected in candidate diff.' >&2
             exit 1
           fi
