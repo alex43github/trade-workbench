@@ -1,4 +1,4 @@
-import { simpleMovingAverageSeries, type Ma30SlopeSnapshot } from "./ma30-slope";
+import { simpleMovingAverageSeries, type Ma30SlopeSnapshot } from "./ma30-slope.ts";
 
 export type Ma30Rankable = Ma30SlopeSnapshot & {
   symbol: string;
