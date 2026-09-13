@@ -9,7 +9,7 @@ type SchedulerRouteDependencies = {
 };
 
 function unavailableResult(): ProtectionSchedulerResult {
-  return { scanned: 0, executed: 0, closed: 0, reconciliationRequired: 0, failed: 0, realOrderRouteEnabled: false };
+  return { scanned: 0, reanchored: 0, entryFrozen: 0, executed: 0, closed: 0, reconciliationRequired: 0, failed: 0, realOrderRouteEnabled: false };
 }
 
 export function createProtectionSchedulerPost(dependencies: SchedulerRouteDependencies = {}) {

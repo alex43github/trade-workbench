@@ -7,6 +7,9 @@ export type PaperClosedCandle = {
   id: string;
   isNewClosedCandle: true;
   close?: number;
+  /** Real OHLC range from the closed exchange candle; required for touch exits. */
+  high?: number;
+  low?: number;
   timeframe?: StrategyTimeframe;
   maKind?: MovingAverageKind;
   maLength?: number;

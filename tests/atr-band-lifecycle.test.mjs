@@ -67,6 +67,9 @@ test("long lifecycle enters STRONG after three closed candles beyond the upper A
   assert.equal(lifecycle?.status, "STRONG");
   assert.equal(lifecycle?.entryTime, bars.at(-1).closeTime);
   assert.equal(lifecycle?.entryPrice, 130);
+  assert.equal(lifecycle?.entryOpenPrice, 130);
+  assert.equal(lifecycle?.outsideBandBars, 3);
+  assert.equal(lifecycle?.lifecycleBars, 1);
   assert.equal(lifecycle?.currentPrice, 130);
   assert.equal(lifecycle?.entryOi, 100);
   assert.equal(lifecycle?.currentOi, 100);
@@ -89,6 +92,8 @@ test("long STRONG lifecycle becomes WARNING while price remains above MA30", asy
   assert.equal(warning?.status, "WARNING");
   assert.equal(warning?.warningTime, warningBars.at(-1).closeTime);
   assert.equal(warning?.endTime, null);
+  assert.equal(warning?.outsideBandBars, 4);
+  assert.equal(warning?.lifecycleBars, 3);
   assert.equal(warning?.currentPrice, 110);
   assert.equal(warning?.extremePrice, 151);
   assert.equal(warning?.peakOi, 140);
@@ -118,6 +123,10 @@ test("long WARNING lifecycle becomes HISTORY only after a close below MA30", asy
   assert.equal(history?.currentOi, 90);
   assert.equal(history?.peakOi, 120);
   assert.equal(history?.oiChangePct, -10);
+  assert.equal(history?.outsideBandBars, 3);
+  assert.equal(history?.lifecycleBars, 3);
+  assert.equal(history?.endOpenPrice, 100);
+  assert.equal(history?.lifecycleReturnPct, -23.08);
 });
 
 test("short lifecycle mirrors the three-candle entry rule below the lower ATR band", async () => {
@@ -156,4 +165,18 @@ test("flat ATR data keeps lifecycle distance metrics finite", async () => {
   assert.equal(lifecycle?.status, "STRONG");
   assert.equal(lifecycle?.maxAtrMultiple, 0);
   assert.ok(Number.isFinite(lifecycle?.maxSignedAtrDistance));
+});
+
+test("legacy completed lifecycle can show a directional return fallback from its stored prices", async () => {
+  const { calculateLifecycleDirectionalReturn } = await import("../lib/radar/atr-band-lifecycle.ts");
+  assert.equal(calculateLifecycleDirectionalReturn("LONG", 100, 85), -15);
+  assert.equal(calculateLifecycleDirectionalReturn("SHORT", 100, 85), 15);
+});
+
+test("legacy lifecycle infers outside-band bars from hourly entry and warning timestamps", async () => {
+  const { inferLegacyOutsideBandBars } = await import("../lib/radar/atr-band-lifecycle.ts");
+  const hour = 3_600_000;
+  assert.equal(inferLegacyOutsideBandBars({ status: "STRONG", entryTime: 10 * hour, lastUpdatedTime: 12 * hour, warningTime: null }), 5);
+  assert.equal(inferLegacyOutsideBandBars({ status: "WARNING", entryTime: 10 * hour, lastUpdatedTime: 12 * hour, warningTime: 13 * hour }), 5);
+  assert.equal(inferLegacyOutsideBandBars({ status: "HISTORY", entryTime: 10 * hour, lastUpdatedTime: 14 * hour, warningTime: 11 * hour }), 3);
 });

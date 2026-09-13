@@ -29,14 +29,12 @@ function update(id, kind, callbackData, text, userId = "901") {
 test("Telegram home is live-only and removes every paper entry", async () => {
   const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
   const reply = await handleAuthorizedTelegramUpdate(update(1, "MESSAGE", undefined, "/start"), memoryConversationDependencies());
-  const labels = reply.replyMarkup.inline_keyboard.flat().map((button) => button.text).join(" ");
-  assert.match(labels, /建立实盘策略/);
+  const labels = reply.replyMarkup.keyboard.flat().map((button) => button.text).join(" ");
+  assert.match(labels, /默认下单/);
   assert.match(labels, /实盘持仓/);
   assert.match(labels, /实盘挂单/);
-  assert.match(labels, /实盘策略管理/);
-  assert.match(labels, /挂止盈止损策略单/);
+  assert.match(labels, /策略管理/);
   assert.doesNotMatch(`${reply.text}\n${labels}`, /PAPER|模拟|纸面/);
-  assert.ok(reply.replyMarkup.inline_keyboard.flat().every((button) => !/paper/i.test(button.callback_data)));
 });
 
 test("manual protection flow uses server-side candidate mapping and submits a default ROI strategy", async () => {
@@ -46,7 +44,7 @@ test("manual protection flow uses server-side candidate mapping and submits a de
     getAlexManualPositions: async () => ({
       connected: true,
       reason: null,
-      positions: [{ candidateId: "candidate-opaque-1", symbol: "BTCUSDT", side: "LONG", quantity: 2, entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["manual-btc-1"] }],
+      positions: [{ candidateId: "candidate-opaque-1", symbol: "BTCUSDT", side: "LONG", quantity: 2, entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["ios_coin_a", "ios_coin_b"], totalQuantity: 3, totalNotional: 300, otherQuantity: 1, otherNotional: 100, manualNotional: 200, manualMargin: 20 }],
     }),
     createProtectionStrategy: async (input) => {
       submission = input;
@@ -55,6 +53,8 @@ test("manual protection flow uses server-side candidate mapping and submits a de
   });
   let reply = await handleAuthorizedTelegramUpdate(update(2, "CALLBACK", "tg:act:home_protection_01"), dependencies);
   assert.match(reply.text, /BTCUSDT/);
+  assert.match(reply.text, /手动数量 2/);
+  assert.match(reply.text, /其他来源 1/);
   const assetButton = reply.replyMarkup.inline_keyboard.flat().find((button) => button.text.includes("BTCUSDT"));
   assert.ok(assetButton);
   assert.doesNotMatch(assetButton.callback_data, /BTCUSDT|alex0001|100/);
@@ -72,7 +72,7 @@ test("manual protection flow uses server-side candidate mapping and submits a de
   reply = await handleAuthorizedTelegramUpdate(update(6, "CALLBACK", confirmButton.callback_data), dependencies);
   assert.equal(submission.origin, "ALEX");
   assert.equal(submission.strategyType, "DEFAULT_TP");
-  assert.deepEqual(submission.source.sourceOrderIds, ["manual-btc-1"]);
+  assert.deepEqual(submission.source.sourceOrderIds, ["ios_coin_a", "ios_coin_b"]);
   assert.match(reply.text, /alex-ps-1/);
   assert.match(reply.text, /alexTP00000001/);
   assert.doesNotMatch(reply.text, /PAPER|模拟|纸面/);

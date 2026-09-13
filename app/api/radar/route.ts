@@ -3,7 +3,6 @@ import { fetchAsterOi } from "@/lib/radar/aster-public";
 import { calculateTop10Concentration } from "@/lib/radar/chip-concentration";
 import { fetchOnchainTop10 } from "@/lib/radar/onchain-holders";
 import { binancePublicJson } from "@/lib/binance-public";
-import { loadTvScreenerResearch, unavailableTvScreenerResearch, type TvScreenerResearch } from "./tvscreener/route";
 
 type PlainObject = Record<string, unknown>;
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
@@ -526,72 +525,8 @@ async function buildLiveMarketFallback(): Promise<RadarCoin[]> {
   return bases.map(analyze).sort((a, b) => b.score - a.score);
 }
 
-const TVSCREENER_FIRST_RESPONSE_WAIT_MS = 1_500;
-
-let radarTvScreenerCache: { key: string; value: TvScreenerResearch; cachedAt: number } | null = null;
-let radarTvScreenerRefresh: Promise<TvScreenerResearch | null> | null = null;
-
-function startRadarTvScreenerRefresh(symbols: string[]): Promise<TvScreenerResearch | null> | null {
-  const uniqueSymbols = [...new Set(symbols)].sort();
-  const key = uniqueSymbols.join(",");
-  const cacheIsFresh = radarTvScreenerCache?.key === key && Date.now() - radarTvScreenerCache.cachedAt <= 30_000;
-  if (!key || cacheIsFresh) return null;
-  if (radarTvScreenerRefresh) return radarTvScreenerRefresh;
-  let refresh: Promise<TvScreenerResearch | null>;
-  refresh = loadTvScreenerResearch(uniqueSymbols)
-    .then((value) => {
-      if (value.coverage !== "unavailable" || !radarTvScreenerCache) {
-        radarTvScreenerCache = { key, value, cachedAt: Date.now() };
-      }
-      return value;
-    })
-    .catch(() => null)
-    .finally(() => {
-      if (radarTvScreenerRefresh === refresh) radarTvScreenerRefresh = null;
-    });
-  radarTvScreenerRefresh = refresh;
-  return refresh;
-}
-
-async function waitForRadarTvScreenerRefresh(refresh: Promise<TvScreenerResearch | null>, timeoutMs: number) {
-  return new Promise<TvScreenerResearch | null>((resolve) => {
-    let settled = false;
-    const finish = (value: TvScreenerResearch | null) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(value);
-    };
-    const timer = setTimeout(() => finish(null), timeoutMs);
-    refresh.then(finish, () => finish(null));
-  });
-}
-
-function radarTvScreenerValue(symbols: string[]): TvScreenerResearch {
-  startRadarTvScreenerRefresh(symbols);
-  const key = [...new Set(symbols)].sort().join(",");
-  if (!radarTvScreenerCache || radarTvScreenerCache.key !== key) return unavailableTvScreenerResearch();
-  const age = Date.now() - radarTvScreenerCache.cachedAt;
-  const canMarkStale = radarTvScreenerCache.value.coverage === "live" || radarTvScreenerCache.value.coverage === "partial";
-  if (age > 30_000 && canMarkStale) {
-    return { ...radarTvScreenerCache.value, coverage: "stale" };
-  }
-  return radarTvScreenerCache.value;
-}
-
-async function withTvScreener<T extends { coins: RadarCoin[] }>(payload: T, waitForRefresh = false) {
-  const symbols = payload.coins.map((coin) => coin.symbol);
-  const key = [...new Set(symbols)].sort().join(",");
-  const refresh = startRadarTvScreenerRefresh(symbols);
-  if (waitForRefresh && refresh && (!radarTvScreenerCache || radarTvScreenerCache.key !== key)) {
-    await waitForRadarTvScreenerRefresh(refresh, TVSCREENER_FIRST_RESPONSE_WAIT_MS);
-  }
-  return { ...payload, tvScreener: radarTvScreenerValue(symbols) };
-}
-
-export async function GET(request?: Request) {
+export async function GET() {
   const baseUrl = process.env.SQUARE_MONITOR_BASE_URL?.replace(/\/$/, "");
-  const waitForTvRefresh = request ? new URL(request.url).searchParams.get("wait_for_tv") === "1" : false;
 
   if (baseUrl) {
     try {
@@ -607,12 +542,12 @@ export async function GET(request?: Request) {
         const hotCoins = [...coins].sort((a, b) => (b.mentionCount + b.heatChange) - (a.mentionCount + a.heatChange)).slice(0, 10);
         const resilientCoins = coins.filter((item) => item.shortCallRatio >= 65 && (item.change4h >= 0 || (item.relativeBtc4h ?? 0) > 0)).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
         const shortCrowding = coins.filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")).sort((a, b) => (b.shortCrowding?.score ?? 0) - (a.shortCrowding?.score ?? 0));
-        return Response.json(await withTvScreener({
+        return Response.json({
           mode: "live",
           updatedAt: new Date().toISOString(),
           sourceStatus: `币安广场监控已连接 · ${coins.length} 个有效币种 · 缺失字段不参与评分`,
           coins, hotCoins, resilientCoins, shortCrowding,
-        }, waitForTvRefresh), { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
+        }, { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
       }
     } catch {
       // Continue with Binance public market data. The response labels missing sources explicitly.
@@ -622,18 +557,18 @@ export async function GET(request?: Request) {
   try {
     const coins = await buildLiveMarketFallback();
     if (coins.length) {
-      return Response.json(await withTvScreener({
+      return Response.json({
         mode: "hybrid",
         updatedAt: new Date().toISOString(),
         sourceStatus: `Binance Futures实时行情 · ${coins.length} 个高波动合约 · Aster OI与链上Top10按可用快照显示`,
         coins,
-      }, waitForTvRefresh), { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
+      }, { headers: { "cache-control": "public, max-age=20, s-maxage=45" } });
     }
   } catch {
     // A fully labeled demo keeps the product usable when the public endpoint is regionally unavailable.
   }
 
-  return Response.json(await withTvScreener({
+  return Response.json({
     mode: "demo",
     updatedAt: new Date().toISOString(),
     sourceStatus: baseUrl ? "外部采集暂不可用 · 已切换演示样本" : "尚未连接广场采集服务 · 当前为演示样本",
@@ -641,5 +576,5 @@ export async function GET(request?: Request) {
     hotCoins: demoCoins.map(analyze).sort((a, b) => b.mentionCount - a.mentionCount).slice(0, 10),
     resilientCoins: demoCoins.map(analyze).filter((item) => item.shortCallRatio >= 65),
     shortCrowding: demoCoins.map(analyze).filter((item) => ["CANDIDATE", "HIGH_CONFIDENCE", "SQUEEZE_TRIGGER"].includes(item.shortCrowding?.level ?? "")),
-  }, waitForTvRefresh), { headers: { "cache-control": "no-store" } });
+  }, { headers: { "cache-control": "no-store" } });
 }

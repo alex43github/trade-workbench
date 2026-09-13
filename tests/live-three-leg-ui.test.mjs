@@ -16,7 +16,8 @@ test("实盘向导必须在最终确认时建立可配置数量的限价 Post On
   assert.match(wizardSource, /CREATE_LIVE_STRATEGY/);
   assert.match(wizardSource, /confirmationNonce/);
   assert.match(wizardSource, /liveSwitchOn:\s*true/);
-  assert.match(wizardSource, /输入 CONFIRM/);
+  assert.match(wizardSource, /确认建立实盘策略/);
+  assert.doesNotMatch(wizardSource, /liveConfirmation|输入 CONFIRM|实盘确认/);
   assert.match(wizardSource, /legCount/);
   assert.match(wizardSource, /min="1" max="10"/);
   assert.doesNotMatch(wizardSource, /三笔/);
@@ -32,6 +33,11 @@ test("实盘策略列表展示逐腿状态并使用专用撤单确认", () => {
   assert.match(liveStatusSource, /strategy.orders/);
   assert.match(liveStatusSource, /实盘策略/);
   assert.doesNotMatch(liveStatusSource, /三笔/);
+});
+
+test("实盘策略列表说明同时覆盖限价 GTX 与市价新仓", () => {
+  assert.match(liveStatusSource, /限价模板[\s\S]*LIMIT[\s\S]*GTX/);
+  assert.match(liveStatusSource, /市价均衡损[\s\S]*独立最终确认[\s\S]*一笔[\s\S]*MARKET[\s\S]*新仓/);
 });
 
 test("实盘策略卡片突出币名并链接到对应 K 线与挂单页面", () => {

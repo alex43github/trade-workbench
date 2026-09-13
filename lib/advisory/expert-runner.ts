@@ -41,7 +41,7 @@ export function extractResponseText(result: unknown): string | null {
 
 export async function runExpertRound(input: ExpertRunnerInput, runtime: { provider?: ModelProviderId; env?: ProviderEnv; fetcher?: typeof fetch; target?: CompatibleTarget; targets?: readonly CompatibleTarget[] } = {}): Promise<DecisionContract> {
   const request = {
-    system: `你是${input.expert.name}体系的独立研究专家。\n${EXPERT_GUIDES[input.expert.id]}\n只输出条件式研究建议，不承诺收益，不发送真实订单。严格依据输入中的已收盘日线、4H、1H数据。R1不得推测其他专家意见；R2只评价匿名论点；账户决定与市场判断分开。sourceRefs 只能引用上述指南已提供的真实来源，不得编造引用。`,
+    system: `你是${input.expert.name}体系的独立研究专家。\n${EXPERT_GUIDES[input.expert.id]}\n只输出条件式研究建议，不承诺收益，不发送真实订单。严格依据输入中的已收盘日线、4H、1H数据。R1不得推测其他专家意见；R2只评价匿名论点；账户决定与市场判断分开。若 accountContext.position.horizontalStopLine 存在，必须把它当作用户明确给出的人工止损约束，在 supportingEvidence、invalidation 或 managementPlan 中说明其价格和“收盘跌破/涨破”触发方向；它不是行情信号，不能擅自执行或改成自动下单。sourceRefs 只能引用上述指南已提供的真实来源，不得编造引用。`,
     user: JSON.stringify(input), name: "expert_decision", schema,
   };
   const result = runtime.targets?.length

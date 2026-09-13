@@ -63,7 +63,7 @@ function candidateId(symbol: string, side: ProtectionSide, sourceOrderIds: strin
 
 function sourceFillId(symbol: string, side: ProtectionSide, sourceOrderIds: string[]) {
   const digest = crypto.createHash("sha256").update(`${symbol}|${side}|${sourceOrderIds.join("|")}`).digest("hex");
-  return `manual-${symbol}-${side.toLowerCase()}-${digest.slice(0, 20)}`;
+  return `manual-${side.toLowerCase()}-${digest.slice(0, 20)}`;
 }
 
 function amount(value: number) {

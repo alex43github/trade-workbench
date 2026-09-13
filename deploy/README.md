@@ -67,45 +67,7 @@ curl --fail https://workbench.example.com/
 
 The first `ss` command must show `127.0.0.1:3000` and `127.0.0.1:8788`, never `0.0.0.0` or the VPS public IP. Caddy must be the sole public HTTP/S listener.
 
-## Optional TradingView Screener sidecar
-
-The `tvscreener` sidecar is an optional, read-only research supplement. It listens
-only on `127.0.0.1:8791`; it is not a public service and must not be added to
-Caddy or the firewall. Binance Futures remains the source of truth for execution,
-closed-candle state, positions, open orders, MA/ATR values, and all trading
-decisions. If the sidecar is stopped or unavailable, the site continues to work
-and the UI labels the supplement as unavailable; an old successful response is
-shown as stale after its freshness window.
-
-Install its isolated Python environment outside the release files, using the
-exact versions in `services/tvscreener/requirements.txt`:
-
-```bash
-sudo install -d -o trade-workbench -g trade-workbench -m 0750 /var/lib/trade-workbench/tvscreener-venv
-sudo python3 -m venv /var/lib/trade-workbench/tvscreener-venv
-sudo /var/lib/trade-workbench/tvscreener-venv/bin/python -m pip install --requirement /opt/trade-workbench/services/tvscreener/requirements.txt
-sudo install -m 0644 /opt/trade-workbench/deploy/tvscreener.service /etc/systemd/system/tvscreener.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now tvscreener.service
-sudo systemctl status tvscreener.service --no-pager
-```
-
-Check the loopback boundary and health without exposing the service:
-
-```bash
-sudo ss -ltnp '( sport = :8791 )'
-curl --fail --silent http://127.0.0.1:8791/healthz
-curl --fail --silent -X POST http://127.0.0.1:8791/v1/screen \
-  -H 'content-type: application/json' \
-  --data '{"assetType":"crypto","symbols":["BINANCE:BTCUSDT"],"intervals":["60"],"fields":["PRICE"],"sortBy":"VOLUME","limit":1}'
-```
-
-The first command must show `127.0.0.1:8791`, never `0.0.0.0` or the VPS public
-address. The Node application reads `TVSCREENER_BASE_URL` server-side; browsers
-never receive the sidecar address. The sidecar does not read the main
-`workbench.env`, Binance credentials, Telegram tokens, or Bark keys. To disable
-the supplement, stop and disable `tvscreener.service`; no order, strategy,
-position, open-order, or live-mode path depends on it.
+TradingView Screener 已从生产运行时移除。雷达、筛选、MA/ATR、持仓和交易状态全部使用 Binance 数据；交易页保留 TradingView 风格图表组件，但不再调用 TradingView Screener。
 
 ## Retired PAPER strategy scheduler
 

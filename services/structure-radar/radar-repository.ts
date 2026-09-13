@@ -4,7 +4,9 @@ import type { TrackedSignal } from "../../lib/structure-radar/state-machine.ts";
 
 type SignalRecord = TrackedSignal & Record<string, unknown>;
 type ConsultationRecord = Record<string, unknown> & { signalId: string; createdAt?: string };
-type Stored = { signals: SignalRecord[]; consultations: ConsultationRecord[] };
+type SqueezeRecord = Record<string, unknown> & { id: string; symbol: string; stage: string };
+type TrendRecord = Record<string, unknown> & { id: string; symbol: string; timeframe: string; stage: string };
+type Stored = { signals: SignalRecord[]; consultations: ConsultationRecord[]; squeezes: SqueezeRecord[]; trends: TrendRecord[] };
 
 function signals(value: unknown): SignalRecord[] {
   return Array.isArray(value) ? value.filter((item): item is SignalRecord =>
@@ -15,6 +17,19 @@ function signals(value: unknown): SignalRecord[] {
 function consultations(value: unknown): ConsultationRecord[] {
   return Array.isArray(value) ? value.filter((item): item is ConsultationRecord =>
     Boolean(item) && typeof item === "object" && "signalId" in item && typeof item.signalId === "string") : [];
+}
+
+function squeezes(value: unknown): SqueezeRecord[] {
+  return Array.isArray(value) ? value.filter((item): item is SqueezeRecord =>
+    Boolean(item) && typeof item === "object" && "id" in item && typeof item.id === "string" &&
+    "symbol" in item && typeof item.symbol === "string" && "stage" in item && typeof item.stage === "string") : [];
+}
+
+function trends(value: unknown): TrendRecord[] {
+  return Array.isArray(value) ? value.filter((item): item is TrendRecord =>
+    Boolean(item) && typeof item === "object" && "id" in item && typeof item.id === "string" &&
+    "symbol" in item && typeof item.symbol === "string" && "timeframe" in item && typeof item.timeframe === "string" &&
+    "stage" in item && typeof item.stage === "string") : [];
 }
 
 export class RadarRepository {
@@ -32,9 +47,9 @@ export class RadarRepository {
       const value: unknown = JSON.parse(await readFile(this.#path, "utf8"));
       if (!value || typeof value !== "object") throw new Error("radar repository root is invalid");
       const root = value as Record<string, unknown>;
-      return { signals: signals(root.signals), consultations: consultations(root.consultations) };
+      return { signals: signals(root.signals), consultations: consultations(root.consultations), squeezes: squeezes(root.squeezes), trends: trends(root.trends) };
     } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { signals: [], consultations: [] };
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { signals: [], consultations: [], squeezes: [], trends: [] };
       throw error;
     }
   }
@@ -73,6 +88,28 @@ export class RadarRepository {
   async saveConsultation(consultation: ConsultationRecord) {
     await this.#update((stored) => {
       stored.consultations.push({ ...consultation, createdAt: consultation.createdAt ?? new Date().toISOString() });
+    });
+  }
+
+  async getSqueeze(id: string) { return (await this.#read()).squeezes.find((item) => item.id === id) ?? null; }
+  async listSqueezes() { return (await this.#read()).squeezes; }
+  async saveSqueeze(squeeze: { id: string; symbol: string; stage: string }) {
+    await this.#update((stored) => {
+      const index = stored.squeezes.findIndex((item) => item.id === squeeze.id);
+      const record: SqueezeRecord = { ...squeeze };
+      if (index >= 0) stored.squeezes[index] = record;
+      else stored.squeezes.push(record);
+    });
+  }
+
+  async getTrend(id: string) { return (await this.#read()).trends.find((item) => item.id === id) ?? null; }
+  async listTrends() { return (await this.#read()).trends; }
+  async saveTrend(trend: { id: string; symbol: string; timeframe: string; stage: string }) {
+    await this.#update((stored) => {
+      const index = stored.trends.findIndex((item) => item.id === trend.id);
+      const record: TrendRecord = { ...trend };
+      if (index >= 0) stored.trends[index] = record;
+      else stored.trends.push(record);
     });
   }
 }

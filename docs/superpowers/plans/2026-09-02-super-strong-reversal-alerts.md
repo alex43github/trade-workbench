@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-02-super-strong-reversal-alerts-design.md`
 
+**Status (2026-09-02):** 已实施并部署至 VPS；相关测试 55/55 通过，生产构建及 `/radar`、`/api/radar/reversal` 健康检查通过。
+
 ## Global Constraints
 
 - 仅使用 Binance Futures 的已收盘 K 线；禁止在任何路径创建、取消或修改实盘订单。

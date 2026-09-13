@@ -24,7 +24,7 @@ export function ConsultationChart({ symbol, snapshot, opinions, consensus }: {
         {(["1d", "4h", "1h"] as const).map((item) => <button key={item} type="button" aria-pressed={timeframe === item} className={timeframe === item ? styles.activeTimeframe : ""} onClick={() => setTimeframe(item)}>{item.toUpperCase()}</button>)}
       </div>
     </div>
-    <div className={styles.consultChart}><TradeChart bars={model.bars} fills={[]} symbol={symbol} theme={resolvedTheme} overlays={model.overlays} indicatorBasis="ma" atrLength={14} atrUpperMultiplier={1} atrLowerMultiplier={1} indicators={{
+    <div className={styles.consultChart}><TradeChart bars={model.bars} fills={[]} symbol={symbol} interval={timeframe} theme={resolvedTheme} overlays={model.overlays} indicatorBasis="ma" atrLength={14} atrUpperMultiplier={1} atrLowerMultiplier={1} indicators={{
       ma: { enabled: true, length: 30, color: "#2563eb", lineWidth: 3 },
       ema: { enabled: false, length: 20, color: "#45a9ff", lineWidth: 2 },
       atr: { upperColor: "#111827", lowerColor: "#111827", upperLineWidth: 1, lowerLineWidth: 1 },

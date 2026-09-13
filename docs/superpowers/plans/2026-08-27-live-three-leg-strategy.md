@@ -4,7 +4,7 @@
 
 > **实施状态（2026-08-28）：** 已完成并部署。该计划的“三笔”是最初需求；当前实现已按后续确认放宽为用户可选的 1–10 笔，仍采用同一预检查、幂等与对账边界。
 
-**Goal:** Let one explicitly confirmed web strategy submit three Binance USDⓈ-M LIMIT Post Only entry orders together, with complete per-leg tracking and reconciliation on any partial or unknown result.
+**Goal:** Let one explicitly confirmed web strategy submit 1–10 Binance USDⓈ-M LIMIT Post Only entry orders together, with complete per-leg tracking and reconciliation on any partial or unknown result.
 
 **Architecture:** Keep PAPER strategies and their scheduler unchanged. Add a protected LIVE strategy route that validates the three legs and current exchange/account constraints before reserving stable order IDs, then submits the three orders concurrently through the existing loopback gateway. Extend the existing strategy wizard to choose LIVE only when the server route and account are available, and render the persisted three-leg results separately from PAPER status.
 
@@ -16,7 +16,8 @@
 
 - Only an authenticated operator may create a LIVE strategy from the web; AI, radar, PAPER scheduler and background jobs remain unable to send real orders.
 - Before the first real request, the server must re-read current public candle/MA/ATR data, exchange filters and available account balance, and reject the complete batch if any leg is invalid.
-- The batch always contains exactly three LIMIT Post Only (`GTX`) entry orders; no market fallback and no automatic price change.
+- The batch contains 1–10 LIMIT Post Only (`GTX`) entry orders; no market fallback and no automatic price change.
+- User-entered total and per-leg amounts are isolated margin. The planner reads the symbol's current Binance leverage and converts margin to order notional without changing leverage or margin mode.
 - Each order uses a unique client order ID and a stable website order ID; a timeout may query once by client ID but must never blindly retry.
 - Any rejected or unknown leg moves the strategy to `RECONCILIATION_REQUIRED` and stops the batch; accepted legs remain visible for manual reconciliation.
 - Local tests use fake gateway dependencies only; no implementation, test, build, deployment or service restart may send a real Binance order.

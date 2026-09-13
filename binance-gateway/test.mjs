@@ -7,6 +7,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const { signedRequestParts } = await import("./signing.mjs");
+const { validateOrderPayload } = await import("./order-policy.mjs");
+
 const PORT = 8799;
 const TOKEN = "test-token-1234567890";
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -102,6 +105,10 @@ test("允许的订单取消路径在只读模式同样保持关闭", async () =>
   assert.equal(res.status, 403);
 });
 
+test("DELETE 撤单接受查询串中的订单标识", () => {
+  assert.equal(validateOrderPayload("DELETE", "/fapi/v1/order", null, "symbol=BTCUSDT&orderId=1&origClientOrderId=webIN1"), null);
+});
+
 test("公开行情经网关转发", async () => {
   const res = await fetch(`${BASE}/api/binance/fapi/v1/time`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
@@ -114,6 +121,23 @@ test("公开行情经网关转发", async () => {
     assert.equal(res.status, 502);
     assert.equal(body.ok, false);
   }
+});
+
+test("POST 下单签名必须覆盖请求体参数", () => {
+  const result = signedRequestParts({
+    method: "POST",
+    query: "",
+    body: "symbol=BTCUSDT&side=BUY&type=LIMIT&timeInForce=GTX&price=100.0&quantity=0.01&newClientOrderId=webIN1",
+    timestamp: 1700000000000,
+    secret: "test-secret",
+  });
+  const unsigned = "symbol=BTCUSDT&side=BUY&type=LIMIT&timeInForce=GTX&price=100.0&quantity=0.01&newClientOrderId=webIN1&timestamp=1700000000000&recvWindow=5000";
+  assert.equal(result.signaturePayload, unsigned);
+  assert.equal(result.query, "");
+  assert.match(result.body, /timestamp=1700000000000/);
+  assert.match(result.body, /signature=[a-f0-9]{64}/);
+  assert.match(result.body, /^symbol=BTCUSDT&side=BUY&type=LIMIT&timeInForce=GTX&price=100\.0&quantity=0\.01&newClientOrderId=webIN1&timestamp=1700000000000&recvWindow=5000&signature=/);
+  assert.equal(new URLSearchParams(result.body).get("signature"), "72a8ce5c571217f0d2bb59afa7dbc8bedd660b91d45e77b791b31ce199ccf3dd");
 });
 
 test("公开合约列表经网关转发", async () => {

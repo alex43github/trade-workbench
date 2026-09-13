@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **实施状态（2026-08-28）：** 已完成并部署。下方未勾选项保留为最初的实施记录；实际交付以已存在的测试、`tvscreener.service` 和本次 Git 基线为准。
+> **实施状态（2026-08-28）：** 已按用户要求退役并从生产代码、VPS 服务和部署模板移除。下方内容保留为历史实施记录，不代表当前运行时仍启用。
 
 **Goal:** Add an isolated, read-only TradingView Screener adapter that supplements radar and AI research without changing Binance execution, scoring, risk, or order state.
 

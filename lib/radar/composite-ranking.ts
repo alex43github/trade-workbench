@@ -118,7 +118,9 @@ export function buildCompositeSnapshot(input: CompositeInput): CompositeSnapshot
     usableSources += 1;
     for (const candidate of input.ma30Oi.candidates ?? []) {
       const symbol = normalizedSymbol(candidate.symbol);
-      if (symbol) addEvidence(records, symbol, "LONG", "ma30Oi", "MA30×OI 增仓", 20, input.ma30Oi.scannedAt);
+      if (!symbol) continue;
+      const direction = candidate.direction === "SHORT" ? "SHORT" : "LONG";
+      addEvidence(records, symbol, direction, "ma30Oi", "MA30×OI 增仓", 20, input.ma30Oi.scannedAt);
     }
   } else if (input.ma30Oi?.status === "ready") {
     warnings.push("MA30×OI快照已过期，已跳过该来源");
@@ -126,6 +128,9 @@ export function buildCompositeSnapshot(input: CompositeInput): CompositeSnapshot
 
   sourceWarning(warnings, "破底翻", input.reversal ? { status: Object.values(input.reversal.scans).some((scan) => scan?.status === "ready") ? "ready" : "degraded" } : null);
   for (const scan of Object.values(input.reversal?.scans ?? {})) {
+    // The daily composite is deliberately anchored to the daily structural signal;
+    // intraday candidates remain visible in the dedicated research panel only.
+    if (scan?.interval !== "1d") continue;
     if (!scan || !sourceIsCurrent(scan.status, scan.scannedAt, runTime)) {
       if (scan?.status === "ready") warnings.push(`破底翻 ${scan.interval} 快照已过期，已跳过该来源`);
       continue;

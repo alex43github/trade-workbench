@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildKlineStreamBatches,
   fetchClosedKlines,
+  fetchSqueezeDerivatives,
   listUsdtPerpetuals,
   parseClosedKlineEvent,
 } from "../services/structure-radar/binance-public.ts";
@@ -14,7 +15,7 @@ function jsonResponse(value, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 }
 
-test("keeps only trading USDT and USDC perpetual contracts", async () => {
+test("keeps only trading USDT-M perpetual contracts", async () => {
   const fetcher = async () => jsonResponse({ symbols: [
     { symbol: "BTCUSDT", status: "TRADING", contractType: "PERPETUAL", quoteAsset: "USDT", marginAsset: "USDT" },
     { symbol: "ETHUSDT_260925", status: "TRADING", contractType: "CURRENT_QUARTER", quoteAsset: "USDT" },
@@ -22,7 +23,7 @@ test("keeps only trading USDT and USDC perpetual contracts", async () => {
     { symbol: "DELISTUSDT", status: "SETTLING", contractType: "PERPETUAL", quoteAsset: "USDT" },
     { symbol: "BTCUSDC", status: "TRADING", contractType: "PERPETUAL", quoteAsset: "USDC" },
   ] });
-  assert.deepEqual((await listUsdtPerpetuals(fetcher)).map((item) => item.symbol), ["BTCUSDC", "BTCUSDT"]);
+  assert.deepEqual((await listUsdtPerpetuals(fetcher)).map((item) => item.symbol), ["BTCUSDT"]);
 });
 
 test("normalizes REST klines and drops the still-open candle", async () => {
@@ -34,6 +35,21 @@ test("normalizes REST klines and drops the still-open candle", async () => {
   const bars = await fetchClosedKlines("BTCUSDT", "1h", 2, async () => jsonResponse(rows), now);
   assert.equal(bars.length, 1);
   assert.deepEqual(bars[0], { time: 1, open: 100, high: 102, low: 99, close: 101, volume: 10, closed: true });
+});
+
+test("squeeze derivatives use only Binance public GET data and never an exchange order route", async () => {
+  const calls = [];
+  const result = await fetchSqueezeDerivatives("TESTSQZUSDT", async (input, init) => {
+    const url = new URL(String(input));
+    calls.push({ path: url.pathname, method: init?.method ?? "GET" });
+    if (url.pathname.endsWith("fundingRate")) return jsonResponse([{ fundingRate: "-0.0002" }]);
+    if (url.pathname.endsWith("takerlongshortRatio")) return jsonResponse([{ buySellRatio: "1.1" }]);
+    if (url.pathname.endsWith("openInterestHist")) return jsonResponse([{ sumOpenInterestValue: "100" }, { sumOpenInterestValue: "112" }]);
+    return jsonResponse([{ longShortRatio: "1.1" }, { longShortRatio: "1.0" }]);
+  });
+  assert.equal(result?.oiChangePct, 12);
+  assert.equal(calls.length, 6);
+  assert.equal(calls.every((call) => call.method === "GET" && !call.path.includes("order")), true);
 });
 
 test("parses only final websocket klines", () => {
@@ -65,6 +81,7 @@ test("bar cache identifies stale series", () => {
 
 test("scanner persists a closed-bar candidate before publishing it downstream", async () => {
   const order = [];
+  let saved;
   const cache = new BarCache();
   const history = Array.from({ length: 48 }, (_, index) => ({
     time: 1_000 + index * 3_600, open: 100, high: 101, low: 99, close: 100, volume: 1, closed: true,
@@ -76,7 +93,7 @@ test("scanner persists a closed-bar candidate before publishing it downstream", 
       symbol: "BTCUSDT", timeframe: "1h", setup: "PLATFORM_RECLAIM", state: "CANDIDATE",
       detectedAt: history.at(-1).time + 3_600, score: 80, anchorHash: "abc",
     })],
-    store: { async get() { return null; }, async save(signal) { order.push(`save:${signal.state}`); } },
+    store: { async get() { return null; }, async save(signal) { saved = signal; order.push(`save:${signal.state}`); } },
     async onSignal(signal) { order.push(`emit:${signal.state}`); },
   });
   const event = { e: "kline", s: "BTCUSDT", k: {
@@ -84,6 +101,7 @@ test("scanner persists a closed-bar candidate before publishing it downstream", 
   } };
   assert.equal((await scanner.handleRawEvent(event)).status, "candidate");
   assert.deepEqual(order, ["save:CANDIDATE", "emit:CANDIDATE"]);
+  assert.equal(saved.score, 80);
 });
 
 test("scanner ignores open and duplicate websocket events", async () => {

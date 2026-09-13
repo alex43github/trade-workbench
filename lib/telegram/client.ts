@@ -1,6 +1,16 @@
-export type TelegramReplyMarkup = {
+export type TelegramInlineKeyboardMarkup = {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
 };
+
+export type TelegramReplyKeyboardMarkup = {
+  keyboard: Array<Array<{ text: string }>>;
+  is_persistent?: boolean;
+  resize_keyboard?: boolean;
+  one_time_keyboard?: boolean;
+  input_field_placeholder?: string;
+};
+
+export type TelegramReplyMarkup = TelegramInlineKeyboardMarkup | TelegramReplyKeyboardMarkup;
 
 export type TelegramMessage = {
   chatId: string;

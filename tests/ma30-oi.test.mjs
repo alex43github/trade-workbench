@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   countTrailingClosesAboveMa,
+  countTrailingClosesBelowMa,
   passesOiExpansion,
   rankMa30OiCandidates,
 } from "../lib/radar/ma30-oi.ts";
@@ -14,6 +15,10 @@ test("counts seven trailing 1H closes above their MA30", () => {
 
 test("streak stops at the first trailing close below MA30", () => {
   assert.equal(countTrailingClosesAboveMa([...flat(100, 30), 90, ...flat(110, 6)], 30), 6);
+});
+
+test("counts seven trailing 1H closes below their MA30", () => {
+  assert.equal(countTrailingClosesBelowMa([...flat(100, 30), ...flat(90, 7)], 30), 7);
 });
 
 test("requires a strict previous-day OI expansion over ten-day average", () => {

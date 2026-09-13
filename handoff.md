@@ -1,6 +1,6 @@
 # Trade Workbench 交接文档
 
-更新时间：2026-08-20
+更新时间：2026-09-07
 
 本文档用于把 `trade-workbench` 后续工作交给 Sol/Terra 模型。目标是让后续模型先阅读本文，再检查代码和测试，不重复破坏已有工作。
 
@@ -169,7 +169,21 @@ node --test binance-gateway/test.mjs
 - 可用 skill：Binance、lightweight-charts、websearch、PDF/文档、街哥交易、ICT、Jingxin；HertzFlow按需使用。
 - 网站建站能力若可用可继续使用，但不要因 Sites 连接器不可用而阻塞本地/VPS部署。
 
-## 九、安全红线
+## 九、开源项目整合优先级
+
+新增需求时，先阅读 [`docs/open-source-integrations.md`](docs/open-source-integrations.md)，并优先查询以下 GitHub 项目是否已有可整合能力：
+
+- [Dune Skills](https://github.com/duneanalytics/skills)：链上数据、钱包、Token、Holder、DeFi Position 与 Query 管理。
+- [CCXT](https://github.com/ccxt/ccxt)：多交易所行情、K线、订单簿、成交、Funding、账户和价差研究。
+- [web3.py](https://github.com/ApeWorX/web3.py)：EVM RPC、合约读取、Event、Receipt、余额与链上交互。
+- [Hummingbot](https://github.com/hummingbot/hummingbot)：DEX、做市、套利和 Gateway 场景。
+- [Freqtrade](https://github.com/freqtrade/freqtrade)：CEX 策略、回测、Dry Run、仓位管理和运行控制。
+- [NautilusTrader](https://github.com/nautechsystems/nautilus_trader)：重型事件驱动、多市场和回测/实盘一致性场景。
+- [Prometheus](https://github.com/prometheus/prometheus)：WebSocket、RPC、API、扫描、Signal、订单失败、余额和 PnL 的长期监控。
+
+评估时必须记录仓库当前文档、许可证、维护状态、版本/提交、密钥边界、部署影响、失败降级和验收方式。优先采用服务端只读适配、缓存、测试网或 dry-run；不要让上述项目绕过 Binance Gateway、模拟盘、风险闸门、人工确认或审计链。Hummingbot、Freqtrade 和 NautilusTrader 默认作为独立旁路服务评估，除非 feature spec 明确批准进入核心交易链路。
+
+## 十、安全红线
 
 - 未经用户明确确认，不创建真实 Binance 订单。
 - API secret、OpenAI key、Bark key不得进入浏览器、日志、Git、截图或回答内容。
@@ -178,7 +192,7 @@ node --test binance-gateway/test.mjs
 - 数据缺失、403、延迟、时间偏移、接口限流时，必须明确告警并停止产生“确定性”建议。
 - 任何“上榜”只表示候选机会，不等于买入信号。
 
-## 十、交接验收标准
+## 十一、交接验收标准
 
 后续模型在声称“完成”前，必须提供：
 
@@ -189,7 +203,7 @@ node --test binance-gateway/test.mjs
 - 模拟盘是否仍完全隔离真实订单。
 - 已知限制、待用户提供的配置和下一步操作。
 
-## 十一、用户待修改清单
+## 十二、用户待修改清单
 
 - [ ] 明确区分“待最终确认”“策略已保存”“模拟策略已检查”“交易所实盘已挂单”四种状态，页面不得用 `WAITING/未成交` 让人误以为 Binance 已经存在真实限价单。
 - [ ] 修复并可视化 PAPER 策略调度链路：策略卡片显示实际计算出的限价、最后检查时间、调度器最近运行结果和失败原因；排查 VPS 定时器、`WORKBENCH_BASE_URL`、`MAINTENANCE_JOB_TOKEN` 与公开行情请求，避免长期显示“尚未检查”。

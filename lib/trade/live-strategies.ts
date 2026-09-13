@@ -26,26 +26,26 @@ export type LiveStrategyLeg = {
 export type LiveStrategyOrder = {
   id: string; strategyId: string; legId: string; intent: LiveOrderIntent; clientOrderId: string;
   exchangeOrderId: string | null; status: LiveOrderStatus; symbol: string | null; side: "BUY" | "SELL" | null;
-  type: "LIMIT" | null; timeInForce: "GTX" | null; price: string | null; quantity: string | null;
+  type: "LIMIT" | "MARKET" | null; timeInForce: "GTX" | null; price: string | null; quantity: string | null;
   executedQuantity: string; error: string | null;
   protection?: LiveEntryProtectionLink;
 };
 
 export type LiveEntryOrderPlan = {
-  symbol: string; side: "BUY" | "SELL"; type: "LIMIT"; timeInForce: "GTX"; price: string; quantity: string;
+  symbol: string; side: "BUY" | "SELL"; type: "LIMIT" | "MARKET"; timeInForce?: "GTX"; price?: string; quantity: string;
   newClientOrderId?: string;
 };
 
 export type LiveStrategyGeneration = {
   id: string; strategyId: string; generation: number; anchorCandleId: string | null;
   maValue: string | null; atrValue: string | null; nextRefreshAt: string | null;
-  refreshReason: string; status: string; leaseExpiresAt: string | null;
+  refreshReason: string; status: string; leaseExpiresAt: string | null; lastError: string | null;
 };
 
 export type LiveStrategyOrderAttempt = {
   id: string; strategyId: string; generationId: string; generation: number; legId: string;
   legacyLiveOrderId: string | null; intent: LiveOrderIntent; clientOrderId: string;
-  exchangeOrderId: string | null; side: "BUY" | "SELL" | null; type: "LIMIT" | null;
+  exchangeOrderId: string | null; side: "BUY" | "SELL" | null; type: "LIMIT" | "MARKET" | null;
   timeInForce: "GTX" | null; price: string | null; quantity: string;
   executedQuantity: string; averageFillPrice: string | null; status: LiveOrderStatus;
   cancellationResult: string | null; error: string | null;
@@ -108,7 +108,7 @@ function decodeOrder(row: Row): LiveStrategyOrder {
     clientOrderId: String(row.client_order_id), exchangeOrderId: row.exchange_order_id === null || row.exchange_order_id === undefined ? null : String(row.exchange_order_id), status: String(row.status) as LiveOrderStatus,
     symbol: row.symbol === null || row.symbol === undefined ? null : String(row.symbol),
     side: row.side === "BUY" || row.side === "SELL" ? row.side : null,
-    type: row.type === "LIMIT" ? "LIMIT" : null,
+    type: row.type === "LIMIT" || row.type === "MARKET" ? row.type : null,
     timeInForce: row.time_in_force === "GTX" ? "GTX" : null,
     price: row.price === null || row.price === undefined ? null : String(row.price),
     quantity: row.quantity === null || row.quantity === undefined ? null : String(row.quantity),
@@ -126,7 +126,7 @@ function decodeGeneration(row: Row): LiveStrategyGeneration {
     id: String(row.id), strategyId: String(row.strategy_id), generation: Number(row.generation),
     anchorCandleId: textOrNull(row.anchor_candle_id), maValue: textOrNull(row.ma_value), atrValue: textOrNull(row.atr_value),
     nextRefreshAt: textOrNull(row.next_refresh_at), refreshReason: String(row.refresh_reason), status: String(row.status),
-    leaseExpiresAt: textOrNull(row.lease_expires_at),
+    leaseExpiresAt: textOrNull(row.lease_expires_at), lastError: textOrNull(row.last_error),
   };
 }
 
@@ -135,7 +135,7 @@ function decodeAttempt(row: Row): LiveStrategyOrderAttempt {
     id: String(row.id), strategyId: String(row.strategy_id), generationId: String(row.generation_id), generation: Number(row.generation), legId: String(row.leg_id),
     legacyLiveOrderId: textOrNull(row.legacy_live_order_id), intent: String(row.intent) as LiveOrderIntent, clientOrderId: String(row.client_order_id),
     exchangeOrderId: textOrNull(row.exchange_order_id), side: row.side === "BUY" || row.side === "SELL" ? row.side : null,
-    type: row.type === "LIMIT" ? "LIMIT" : null, timeInForce: row.time_in_force === "GTX" ? "GTX" : null,
+    type: row.type === "LIMIT" || row.type === "MARKET" ? row.type : null, timeInForce: row.time_in_force === "GTX" ? "GTX" : null,
     price: textOrNull(row.price), quantity: String(row.original_quantity),
     executedQuantity: row.executed_quantity == null ? "0" : String(row.executed_quantity), averageFillPrice: textOrNull(row.average_fill_price),
     status: String(row.status) as LiveOrderStatus, cancellationResult: textOrNull(row.cancellation_result), error: textOrNull(row.error),
@@ -306,6 +306,7 @@ export async function listRefreshableLiveStrategies(limit = 50) {
   const strategies = await listLiveStrategies(limit);
   return strategies.filter((strategy) => strategy.config.mode === "LIVE_ARMED"
     && strategy.config.style === "MA"
+    && strategy.config.quickEntryMode !== "MARKET"
     && ["15m", "1h", "4h", "1d"].includes(strategy.config.timeframe)
     && ["WAITING", "ACTIVE"].includes(strategy.status)
     && !strategy.lifecycle.entryFreezeReason);
@@ -342,6 +343,20 @@ export async function releaseLiveStrategyRefreshLease(input: { strategyId: unkno
   return changed(result) === 1;
 }
 
+/** Records a failure before any external order mutation so the scheduler can safely retry. */
+export async function recordLiveStrategyRefreshRetry(input: { strategyId: unknown; generation: unknown; error: unknown }) {
+  await ensureLiveStrategySchema();
+  const strategyId = safeId(input.strategyId, "实盘策略编号不正确");
+  const generation = safeGeneration(input.generation);
+  const error = safeOptionalText(input.error, "实盘策略刷新错误不正确", 240);
+  if (!error) throw new Error("实盘策略刷新错误不能为空");
+  const result = await (await getD1()).prepare(`UPDATE live_strategy_generations
+    SET refresh_reason = 'RETRY_PENDING', last_error = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE strategy_id = ? AND generation = ? AND status = 'ACTIVE'`)
+    .bind(error, strategyId, generation).run();
+  return { recorded: changed(result) === 1 };
+}
+
 /** Records a due-candle check without creating a new order generation. */
 export async function advanceLiveStrategyGenerationAnchor(input: {
   strategyId: unknown; generation: unknown; leaseToken: unknown;
@@ -356,7 +371,7 @@ export async function advanceLiveStrategyGenerationAnchor(input: {
   const atrValue = safeOptionalDecimal(input.atrValue, "ATR值");
   if (!anchorCandleId || !maValue || !atrValue) throw new Error("实盘策略刷新锚点不完整");
   const result = await (await getD1()).prepare(`UPDATE live_strategy_generations
-    SET anchor_candle_id = ?, ma_value = ?, atr_value = ?, refresh_reason = 'REANCHOR_CHECKED', updated_at = CURRENT_TIMESTAMP
+    SET anchor_candle_id = ?, ma_value = ?, atr_value = ?, refresh_reason = 'REANCHOR_CHECKED', last_error = NULL, updated_at = CURRENT_TIMESTAMP
     WHERE strategy_id = ? AND generation = ? AND status = 'ACTIVE' AND lease_token = ?`)
     .bind(anchorCandleId, maValue, atrValue, strategyId, generation, leaseToken).run();
   return { advanced: changed(result) === 1 };
@@ -406,7 +421,7 @@ export async function completeLiveStrategyRefresh(input: {
 
 export async function createLiveOrderAttempt(input: {
   strategyId: unknown; generation: unknown; legId: unknown; intent: LiveOrderIntent; clientOrderId: unknown;
-  side?: "BUY" | "SELL"; type?: "LIMIT"; timeInForce?: "GTX"; price?: unknown; quantity: unknown;
+  side?: "BUY" | "SELL"; type?: "LIMIT" | "MARKET"; timeInForce?: "GTX"; price?: unknown; quantity: unknown;
 }) {
   await ensureLiveStrategySchema();
   const strategyId = safeId(input.strategyId, "实盘策略编号不正确");
@@ -415,7 +430,7 @@ export async function createLiveOrderAttempt(input: {
   const clientOrderId = safeId(input.clientOrderId, "实盘订单客户编号不正确");
   if (!(["ENTRY", "TAKE_PROFIT", "GUARD_STOP"] as string[]).includes(input.intent)) throw new Error("实盘订单意图不正确");
   if (input.side !== undefined && input.side !== "BUY" && input.side !== "SELL") throw new Error("实盘订单方向不正确");
-  if (input.type !== undefined && input.type !== "LIMIT") throw new Error("实盘订单类型不正确");
+  if (input.type !== undefined && input.type !== "LIMIT" && input.type !== "MARKET") throw new Error("实盘订单类型不正确");
   if (input.timeInForce !== undefined && input.timeInForce !== "GTX") throw new Error("实盘订单时效不正确");
   await strategyRow(strategyId);
   const db = await getD1();

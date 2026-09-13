@@ -9,6 +9,7 @@ fs.rmSync(testDb, { force: true });
 process.env.STREETLIGHT_LOCAL_D1 = testDb;
 
 const { syncLiveEntryProtections } = await import("../lib/trade/live-entry-protection.ts");
+const { expandQuickLiveTemplate } = await import("../lib/trade/quick-live-template.ts");
 
 const config = {
   symbol: "BTCUSDT", side: "LONG", timeframe: "15m",
@@ -109,4 +110,38 @@ test("persisted LIVE order exposes the protection badge instead of treating subm
   const persisted = await getLiveStrategy(strategy.id);
   assert.equal(persisted?.orders[0].protection?.status, "ERROR");
   assert.match(persisted?.orders[0].protection?.error ?? "", /网关超时/);
+});
+
+test("quick LIVE protection forwards the persisted server-owned template snapshot", async () => {
+  const quickTemplateSnapshot = expandQuickLiveTemplate({ symbol: "BTCUSDT", quickTemplateId: "BULL_CHASE_1H" }, {
+    totalEquityUsdt: 400,
+    market: {
+      symbol: "BTCUSDT",
+      closedCandle: { id: "quick-source-candle", timeframe: "1h", maKind: "SMA", maLength: 30, atrLength: 14, ma: 100, atr: 10 },
+    },
+  }).quickTemplateSnapshot;
+  const strategy = {
+    id: "TW-L-S-quick-forward", origin: "WEB", status: "ACTIVE",
+    config: {
+      ...config, timeframe: "1h", ma: { kind: "SMA", length: 30 }, atr: { length: 14 },
+      quickTemplateId: "BULL_CHASE_1H", quickExitRule: "BULL_CHASE_1H", quickTemplateSnapshot,
+    },
+    legs: [{ id: "LEG-QUICK", websiteOrderId: "webquick-forward", atrOffset: 2.7, marginUsdt: 4, status: "WAITING" }],
+    orders: [{ id: "ENTRY-QUICK", strategyId: "TW-L-S-quick-forward", legId: "LEG-QUICK", intent: "ENTRY", clientOrderId: "webQF01abc", exchangeOrderId: "2001", status: "SUBMITTED", symbol: "BTCUSDT", side: "BUY", type: "LIMIT", timeInForce: "GTX", price: "127", quantity: "1", executedQuantity: "0", error: null }],
+  };
+  const created = [];
+  const result = await syncLiveEntryProtections({
+    listStrategies: async () => [strategy],
+    findOrder: async () => ({ orderId: "2001", clientOrderId: "webQF01abc", status: "FILLED", executedQty: "1", avgPrice: "127" }),
+    readPosition: async () => ({ symbol: "BTCUSDT", positionAmt: "1", markPrice: "127", leverage: "10" }),
+    recordOrder: async () => ({ ...strategy.orders[0], status: "FILLED", executedQuantity: "1" }),
+    listProtectionsForSource: async () => [],
+    recordLink: async () => ({}),
+    createProtection: async (input) => { created.push(input); return { ok: true, status: 200, strategy: { id: "web-ps-quick-forward", status: "ACTIVE" } }; },
+  });
+  assert.equal(result.protected, 1);
+  assert.equal(created.length, 1);
+  assert.equal(created[0].quickTemplateId, "BULL_CHASE_1H");
+  assert.equal(created[0].quickExitRule, "BULL_CHASE_1H");
+  assert.deepEqual(created[0].quickTemplateSnapshot, quickTemplateSnapshot);
 });

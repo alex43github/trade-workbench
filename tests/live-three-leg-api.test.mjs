@@ -52,6 +52,8 @@ function dependencies(overrides = {}) {
     readMarket: async () => market,
     readExchangeInfo: async () => exchangeInfo,
     readAccount: async () => ({ availableBalance: "100" }),
+    readLeverage: async () => 1,
+    readPositionMode: async () => "HEDGE",
     reserveOrder: async (strategyId, legId, intent, plan) => {
       const order = { id: `ORDER-${orders.length + 1}`, strategyId, legId, intent, clientOrderId: plan.newClientOrderId,
         exchangeOrderId: null, status: "RESERVED", ...plan };
@@ -104,6 +106,35 @@ test("submits all three live entry legs concurrently after one confirmation", as
   assert.deepEqual(placed.map((order) => [order.side, order.type, order.timeInForce]), [
     ["BUY", "LIMIT", "GTX"], ["BUY", "LIMIT", "GTX"], ["BUY", "LIMIT", "GTX"],
   ]);
+  assert.deepEqual(placed.map((order) => order.positionSide), ["LONG", "LONG", "LONG"]);
+});
+
+test("uses the symbol leverage for margin-based preflight sizing", async () => {
+  const placed = [];
+  const deps = dependencies({
+    readLeverage: async () => 10,
+    placeOrder: async (order) => {
+      placed.push(order);
+      return { orderId: 500 + placed.length, clientOrderId: order.newClientOrderId, status: "NEW", executedQty: "0" };
+    },
+  });
+  const response = await createLiveStrategyPost(deps)(request({ draft, liveSwitchOn: true, confirmation: "CREATE_LIVE_STRATEGY", confirmationNonce: "live_margin_nonce_10" }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(placed.map((order) => order.quantity), ["2.72", "3.00", "3.33"]);
+});
+
+test("maps one-way accounts to BOTH without changing the selected direction", async () => {
+  const placed = [];
+  const deps = dependencies({
+    readPositionMode: async () => "ONE_WAY",
+    placeOrder: async (order) => {
+      placed.push(order);
+      return { orderId: 700 + placed.length, clientOrderId: order.newClientOrderId, status: "NEW", executedQty: "0" };
+    },
+  });
+  const response = await createLiveStrategyPost(deps)(request({ draft, liveSwitchOn: true, confirmation: "CREATE_LIVE_STRATEGY", confirmationNonce: "one_way_nonce_01" }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(placed.map((order) => order.positionSide), ["BOTH", "BOTH", "BOTH"]);
 });
 
 test("stops at a partial result and marks the strategy for reconciliation", async () => {

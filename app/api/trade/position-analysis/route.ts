@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       const failure = classifyAnalysisError(item?.error);
       return Response.json({ status: "incomplete", error: failure.message, code: failure.code, retryable: failure.retryable, realOrderRouteEnabled: false }, { status: 503 });
     }
-    return Response.json(buildPositionAnalysis(item.result), { headers: { "cache-control": "no-store" } });
+    return Response.json(buildPositionAnalysis(item.result, position?.horizontalStopLine), { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const failure = classifyAnalysisError(error);
     return Response.json({ status: "incomplete", error: failure.message, code: failure.code, retryable: failure.retryable, realOrderRouteEnabled: false }, { status: 503 });

@@ -49,6 +49,30 @@ test("creates two source-bound ROI take-profit orders for a Binance manual sourc
   assert.equal(result.strategy.orders.length, 2);
 });
 
+test("binds a Hedge Mode protection strategy to the source side", async () => {
+  const { createProtectionStrategy } = await strategies();
+  let requestedDirection;
+  const placed = [];
+  const result = await createProtectionStrategy({
+    env,
+    origin: "ALEX",
+    source: { ...source, side: "SHORT", symbol: "ADAUSDT", sourceOrderIds: ["manual-ada-hedge"] },
+    strategyType: "LEVEL_SL",
+    fixedPrice: 110,
+    idempotencyKey: "alex-ada-hedge-1",
+  }, {
+    readPosition: async (symbol, direction) => {
+      requestedDirection = direction;
+      return { symbol, positionSide: "SHORT", positionAmt: "-2", entryPrice: "100", markPrice: "100" };
+    },
+    readExchangeInfo: async () => ({ symbols: [{ symbol: "ADAUSDT", filters }] }),
+    placeOrder: async (order) => { placed.push(order); return { orderId: "hedge-protection-1", status: "NEW", executedQty: "0", clientOrderId: order.newClientOrderId }; },
+  });
+  assert.equal(requestedDirection, "SHORT");
+  assert.equal(placed[0].positionSide, "SHORT");
+  assert.equal(result.strategy.orders.length, 1);
+});
+
 test("creates a fixed support stop for only the selected source quantity", async () => {
   const { createProtectionStrategy } = await strategies();
   const placed = [];
@@ -63,6 +87,32 @@ test("creates a fixed support stop for only the selected source quantity", async
   assert.deepEqual(placed[0], {
     strategyId: result.strategy.id, origin: "ALEX", symbol: "ETHUSDT", side: "SELL", positionSide: "LONG",
     type: "STOP_MARKET", quantity: "2", stopPrice: "90", reduceOnly: true,
+    workbenchOrderIntent: "EXIT_ONLY",
+    newClientOrderId: placed[0].newClientOrderId, stage: "FULL",
+  });
+  assert.match(placed[0].newClientOrderId, /^alexSL\d+$/);
+});
+
+test("creates an exit-only breakout stop for a Unicode Binance manual short", async () => {
+  const { createProtectionStrategy } = await strategies();
+  const placed = [];
+  const result = await createProtectionStrategy({
+    env,
+    origin: "ALEX",
+    source: { ...source, symbol: "龙虾USDT", side: "SHORT", sourceOrderIds: ["web_coin_unicode_short"] },
+    strategyType: "LEVEL_SL",
+    fixedPrice: 110,
+    idempotencyKey: "tele-unicode-level-short-1",
+  }, {
+    readPosition: async () => ({ symbol: "龙虾USDT", positionAmt: "-2", entryPrice: "100", markPrice: "100" }),
+    readExchangeInfo: async () => ({ symbols: [{ symbol: "龙虾USDT", filters }] }),
+    placeOrder: async (order) => { placed.push(order); return { orderId: "unicode-short-stop-1", status: "NEW", executedQty: "0" }; },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(placed[0], {
+    strategyId: result.strategy.id, origin: "ALEX", symbol: "龙虾USDT", side: "BUY", positionSide: "SHORT",
+    type: "STOP_MARKET", quantity: "2", stopPrice: "110", reduceOnly: true,
+    workbenchOrderIntent: "EXIT_ONLY",
     newClientOrderId: placed[0].newClientOrderId, stage: "FULL",
   });
   assert.match(placed[0].newClientOrderId, /^alexSL\d+$/);

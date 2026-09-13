@@ -3,6 +3,15 @@ import {
   type StrategyConfig,
   type StrategyDraft,
 } from "./strategy-contracts.ts";
+import {
+  normalizeQuickLiveTemplateSnapshot,
+  QUICK_LIVE_ALL_TEMPLATE_IDS,
+  isQuickLiveMarketTemplate,
+  type QuickLiveExitRule,
+  type QuickLiveEntryMode,
+  type QuickLiveTemplateId,
+  type QuickLiveTemplateSnapshot,
+} from "./quick-live-template.ts";
 
 export type LiveExecution = {
   entry: "LIMIT_POST_ONLY";
@@ -14,6 +23,11 @@ export type LiveStrategyConfig = Omit<StrategyConfig, "mode" | "execution"> & {
   mode: "LIVE_ARMED";
   execution: LiveExecution;
   defaultLeverage?: never;
+  entryLeverageAtSubmission?: number | null;
+  quickTemplateId?: QuickLiveTemplateId;
+  quickExitRule?: QuickLiveExitRule;
+  quickEntryMode?: QuickLiveEntryMode;
+  quickTemplateSnapshot?: QuickLiveTemplateSnapshot;
 };
 
 export type LiveStrategyDraft = StrategyDraft & {
@@ -21,6 +35,11 @@ export type LiveStrategyDraft = StrategyDraft & {
   legCount?: number | string;
   firstGuardExitPct?: number | string;
   useDefaultProfitTargets?: boolean;
+  quickTemplateId?: QuickLiveTemplateId | string;
+  templateId?: QuickLiveTemplateId | string;
+  quickExitRule?: QuickLiveExitRule | string;
+  quickEntryMode?: QuickLiveEntryMode | string;
+  quickTemplateSnapshot?: unknown;
   leverage?: never;
   defaultLeverage?: never;
   marginType?: never;
@@ -57,13 +76,50 @@ export function normalizeLiveStrategyDraft(input: LiveStrategyDraft | unknown): 
       ? { atrMultiplier: atr.multiplier ?? 1, firstTargetRemainingPct: 50 }
       : source.dynamicGuard,
   });
+  const quickTemplateId = source.quickTemplateId === undefined ? undefined : String(source.quickTemplateId).trim().toUpperCase();
+  const quickTemplateSnapshot = source.quickTemplateSnapshot;
+  if (quickTemplateSnapshot !== undefined && quickTemplateId === undefined) {
+    throw new Error("快捷模板快照必须由服务端生成");
+  }
+  if (quickTemplateId !== undefined && !QUICK_LIVE_ALL_TEMPLATE_IDS.includes(quickTemplateId as QuickLiveTemplateId)) {
+    throw new Error("快捷模板标识不正确");
+  }
+  const quickEntryMode = source.quickEntryMode === undefined
+    ? quickTemplateId === undefined ? undefined : isQuickLiveMarketTemplate(quickTemplateId) ? "MARKET" : "LIMIT"
+    : String(source.quickEntryMode).trim().toUpperCase() as QuickLiveEntryMode;
+  if (quickEntryMode !== undefined && quickEntryMode !== "LIMIT" && quickEntryMode !== "MARKET") {
+    throw new Error("快捷模板入场模式不正确");
+  }
+  if (quickTemplateId !== undefined && quickEntryMode !== (isQuickLiveMarketTemplate(quickTemplateId) ? "MARKET" : "LIMIT")) {
+    throw new Error("快捷模板入场模式与模板不一致");
+  }
+  const quickExitRule = source.quickExitRule === undefined ? undefined : String(source.quickExitRule).trim().toUpperCase() as QuickLiveExitRule;
+  const normalizedSnapshot = quickTemplateSnapshot === undefined
+    ? undefined
+    : normalizeQuickLiveTemplateSnapshot(quickTemplateSnapshot);
+  if (quickTemplateId !== undefined && (!quickExitRule || !normalizedSnapshot || normalizedSnapshot.templateId !== quickTemplateId || normalizedSnapshot.exitRule !== quickExitRule)) {
+    throw new Error("快捷模板退出快照不完整");
+  }
   return {
     ...paperConfig,
     mode: "LIVE_ARMED",
+    entryLeverageAtSubmission: source.entryLeverageAtSubmission == null
+      ? null
+      : (() => {
+        const leverage = Number(source.entryLeverageAtSubmission);
+        if (!Number.isFinite(leverage) || leverage <= 0) throw new Error("下单杠杆快照无效");
+        return leverage;
+      })(),
     execution: {
       entry: "LIMIT_POST_ONLY",
       profitTarget: "LIMIT_POST_ONLY",
       guardStop: "MARKET_REDUCE_ONLY",
     },
+    ...(quickTemplateId === undefined ? {} : {
+      quickTemplateId: quickTemplateId as QuickLiveTemplateId,
+      quickExitRule,
+      quickEntryMode,
+      quickTemplateSnapshot: normalizedSnapshot,
+    }),
   };
 }

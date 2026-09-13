@@ -16,12 +16,14 @@ import {
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type LineData,
+  type MouseEventParams,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildFillMarkers, buildLifecycleChartSeries, buildTradeLifecycleLines, calculateAnchoredVwap, calculateAtr, calculateAtrBand, calculateEma, calculateMa, calculateVolumeProfile, type TradeFill } from "./strategyMath";
+import { buildChartMarkers, buildLifecycleChartSeries, buildTradeLifecycleLines, calculateAnchoredVwap, calculateAtr, calculateAtrBand, calculateEma, calculateMa, calculateTrendAtrBands, calculateVolumeProfile, type TradeFill } from "./strategyMath";
 import { createPriceFormat, formatPrice, inferPriceStep } from "./priceFormat";
+import type { ReversalStrengthInterval } from "../../lib/radar/reversal";
 
 export type MarketBar = {
   time: number;
@@ -33,10 +35,17 @@ export type MarketBar = {
   closed: boolean;
 };
 
+export type AtrChannelSettings = {
+  enabled: boolean;
+  multiplier: number;
+  color: string;
+};
+
 export type IndicatorSettings = {
   ma: { enabled: boolean; length: number; color: string; lineWidth: 1 | 2 | 3 | 4 };
   ema: { enabled: boolean; length: number; color: string; lineWidth: 1 | 2 | 3 | 4 };
   atr: { upperColor: string; lowerColor: string; upperLineWidth: 1 | 2 | 3 | 4; lowerLineWidth: 1 | 2 | 3 | 4 };
+  atrChannels?: AtrChannelSettings[];
   avwap: { enabled: boolean; anchorBars: number; source: "hlc3" | "close"; color: string; lineWidth: 1 | 2 | 3 | 4 };
   volumeProfile: { enabled: boolean; rangeBars: number; rows: number };
   vegas: {
@@ -63,6 +72,7 @@ type Props = {
   bars: MarketBar[];
   fills: TradeFill[];
   symbol: string;
+  interval?: ReversalStrengthInterval;
   theme: "dark" | "light";
   indicators: IndicatorSettings;
   overlays: ChartOverlay[];
@@ -91,11 +101,61 @@ type ChartRefs = {
   lower: ISeriesApi<"Line">;
   trendUpper: ISeriesApi<"Line">;
   trendLower: ISeriesApi<"Line">;
+  atrChannels: Array<{ upper: ISeriesApi<"Line">; lower: ISeriesApi<"Line"> }>;
   volume: ISeriesApi<"Histogram">;
   markers: ISeriesMarkersPluginApi<Time>;
-  lifecycleLines: ISeriesApi<"Line">[];
-  priceLines: IPriceLine[];
+  lifecycleLines: Map<string, ISeriesApi<"Line">>;
+  lifecyclePool: ISeriesApi<"Line">[];
+  priceLines: Map<string, IPriceLine>;
 };
+
+type HoverCandle = {
+  time: Time;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  changePct: number;
+  amplitudePct: number;
+};
+
+const defaultAtrChannelColors = ["#111827", "#f59e0b", "#ec4899"] as const;
+
+export function buildAtrChannelSeries(
+  basisData: Array<{ time: number; value: number }>,
+  atrByTime: Map<number, number>,
+  channels?: readonly AtrChannelSettings[],
+) {
+  return defaultAtrChannelColors.map((defaultColor, index) => {
+    const channel = channels?.[index];
+    const rawMultiplier = channel?.multiplier;
+    const parsedMultiplier = typeof rawMultiplier === "number" ? rawMultiplier : Number(rawMultiplier);
+    const fallbackMultiplier = index === 0 ? 1 : index === 1 ? 3 : 5;
+    const multiplier = Number.isFinite(parsedMultiplier) ? Math.max(0, parsedMultiplier) : fallbackMultiplier;
+    const enabled = channel?.enabled === true;
+    const color = typeof channel?.color === "string" && channel.color.trim() ? channel.color : defaultColor;
+    if (!enabled) return { upper: [], lower: [], enabled, color };
+
+    const upper: Array<{ time: number; value: number }> = [];
+    const lower: Array<{ time: number; value: number }> = [];
+    for (const point of basisData) {
+      const atr = atrByTime.get(point.time);
+      const band = atr === undefined ? null : calculateAtrBand(point.value, atr, multiplier, multiplier);
+      if (!band) continue;
+      upper.push({ time: point.time, value: band.upper });
+      lower.push({ time: point.time, value: band.lower });
+    }
+    return { upper, lower, enabled, color };
+  });
+}
+
+function formatCrosshairTime(time: Time) {
+  if (typeof time === "number") {
+    return new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(time * 1000));
+  }
+  if (typeof time === "string") return time;
+  return `${time.year}-${String(time.month).padStart(2, "0")}-${String(time.day).padStart(2, "0")}`;
+}
 
 const palettes = {
   dark: {
@@ -108,13 +168,14 @@ const palettes = {
   },
 };
 
-export default function TradeChart({ bars, fills, symbol, theme, indicators, overlays, priceTickSize, indicatorBasis, atrLength, atrUpperMultiplier, atrLowerMultiplier, trendAtrEnabled = true, trendAtrMultiplier = 3, drawingLine = false, onManualLineChange }: Props) {
+export default function TradeChart({ bars, fills, symbol, interval, theme, indicators, overlays, priceTickSize, indicatorBasis, atrLength, atrUpperMultiplier, atrLowerMultiplier, trendAtrEnabled = true, trendAtrMultiplier = 3, drawingLine = false, onManualLineChange }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<ChartRefs | null>(null);
   const latestCloseRef = useRef(0);
   const drawingLineRef = useRef(drawingLine);
   const onManualLineChangeRef = useRef(onManualLineChange);
   const [hoverPrice, setHoverPrice] = useState<{ price: number; changePct: number; y: number } | null>(null);
+  const [hoverCandle, setHoverCandle] = useState<HoverCandle | null>(null);
   const maData = useMemo(() => calculateMa(bars, indicators.ma.length), [bars, indicators.ma.length]);
   const emaData = useMemo(() => calculateEma(bars, indicators.ema.length), [bars, indicators.ema.length]);
   const vegas144Data = useMemo(() => calculateEma(bars, indicators.vegas.fastLength), [bars, indicators.vegas.fastLength]);
@@ -188,13 +249,17 @@ export default function TradeChart({ bars, fills, symbol, theme, indicators, ove
     const lower = chart.addSeries(LineSeries, { color: "#111827", lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false }, 0);
     const trendUpper = chart.addSeries(LineSeries, { color: "#f0a84a", lineWidth: 2, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false }, 0);
     const trendLower = chart.addSeries(LineSeries, { color: "#f0a84a", lineWidth: 2, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false }, 0);
+    const atrChannels = defaultAtrChannelColors.map((color) => ({
+      upper: chart.addSeries(LineSeries, { color, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, visible: false }, 0),
+      lower: chart.addSeries(LineSeries, { color, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, visible: false }, 0),
+    }));
     const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, 1);
     const markers = createSeriesMarkers(candles, []);
     chart.panes()[1]?.setHeight(92);
-    chartRef.current = { chart, candles, ma, ema, vegas144, vegas169, vegas576, vegas676, avwap, upper, lower, trendUpper, trendLower, volume, markers, lifecycleLines: [], priceLines: [] };
-    const onCrosshairMove = (param: { point?: { y: number } }) => {
+    chartRef.current = { chart, candles, ma, ema, vegas144, vegas169, vegas576, vegas676, avwap, upper, lower, trendUpper, trendLower, atrChannels, volume, markers, lifecycleLines: new Map(), lifecyclePool: [], priceLines: new Map() };
+    const onCrosshairMove = (param: MouseEventParams<Time>) => {
       if (!param.point || latestCloseRef.current <= 0) {
-        setHoverPrice(null);
+        setHoverPrice(null); setHoverCandle(null);
         return;
       }
       const price = candles.coordinateToPrice(param.point.y);
@@ -203,6 +268,10 @@ export default function TradeChart({ bars, fills, symbol, theme, indicators, ove
         return;
       }
       setHoverPrice({ price, changePct: ((price - latestCloseRef.current) / latestCloseRef.current) * 100, y: param.point.y });
+      const candle = param.seriesData.get(candles) as Partial<CandlestickData<Time>> | undefined;
+      if (candle && typeof candle.open === "number" && typeof candle.high === "number" && typeof candle.low === "number" && typeof candle.close === "number" && param.time !== undefined) {
+        setHoverCandle({ time: param.time, open: candle.open, high: candle.high, low: candle.low, close: candle.close, changePct: candle.open ? (candle.close - candle.open) / candle.open * 100 : 0, amplitudePct: candle.open ? (candle.high - candle.low) / candle.open * 100 : 0 });
+      } else setHoverCandle(null);
     };
     chart.subscribeCrosshairMove(onCrosshairMove);
     const onClick = (param: { point?: { y: number } }) => {
@@ -235,6 +304,11 @@ export default function TradeChart({ bars, fills, symbol, theme, indicators, ove
   useEffect(() => {
     const refs = chartRef.current;
     if (!refs) return;
+    // lightweight-charts 5.2.0 can synchronously recalculate a hovered crosshair
+    // against stale logical indexes while multiple series replace their data.
+    // Clear it before any option/data update; upstream fix: PR #2110.
+    refs.chart.clearCrosshairPosition();
+    setHoverPrice(null); setHoverCandle(null);
     const priceFormat = createPriceFormat(inferredPriceStep);
     refs.candles.applyOptions({ priceFormat });
     refs.ma.applyOptions({ priceFormat });
@@ -247,13 +321,21 @@ export default function TradeChart({ bars, fills, symbol, theme, indicators, ove
     refs.upper.applyOptions({ priceFormat });
     refs.lower.applyOptions({ priceFormat });
     refs.trendUpper.applyOptions({ priceFormat }); refs.trendLower.applyOptions({ priceFormat });
+    refs.atrChannels.forEach(({ upper, lower }) => {
+      upper.applyOptions({ priceFormat });
+      lower.applyOptions({ priceFormat });
+    });
     if (!bars.length) {
-      refs.candles.setData([]);
       refs.markers.setMarkers([]);
-      refs.lifecycleLines.forEach((line) => refs.chart.removeSeries(line));
-      refs.lifecycleLines = [];
+      refs.candles.setData([]);
+      refs.atrChannels.forEach(({ upper, lower }) => {
+        upper.setData([]);
+        lower.setData([]);
+      });
+      refs.lifecycleLines.forEach((line) => line.setData([]));
+      refs.lifecyclePool.forEach((line) => line.setData([]));
       refs.priceLines.forEach((line) => refs.candles.removePriceLine(line));
-      refs.priceLines = [];
+      refs.priceLines.clear();
       return;
     }
     const visibleLogicalRange = refs.chart.timeScale().getVisibleLogicalRange();
@@ -263,6 +345,9 @@ export default function TradeChart({ bars, fills, symbol, theme, indicators, ove
     }));
     const asLineData = (points: Array<{ time: number; value: number }>): LineData<UTCTimestamp>[] =>
       points.map((point) => ({ time: point.time as UTCTimestamp, value: point.value }));
+    // Clear marker primitives before replacing candle data. Their renderer requires
+    // each marker time to resolve against the current candle series.
+    refs.markers.setMarkers([]);
     refs.candles.setData(candleData);
    refs.ma.setData(asLineData(maData));
    refs.ema.setData(asLineData(emaData));
@@ -285,9 +370,17 @@ export default function TradeChart({ bars, fills, symbol, theme, indicators, ove
     });
     refs.upper.setData(asLineData(upperBand));
     refs.lower.setData(asLineData(lowerBand));
-    const trendUpper = basisData.flatMap((point, index) => { const atr = atrByTime.get(point.time); const previous = basisData[index - 1]; return atr === undefined || !previous || point.value <= previous.value ? [] : [{ time: point.time, value: point.value + atr * trendAtrMultiplier }]; });
-    const trendLower = basisData.flatMap((point, index) => { const atr = atrByTime.get(point.time); const previous = basisData[index - 1]; return atr === undefined || !previous || point.value >= previous.value ? [] : [{ time: point.time, value: point.value - atr * trendAtrMultiplier }]; });
-    refs.trendUpper.setData(asLineData(trendUpper)); refs.trendLower.setData(asLineData(trendLower));
+    const trendBands = calculateTrendAtrBands(basisData, atrByTime, trendAtrMultiplier);
+    refs.trendUpper.setData(asLineData(trendBands.upper)); refs.trendLower.setData(asLineData(trendBands.lower));
+    const atrChannelSeries = buildAtrChannelSeries(basisData, atrByTime, indicators.atrChannels);
+    refs.atrChannels.forEach((channelRefs, index) => {
+      const channel = atrChannelSeries[index];
+      if (!channel) return;
+      channelRefs.upper.setData(asLineData(channel.upper));
+      channelRefs.lower.setData(asLineData(channel.lower));
+      channelRefs.upper.applyOptions({ visible: channel.enabled, color: channel.color, lineWidth: 1, lineStyle: LineStyle.Dashed });
+      channelRefs.lower.applyOptions({ visible: channel.enabled, color: channel.color, lineWidth: 1, lineStyle: LineStyle.Dashed });
+    });
     refs.volume.setData(bars.map((bar) => ({
       time: bar.time as UTCTimestamp, value: bar.volume,
       color: bar.close >= bar.open ? palette.volumeUp : palette.volumeDown,
@@ -303,30 +396,51 @@ export default function TradeChart({ bars, fills, symbol, theme, indicators, ove
     refs.vegas676.applyOptions({ visible: indicators.vegas.enabled, color: indicators.vegas.secondColor, lineWidth: indicators.vegas.lineWidth });
     refs.avwap.applyOptions({ visible: indicators.avwap.enabled, color: indicators.avwap.color, lineWidth: indicators.avwap.lineWidth });
 
-    refs.markers.setMarkers(buildFillMarkers(bars, fills).map((marker) => ({ ...marker, time: marker.time as UTCTimestamp })));
-    refs.lifecycleLines.forEach((line) => refs.chart.removeSeries(line));
-    refs.lifecycleLines = lifecycleChartSeries.map((lifecycle) => {
-      const line = refs.chart.addSeries(LineSeries, {
+    const nextLifecycleLines = new Map<string, ISeriesApi<"Line">>();
+    for (const lifecycle of lifecycleChartSeries) {
+      const line = refs.lifecycleLines.get(lifecycle.id) ?? refs.lifecyclePool.pop() ?? refs.chart.addSeries(LineSeries, {}, 0);
+      line.applyOptions({
         color: lifecycle.color, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, priceFormat,
-      }, 0);
+      });
       line.setData([
         { time: lifecycle.entry.time as UTCTimestamp, value: lifecycle.entry.value },
         { time: lifecycle.exit.time as UTCTimestamp, value: lifecycle.exit.value },
       ]);
-      return line;
+      nextLifecycleLines.set(lifecycle.id, line);
+    }
+    refs.lifecycleLines.forEach((line, id) => {
+      if (!nextLifecycleLines.has(id)) {
+        line.setData([]);
+        refs.lifecyclePool.push(line);
+      }
     });
+    refs.lifecycleLines = nextLifecycleLines;
 
-    refs.priceLines.forEach((line) => refs.candles.removePriceLine(line));
-    refs.priceLines = overlays.filter((overlay) => Number.isFinite(overlay.price) && overlay.price > 0).map((overlay) => {
+    const nextPriceLineIds = new Set<string>();
+    for (const overlay of overlays) {
+      if (!Number.isFinite(overlay.price) || overlay.price <= 0) continue;
       const color = overlay.kind === "position" ? "#45a9ff" : overlay.kind === "cost" ? "#111827" : overlay.kind === "limit" ? "#f0a84a" : overlay.kind === "tpsl" ? "#ef646b" : overlay.kind === "manual" ? "#ef646b" : "#b57cff";
-      return refs.candles.createPriceLine({
+      const options = {
         price: overlay.price, color, lineWidth: overlay.kind === "manual" || overlay.kind === "cost" ? 2 : 1, lineStyle: overlay.kind === "manual" ? LineStyle.Solid : LineStyle.Dashed,
         axisLabelVisible: true,
-      });
+      };
+      const existing = refs.priceLines.get(overlay.id);
+      if (existing) existing.applyOptions(options);
+      else refs.priceLines.set(overlay.id, refs.candles.createPriceLine(options));
+      nextPriceLineIds.add(overlay.id);
+    }
+    refs.priceLines.forEach((line, id) => {
+      if (!nextPriceLineIds.has(id)) {
+        refs.candles.removePriceLine(line);
+        refs.priceLines.delete(id);
+      }
     });
+    const toChartMarker = (marker: ReturnType<typeof buildChartMarkers>[number]) => ({ ...marker, time: marker.time as UTCTimestamp });
+    if (interval === undefined) refs.markers.setMarkers(buildChartMarkers(bars, fills).map(toChartMarker));
+    else refs.markers.setMarkers(buildChartMarkers(bars, fills, interval).map(toChartMarker));
     if (visibleLogicalRange) refs.chart.timeScale().setVisibleLogicalRange(visibleLogicalRange);
     else refs.chart.timeScale().fitContent();
-  }, [bars, fills, lifecycleChartSeries, maData, emaData, vegas144Data, vegas169Data, vegas576Data, vegas676Data, atrData, avwapData, atrUpperMultiplier, atrLowerMultiplier, trendAtrEnabled, trendAtrMultiplier, indicatorBasis, indicators, overlays, symbol, theme, inferredPriceStep]);
+  }, [bars, fills, interval, lifecycleChartSeries, maData, emaData, vegas144Data, vegas169Data, vegas576Data, vegas676Data, atrData, avwapData, atrUpperMultiplier, atrLowerMultiplier, trendAtrEnabled, trendAtrMultiplier, indicatorBasis, indicators, overlays, symbol, theme, inferredPriceStep]);
 
   return (
     <div className="trade-chart-stage">
@@ -340,6 +454,7 @@ export default function TradeChart({ bars, fills, symbol, theme, indicators, ove
         <strong>{formatPrice(hoverPrice.price, inferredPriceStep)}</strong>
         <span>{hoverPrice.changePct >= 0 ? "+" : ""}{hoverPrice.changePct.toFixed(2)}%</span>
       </div>}
+      {hoverCandle && <div className="crosshair-candle-details" aria-live="polite"><time>{formatCrosshairTime(hoverCandle.time)}</time><span>O {formatPrice(hoverCandle.open, inferredPriceStep)}</span><span>H {formatPrice(hoverCandle.high, inferredPriceStep)}</span><span>L {formatPrice(hoverCandle.low, inferredPriceStep)}</span><span>C {formatPrice(hoverCandle.close, inferredPriceStep)}</span><span className={hoverCandle.changePct >= 0 ? "up" : "down"}>涨跌 {hoverCandle.changePct >= 0 ? "+" : ""}{hoverCandle.changePct.toFixed(2)}%</span><span>振幅 {hoverCandle.amplitudePct.toFixed(2)}%</span></div>}
       {indicators.volumeProfile.enabled && volumeProfile.length > 0 && (
         <div className="volume-profile" aria-label={`最近${indicators.volumeProfile.rangeBars}根K线固定区间成交量分布`}>
           {volumeProfile.map((bin) => (

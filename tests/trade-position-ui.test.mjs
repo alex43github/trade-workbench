@@ -104,10 +104,11 @@ test("受活动保护的持仓在分析与合约之间显示保护绿灯和比�
   assert.match(stylesSource, /protectionLight/);
 });
 
-test("保证金字段只接受接口明确返回的实际占用值", () => {
-  assert.equal(resolveOccupiedMargin({ initialMargin: "12.50", isolatedMargin: "9" }), 12.5);
+test("cross 仓位忽略包含委托保证金的 initialMargin，并按名义价值和杠杆得出仓位初始保证金", () => {
+  assert.equal(resolveOccupiedMargin({ marginType: "cross", initialMargin: "22.28811713", notional: "-9.568749", leverage: "75" }), 0.12758332);
   assert.equal(resolveOccupiedMargin({ positionInitialMargin: "8.25" }), 8.25);
-  assert.equal(resolveOccupiedMargin({ isolatedMargin: "0", notional: "1000", leverage: "10" }), null);
+  assert.equal(resolveOccupiedMargin({ marginType: "isolated", isolatedMargin: "9" }), 9);
+  assert.equal(resolveOccupiedMargin({ marginType: "cross", initialMargin: "12.50", isolatedMargin: "0", notional: "0", leverage: "10" }), null);
 });
 
 test("四专家一致时生成统一的待审核金额止损止盈计划", () => {

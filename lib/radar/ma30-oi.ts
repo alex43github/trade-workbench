@@ -1,7 +1,10 @@
+export type Ma30OiDirection = "LONG" | "SHORT";
+
 export type Ma30OiCandidate = {
   symbol: string;
   eligible: boolean;
   currentOi: number;
+  direction?: Ma30OiDirection;
   [key: string]: unknown;
 };
 
@@ -24,6 +27,18 @@ export function countTrailingClosesAboveMa(closes: readonly number[], maLength =
     const close = closes[index];
     const ma = simpleMovingAverage(closes, index, maLength);
     if (!finite(close) || ma === null || close <= ma) break;
+    count += 1;
+  }
+  return count;
+}
+
+export function countTrailingClosesBelowMa(closes: readonly number[], maLength = 30) {
+  if (!Number.isInteger(maLength) || maLength < 2 || closes.length < maLength) return 0;
+  let count = 0;
+  for (let index = closes.length - 1; index >= maLength - 1; index -= 1) {
+    const close = closes[index];
+    const ma = simpleMovingAverage(closes, index, maLength);
+    if (!finite(close) || ma === null || close >= ma) break;
     count += 1;
   }
   return count;

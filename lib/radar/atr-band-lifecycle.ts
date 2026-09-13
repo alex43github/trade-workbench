@@ -34,6 +34,11 @@ export type AtrBandLifecycleSignal = {
 
 export type AtrBandLifecycleMetrics = {
   entryPrice: number;
+  entryOpenPrice: number;
+  endOpenPrice: number | null;
+  lifecycleReturnPct: number | null;
+  outsideBandBars: number;
+  lifecycleBars: number;
   currentPrice: number;
   extremePrice: number;
   maxFavorablePct: number;
@@ -229,6 +234,22 @@ function favorablePct(direction: AtrBandDirection, entryPrice: number, extremePr
   return rounded(Math.max(0, raw));
 }
 
+export function calculateLifecycleDirectionalReturn(direction: AtrBandDirection, entryPrice: number, endPrice: number) {
+  if (entryPrice <= 0) return null;
+  const raw = direction === "LONG"
+    ? ((endPrice - entryPrice) / entryPrice) * 100
+    : ((entryPrice - endPrice) / entryPrice) * 100;
+  return rounded(raw);
+}
+
+/** Reconstructs the threshold-external duration for records created before the field was persisted. */
+export function inferLegacyOutsideBandBars(input: Pick<AtrBandLifecycle, "status" | "entryTime" | "lastUpdatedTime" | "warningTime">) {
+  const hour = 60 * 60 * 1_000;
+  const boundary = input.status === "STRONG" ? input.lastUpdatedTime : input.warningTime ?? input.lastUpdatedTime;
+  const elapsed = Math.max(0, Math.floor((boundary - input.entryTime) / hour));
+  return input.status === "STRONG" ? MIN_ATR_BAND_CONSECUTIVE_BARS + elapsed : MIN_ATR_BAND_CONSECUTIVE_BARS + Math.max(0, elapsed - 1);
+}
+
 function openInterestChange(entryOi: number | null, currentOi: number | null) {
   if (entryOi === null || currentOi === null || entryOi <= 0) return null;
   return rounded(((currentOi - entryOi) / entryOi) * 100);
@@ -268,10 +289,15 @@ function createLifecycle(
     entryTime: signal.timestamp,
     warningTime: null,
     endTime: null,
-    entryPrice: signal.close,
+    entryPrice: bar.open,
+    entryOpenPrice: bar.open,
+    endOpenPrice: null,
+    lifecycleReturnPct: null,
+    outsideBandBars: signal.consecutiveBars,
+    lifecycleBars: 1,
     currentPrice: signal.close,
     extremePrice,
-    maxFavorablePct: favorablePct(signal.direction, signal.close, extremePrice),
+    maxFavorablePct: favorablePct(signal.direction, bar.open, extremePrice),
     maxAtrMultiple: rounded(Math.max(0, favorableAtrMultiple(signal.direction, maxSignedAtrDistance))),
     maxSignedAtrDistance,
     maxAtrDistance: maxSignedAtrDistance,
@@ -305,14 +331,25 @@ function applyObservation(
   const oi = updateOi(previous, currentOi);
   const warningTime = previous.warningTime ?? (status === "STRONG" ? null : signal.timestamp);
   const endTime = status === "HISTORY" ? signal.timestamp : null;
+  const previousOutsideBandBars = Number.isFinite(previous.outsideBandBars) ? previous.outsideBandBars : MIN_ATR_BAND_CONSECUTIVE_BARS;
+  const outsideBandBars = previous.status === "STRONG" && status === "STRONG"
+    ? previousOutsideBandBars + 1
+    : previousOutsideBandBars;
+  const entryOpenPrice = Number.isFinite(previous.entryOpenPrice) ? previous.entryOpenPrice : previous.entryPrice;
+  const endOpenPrice = status === "HISTORY" ? bar.open : null;
   return {
     ...previous,
     status,
     warningTime,
     endTime,
+    entryOpenPrice,
+    endOpenPrice,
+    lifecycleReturnPct: endOpenPrice === null ? null : calculateLifecycleDirectionalReturn(previous.direction, entryOpenPrice, endOpenPrice),
+    outsideBandBars,
+    lifecycleBars: (Number.isFinite(previous.lifecycleBars) ? previous.lifecycleBars : 1) + 1,
     currentPrice: signal.close,
     extremePrice,
-    maxFavorablePct: favorablePct(previous.direction, previous.entryPrice, extremePrice),
+    maxFavorablePct: favorablePct(previous.direction, entryOpenPrice, extremePrice),
     maxAtrMultiple: rounded(Math.max(0, favorableAtrMultiple(previous.direction, maxSignedAtrDistance))),
     maxSignedAtrDistance: rounded(maxSignedAtrDistance),
     maxAtrDistance: rounded(maxSignedAtrDistance),
@@ -345,7 +382,7 @@ export function transitionAtrBandLifecycle(
 
   const multiplier = observation.multiplier ?? DEFAULT_ATR_MULTIPLIER;
   const bar = bars.at(-1) as LifecycleBar | undefined;
-  if (!bar || ![bar.high, bar.low, bar.close, bar.closeTime].every(finite)) return previous;
+  if (!bar || ![bar.open, bar.high, bar.low, bar.close, bar.closeTime].every(finite)) return previous;
   if (previous && previous.symbol !== symbol) return previous;
 
   const signal = previous

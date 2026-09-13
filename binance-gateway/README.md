@@ -115,3 +115,6 @@ BINANCE_GATEWAY_TOKEN=与网关 .env 相同
   执行 `timedatectl set-ntp true`。
 - **私接口 400 missing signature**：确认 `.env` 中 `BINANCE_GATEWAY_API_KEY` /
   `BINANCE_GATEWAY_API_SECRET` 已填且重启过服务。
+- **私接口 `Signature for this request is not valid`**：签名必须覆盖完整的查询参数和
+  `POST` 表单参数。当前网关会把 `timestamp`、`recvWindow`、`signature` 追加到请求体后再转发，
+  不要在网站侧自行生成或改写签名。

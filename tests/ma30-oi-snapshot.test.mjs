@@ -18,6 +18,25 @@ test("builds a ready snapshot with eligible candidates sorted by current OI", as
   assert.equal(snapshot.candidates[0].oiExpansionPct, 20);
 });
 
+test("builds both long and short MA30/OI candidates from closed candles", async () => {
+  const snapshot = await buildMa30OiSnapshot({
+    listSymbols: async () => ["LONGUSDT", "SHORTUSDT"],
+    fetchClosedHourlyCloses: async (symbol) => symbol === "LONGUSDT"
+      ? [...flat(100, 30), ...flat(110, 7)]
+      : [...flat(100, 30), ...flat(90, 7)],
+    fetchDailyOi: async () => [...flat(100, 10), 120],
+    fetchCurrentOi: async (symbol) => symbol === "LONGUSDT" ? 500 : 800,
+  }, new Date("2026-08-20T00:30:00.000Z"));
+
+  assert.equal(snapshot.status, "ready");
+  assert.deepEqual(snapshot.candidates.map((item) => [item.symbol, item.direction]), [
+    ["SHORTUSDT", "SHORT"],
+    ["LONGUSDT", "LONG"],
+  ]);
+  assert.equal(snapshot.candidates.find((item) => item.direction === "LONG")?.consecutiveAboveMa, 7);
+  assert.equal(snapshot.candidates.find((item) => item.direction === "SHORT")?.consecutiveBelowMa, 7);
+});
+
 test("marks a scan degraded when every symbol is missing required data", async () => {
   const snapshot = await buildMa30OiSnapshot({
     listSymbols: async () => ["AAAUSDT"],

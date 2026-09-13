@@ -59,9 +59,10 @@ test("trade chart uses the requested clean MA and ATR defaults", () => {
   assert.doesNotMatch(chartSource, /MA触及/);
 });
 
-test("trade chart markers are based only on executed fills and never include marker text", () => {
-  assert.match(chartSource, /buildFillMarkers/);
-  assert.match(chartSource, /refs\.markers\.setMarkers\(buildFillMarkers/);
+test("trade chart combines executed-fill and closed-candle reversal markers without marker text", () => {
+  assert.match(chartSource, /buildChartMarkers/);
+  assert.match(chartSource, /refs\.markers\.setMarkers\(\[\]\);[\s\S]*refs\.candles\.setData\(candleData\)/);
+  assert.match(chartSource, /refs\.markers\.setMarkers\(buildChartMarkers\(bars, fills\)/);
   assert.doesNotMatch(chartSource, /bar\.low <= band\.upper/);
   const markerUpdate = chartSource.match(/refs\.markers\.setMarkers\(([\s\S]*?)\);/)?.[1] ?? "";
   assert.doesNotMatch(markerUpdate, /text:\s*"/);
@@ -103,10 +104,11 @@ test("positions keep the same wizard shell and show an explicit add-only warning
   assert.match(wizardSource, /只新增限价策略，不自动平仓/);
 });
 
-test("the unified strategy panel uses final live confirmation instead of the retired conditional endpoint", () => {
+test("the unified strategy panel uses one-click final live confirmation instead of the retired conditional endpoint", () => {
   assert.match(wizardSource, /下单笔数/);
   assert.match(wizardSource, /api\/trade\/live-strategies/);
-  assert.match(wizardSource, /输入 CONFIRM/);
+  assert.match(wizardSource, /确认建立实盘策略/);
+  assert.doesNotMatch(wizardSource, /liveConfirmation|输入 CONFIRM|实盘确认/);
   assert.doesNotMatch(strategyPanelSource, /api\/trade\/conditional-orders/);
   assert.doesNotMatch(terminalSource, /api\/trade\/conditional-orders/);
   assert.doesNotMatch(terminalSource, /conditionalRevision|onConditionalChanged|waitingOrders/);

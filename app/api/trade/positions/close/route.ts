@@ -1,6 +1,3 @@
-import crypto from "node:crypto";
-import { getD1 } from "../../../../../db/index.ts";
-import { ensureLiveManualCloseSchema } from "../../../../../db/ensure.ts";
 import { getGatewayConfig, gatewayJson } from "../../../../../lib/binance-gateway.ts";
 import { requireOperatorMutation } from "../../../../../lib/security/operator-guard.ts";
 import {
@@ -11,6 +8,11 @@ import {
   type LivePositionSnapshot,
   type MarketCloseOrder,
 } from "../../../../../lib/trade/live-position-close.ts";
+import {
+  normalizeManualCloseIdempotencyKey,
+  recordManualCloseOutcome,
+  reserveManualClose,
+} from "../../../../../lib/trade/live-manual-close-idempotency.ts";
 import { isBinanceFuturesSymbol } from "../../../../../lib/trade/symbols.ts";
 
 type RuntimeEnv = Record<string, string | undefined>;
@@ -43,14 +45,28 @@ function liveTradingEnabled(env: RuntimeEnv) {
     && getGatewayConfig(env).configured;
 }
 
-function newClientOrderId() {
-  return `webMC${crypto.randomUUID().replaceAll("-", "").slice(0, 31)}`;
-}
-
 function isTimeoutError(error: unknown) {
   const name = error instanceof Error ? error.name : "";
   const message = error instanceof Error ? error.message : String(error);
   return name === "AbortError" || name === "TimeoutError" || /timeout|超时/i.test(message);
+}
+
+function exchangeCloseError(error: unknown) {
+  const record = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const rawCode = record.code;
+  const code = typeof rawCode === "number" || (typeof rawCode === "string" && /^-?\d{1,8}$/.test(rawCode))
+    ? String(rawCode)
+    : "";
+  const rawMessage = typeof record.msg === "string"
+    ? record.msg
+    : error instanceof Error ? error.message : "";
+  const message = rawMessage
+    .replace(/(?:authorization|bearer|token|api[_ -]?key|secret|signature)\s*(?:[:=]|\s)\s*[^\s&]+/gi, "[已隐藏]")
+    .replace(/(?:^|[?&])(symbol|quantity|price|timestamp|recvWindow)=[^\s&]*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+  return `币安拒绝了这次真实平仓请求${code ? `（代码 ${code}）` : ""}${message ? `：${message}` : "，请刷新持仓后重试"}`;
 }
 
 function safeOrder(order: BinanceOrderResult, fallbackClientOrderId: string) {
@@ -60,18 +76,6 @@ function safeOrder(order: BinanceOrderResult, fallbackClientOrderId: string) {
     status: order.status || "UNKNOWN",
     executedQty: order.executedQty || "0",
   };
-}
-
-async function persistAudit(record: CloseAuditRecord) {
-  await ensureLiveManualCloseSchema();
-  const db = await getD1();
-  await db.prepare(`INSERT INTO live_manual_closes
-    (id, symbol, position_side, requested_percent, quantity, client_order_id, exchange_order_id, status, recovered)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(
-      crypto.randomUUID(), record.symbol, record.positionSide, record.requestedPercent, record.quantity,
-      record.clientOrderId, record.exchangeOrderId, record.status, record.recovered ? 1 : 0,
-    ).run();
 }
 
 function invalid(message: string, status = 400) {
@@ -91,6 +95,7 @@ export function createLivePositionClosePost(dependencies: CloseDependencies = {}
       side: order.side,
       type: order.type,
       quantity: order.quantity,
+      workbenchOrderIntent: order.workbenchOrderIntent,
       newClientOrderId: order.newClientOrderId,
       });
       if (order.positionSide) params.set("positionSide", order.positionSide);
@@ -101,7 +106,7 @@ export function createLivePositionClosePost(dependencies: CloseDependencies = {}
   const findOrder = dependencies.findOrder ?? ((input) => gatewayJson<BinanceOrderResult>(
     `/fapi/v1/order?symbol=${encodeURIComponent(input.symbol)}&origClientOrderId=${encodeURIComponent(input.clientOrderId)}`,
   ));
-  const audit = dependencies.audit ?? persistAudit;
+  const audit = dependencies.audit;
 
   return async function POST(request: Request) {
     const denied = await requireOperatorMutation(request, env);
@@ -118,8 +123,9 @@ export function createLivePositionClosePost(dependencies: CloseDependencies = {}
     if (body.confirmation !== "CLOSE_MARKET") return invalid("请先完成市价平仓二次确认");
     if (body.liveSwitchOn !== true) return invalid("实盘开关未开启", 403);
     const requestedPositionSide = typeof body.positionSide === "string" ? body.positionSide : undefined;
-    const clientOrderId = typeof body.clientOrderId === "string" && body.clientOrderId ? body.clientOrderId : newClientOrderId();
-    if (!/^webMC[A-Za-z0-9]{16,32}$/.test(clientOrderId)) return invalid("平仓请求编号无效");
+    let idempotencyKey: string;
+    try { idempotencyKey = normalizeManualCloseIdempotencyKey(body.idempotencyKey); }
+    catch (error) { return invalid(error instanceof Error ? error.message : "真实平仓幂等编号无效"); }
 
     try {
       const [positionRisk, exchangeInfo] = await Promise.all([readPositionRisk(), readExchangeInfo()]);
@@ -131,6 +137,16 @@ export function createLivePositionClosePost(dependencies: CloseDependencies = {}
       const position = matching[0];
       const symbolInfo = exchangeInfo.symbols?.find((item) => item.symbol === symbol);
       if (!symbolInfo?.filters) return invalid("交易所未返回该合约的数量规则，已拒绝平仓", 502);
+      const semantics = { symbol, positionSide: requestedPositionSide ?? "AUTO", percent, type: "MARKET" as const };
+      const reservation = await reserveManualClose({ idempotencyKey, semantics });
+      const clientOrderId = reservation.record.clientOrderId;
+      if (reservation.replay) {
+        const existing = await findOrder({ symbol, clientOrderId }).catch(() => null);
+        if (!existing) return invalid("真实平仓请求已有未确认结果，已拒绝自动重发", 409);
+        const orderSummary = safeOrder(existing, clientOrderId);
+        await recordManualCloseOutcome({ idempotencyKey, quantity: reservation.record.quantity, exchangeOrderId: orderSummary.orderId, status: orderSummary.status, recovered: true });
+        return Response.json({ ok: true, symbol, side: Number(position.positionAmt) > 0 ? "SELL" : "BUY", percent, quantity: reservation.record.quantity, recovered: true, auditRecorded: true, order: orderSummary }, { headers: { "cache-control": "no-store" } });
+      }
       const order = buildMarketCloseOrder({ position, percent, filters: symbolInfo.filters, clientOrderId });
 
       let result: BinanceOrderResult;
@@ -138,17 +154,24 @@ export function createLivePositionClosePost(dependencies: CloseDependencies = {}
       try {
         result = await placeOrder(order);
       } catch (error) {
-        if (!isTimeoutError(error)) return invalid("币安拒绝了这次真实平仓请求，请刷新持仓后重试", 502);
+        if (!isTimeoutError(error)) {
+          await recordManualCloseOutcome({ idempotencyKey, quantity: order.quantity, exchangeOrderId: null, status: "REJECTED", recovered: false });
+          return invalid(exchangeCloseError(error), 502);
+        }
         const existing = await findOrder({ symbol, clientOrderId }).catch(() => null);
-        if (!existing) return invalid("真实平仓请求结果未确认，请先到币安活动委托核对，系统没有自动重复下单", 502);
+        if (!existing) {
+          await recordManualCloseOutcome({ idempotencyKey, quantity: order.quantity, exchangeOrderId: null, status: "UNKNOWN", recovered: false });
+          return invalid("真实平仓请求结果未确认，请先到币安活动委托核对，系统没有自动重复下单", 502);
+        }
         result = existing;
         recovered = true;
       }
 
       const orderSummary = safeOrder(result, clientOrderId);
+      await recordManualCloseOutcome({ idempotencyKey, quantity: order.quantity, exchangeOrderId: orderSummary.orderId, status: orderSummary.status, recovered });
       let auditRecorded = true;
       try {
-        await audit({
+        await audit?.({
           symbol,
           positionSide: position.positionSide || "BOTH",
           requestedPercent: percent,

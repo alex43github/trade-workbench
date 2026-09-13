@@ -1,4 +1,5 @@
 import { normalizeBinanceFuturesSymbol } from "@/lib/trade/symbols";
+import { resolvePriceTickSize } from "./trade/priceFormat";
 
 export type PublicMarketBar = {
   time: number;
@@ -39,10 +40,20 @@ export async function fetchBrowserBinanceKlines(symbolValue: string, intervalVal
   endpoint.searchParams.set("symbol", symbol);
   endpoint.searchParams.set("interval", interval);
   endpoint.searchParams.set("limit", String(limit));
-  const response = await fetch(endpoint, { cache: "no-store", signal: AbortSignal.timeout(8_000) });
+  const exchangeInfoEndpoint = new URL(`${BINANCE_FUTURES}/fapi/v1/exchangeInfo`);
+  exchangeInfoEndpoint.searchParams.set("symbol", symbol);
+  const [response, exchangeInfoResponse] = await Promise.all([
+    fetch(endpoint, { cache: "no-store", signal: AbortSignal.timeout(8_000) }),
+    fetch(exchangeInfoEndpoint, { cache: "no-store", signal: AbortSignal.timeout(8_000) }).catch(() => null),
+  ]);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const payload: unknown = await response.json();
   if (!Array.isArray(payload)) throw new Error("invalid_kline_payload");
+  let priceTickSize: number | null = null;
+  if (exchangeInfoResponse?.ok) {
+    try { priceTickSize = resolvePriceTickSize(await exchangeInfoResponse.json(), symbol); }
+    catch { priceTickSize = null; }
+  }
   const now = Date.now();
   const bars = payload
     .filter(Array.isArray)
@@ -54,5 +65,5 @@ export async function fetchBrowserBinanceKlines(symbolValue: string, intervalVal
     .filter((bar) => bar.time > 0 && bar.close > 0)
     .sort((a, b) => a.time - b.time);
   if (bars.length < 30) throw new Error("insufficient_klines");
-  return { mode: "live" as const, symbol, interval, updatedAt: new Date().toISOString(), bars };
+  return { mode: "live" as const, symbol, interval, updatedAt: new Date().toISOString(), bars, priceTickSize };
 }

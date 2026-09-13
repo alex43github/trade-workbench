@@ -28,6 +28,26 @@ function json(value: unknown, status = 200) {
   return Response.json(sanitize(value), { status, headers: { "cache-control": "no-store" } });
 }
 
+export async function adaptRadarNodeRequest(
+  request: AsyncIterable<Uint8Array | string> & { headers: Record<string, string | string[] | undefined>; method?: string; url?: string },
+  origin: string,
+) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (Array.isArray(value)) value.forEach((item) => headers.append(key, item));
+    else if (value !== undefined) headers.set(key, value);
+  }
+  const method = request.method ?? "GET";
+  return new Request(`${origin}${request.url ?? "/"}`, {
+    method,
+    headers,
+    body: method === "GET" || method === "HEAD" ? undefined : body,
+  });
+}
+
 export function createRadarHttpServer(options: RadarApiOptions) {
   return {
     async fetch(request: Request) {
@@ -66,20 +86,7 @@ export async function listenRadarHttpServer(
   const port = options.port ?? 8_790;
   const server = createServer(async (request, response) => {
     try {
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
-      const headers = new Headers();
-      for (const [key, value] of Object.entries(request.headers)) {
-        if (Array.isArray(value)) value.forEach((item) => headers.append(key, item));
-        else if (value !== undefined) headers.set(key, value);
-      }
-      const method = request.method ?? "GET";
-      const webRequest = new Request(`http://${request.headers.host ?? `${hostname}:${port}`}${request.url ?? "/"}`, {
-        method,
-        headers,
-        body: method === "GET" || method === "HEAD" ? undefined : body,
-      });
+      const webRequest = await adaptRadarNodeRequest(request, `http://${request.headers.host ?? `${hostname}:${port}`}`);
       const webResponse = await api.fetch(webRequest);
       response.statusCode = webResponse.status;
       webResponse.headers.forEach((value, key) => response.setHeader(key, value));

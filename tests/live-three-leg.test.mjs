@@ -30,6 +30,7 @@ test("builds exactly three LONG GTX orders around MA and ATR", () => {
     strategy,
     market,
     filters,
+    positionMode: "HEDGE",
     availableBalance: 100,
     clientOrderIds: ["webIN1", "webIN2", "webIN3"],
   });
@@ -40,8 +41,30 @@ test("builds exactly three LONG GTX orders around MA and ATR", () => {
     ["web0002", "100.0", "BUY", "LIMIT", "GTX"],
     ["web0003", "90.0", "BUY", "LIMIT", "GTX"],
   ]);
+  assert.deepEqual(orders.map((order) => order.positionSide), ["LONG", "LONG", "LONG"]);
   assert.deepEqual(orders.map((order) => order.quantity), ["0.27", "0.30", "0.33"]);
   assert.deepEqual(orders.map((order) => order.newClientOrderId), ["webIN1", "webIN2", "webIN3"]);
+});
+
+test("treats each leg amount as margin and applies the current leverage to order notional", () => {
+  const orders = buildThreeLiveEntryOrders({
+    strategy: {
+      ...strategy,
+      totalMarginUsdt: 30,
+      legs: [
+        { websiteOrderId: "web0001", atrOffset: 1, marginUsdt: 10 },
+        { websiteOrderId: "web0002", atrOffset: 0, marginUsdt: 10 },
+        { websiteOrderId: "web0003", atrOffset: -1, marginUsdt: 10 },
+      ],
+    },
+    leverage: 10,
+    market,
+    filters: [{ filterType: "LOT_SIZE", stepSize: "0.01", minQty: "0.01" }, { filterType: "MIN_NOTIONAL", notional: "90" }],
+    availableBalance: 30,
+    clientOrderIds: ["webIN21", "webIN22", "webIN23"],
+  });
+
+  assert.deepEqual(orders.map((order) => order.quantity), ["0.90", "1.00", "1.11"]);
 });
 
 test("builds exactly three SHORT GTX orders with the same strategy prices", () => {
@@ -49,11 +72,13 @@ test("builds exactly three SHORT GTX orders with the same strategy prices", () =
     strategy: { ...strategy, side: "SHORT" },
     market,
     filters,
+    positionMode: "HEDGE",
     availableBalance: 100,
     clientOrderIds: ["webIN4", "webIN5", "webIN6"],
   });
 
   assert.deepEqual(orders.map((order) => order.side), ["SELL", "SELL", "SELL"]);
+  assert.deepEqual(orders.map((order) => order.positionSide), ["SHORT", "SHORT", "SHORT"]);
   assert.deepEqual(orders.map((order) => order.price), ["110.0", "100.0", "90.0"]);
 });
 

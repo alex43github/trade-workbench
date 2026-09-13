@@ -21,9 +21,11 @@ test("long-running radar scans are scheduled in the background", async () => {
 
 test("scheduled maintenance keeps using awaitable scan functions", async () => {
   const source = await readFile(new URL("app/api/advisory/maintenance/route.ts", root), "utf8");
+  const reversalRoute = await readFile(new URL("app/api/radar/reversal/route.ts", root), "utf8");
 
   assert.match(source, /runMa30OiScan/);
   assert.match(source, /runReversalScan/);
+  assert.match(reversalRoute, /runReversalScan\(intervals: ReversalInterval\[\] = \[\.\.\.REVERSAL_INTERVALS\]/);
   assert.doesNotMatch(source, /scanReversal\(/);
   assert.doesNotMatch(source, /scanMa30Oi\(/);
 });

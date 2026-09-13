@@ -134,6 +134,8 @@ export async function fetchPaperStrategyMarketSnapshot(
       id: `${symbol}:${timeframe}:${latest.openTime}`,
       isNewClosedCandle: true,
       close: latest.close,
+      high: latest.high,
+      low: latest.low,
       timeframe,
       maKind,
       maLength,

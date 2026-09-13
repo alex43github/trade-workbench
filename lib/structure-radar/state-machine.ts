@@ -26,6 +26,7 @@ export type TrackedSignal = {
   expiresAfterBars: number;
   lastProcessedBarTime: number;
   processedBars?: number;
+  score?: number;
   reason?: string;
   consensusGrade?: string;
   planHash?: string;

@@ -43,6 +43,7 @@ export type ProtectionOrderPlan = {
   positionSide: ProtectionPositionSide;
   type: "MARKET" | "TAKE_PROFIT_MARKET" | "STOP_MARKET";
   quantity: string;
+  workbenchOrderIntent: "EXIT_ONLY";
   stopPrice?: string;
   reduceOnly: true;
   newClientOrderId: string;

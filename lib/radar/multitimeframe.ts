@@ -9,6 +9,20 @@ import {
   type VegasInterval,
 } from "./vegas.ts";
 import { createScanProgress, type RadarScanProgress, type ScanProgressOptions } from "./scan-progress.ts";
+import {
+  calculateHistoricalEvidence,
+  countTrailingMa30Closes,
+  evaluateMa30Conditions,
+  matchesFineConditions,
+  rankFineCandidates,
+  scoreFineCandidate,
+  type FineCandidate,
+  type FineCondition,
+  type FineCombinationMode,
+  type FineHistoricalEvidence,
+  type FineScreenRequest,
+  type FineVegasEvidence,
+} from "./fine-screen.ts";
 
 export type MultiTimeframeSnapshot = {
   status: "ready" | "degraded" | "pending";
@@ -23,10 +37,24 @@ export type MultiTimeframeSnapshot = {
   failedSymbols: number;
   progress: RadarScanProgress;
   warning?: string;
+  fine?: FineScreenSnapshot;
+};
+
+export type FineScreenSnapshot = {
+  request: FineScreenRequest;
+  status: "ready" | "degraded" | "pending";
+  symbols: string[];
+  results: FineCandidate[];
+  scannedSymbols: number;
+  matchedSymbols: number;
+  deepScannedSymbols: number;
+  failedSymbols: number;
+  warning?: string;
 };
 
 export type MultiTimeframeFetchers = {
   fetchClosedBars: (symbol: string, interval: MultiTimeframeInterval, now: Date) => Promise<ClosedBar[]>;
+  fetchHourlyOi?: (symbol: string, now: Date) => Promise<Array<{ timestamp: number; openInterest: number }>>;
 };
 
 export const MULTI_TIMEFRAME_SNAPSHOT_TTL_MS = 30 * 60 * 1_000;
@@ -58,6 +86,7 @@ function validBar(bar: ClosedBar, nowMs: number) {
 
 async function scanSymbol(symbol: string, now: Date, fetchers: MultiTimeframeFetchers) {
   const byInterval: Partial<Record<MultiTimeframeInterval, TimeframeIndicatorSnapshot>> = {};
+  const barsByInterval: Partial<Record<MultiTimeframeInterval, ClosedBar[]>> = {};
   const failedIntervals: MultiTimeframeInterval[] = [];
   const insufficientMa30Intervals: Ma30ScreenInterval[] = [];
   const insufficientShortIntervals: VegasInterval[] = [];
@@ -68,6 +97,7 @@ async function scanSymbol(symbol: string, now: Date, fetchers: MultiTimeframeFet
         .filter((bar) => validBar(bar, now.getTime()))
         .toSorted((left, right) => left.closeTime - right.closeTime);
       const latest = bars.at(-1);
+      barsByInterval[interval] = bars;
       const snapshot = latest ? buildTimeframeIndicatorSnapshot(bars.map((bar) => bar.close), latest.closeTime) : null;
       if (snapshot) byInterval[interval] = snapshot;
       if ((MA30_SCREEN_INTERVALS as readonly string[]).includes(interval) && bars.length < 30) {
@@ -82,14 +112,98 @@ async function scanSymbol(symbol: string, now: Date, fetchers: MultiTimeframeFet
       failedIntervals.push(interval);
     }
   }
-  return { byInterval, failedIntervals, insufficientMa30Intervals, insufficientShortIntervals, insufficientLongIntervals };
+  return { byInterval, barsByInterval, failedIntervals, insufficientMa30Intervals, insufficientShortIntervals, insufficientLongIntervals };
+}
+
+function vegasSpreadRatio(indicator: TimeframeIndicatorSnapshot | undefined) {
+  if (!indicator || !Number.isFinite(indicator.ma30) || indicator.ma30 === 0) return null;
+  const values = [indicator.ma30, indicator.ema144, indicator.ema169, indicator.ema576, indicator.ema676];
+  const finiteValues = values.filter(Number.isFinite);
+  if (finiteValues.length < 3) return null;
+  const spread = finiteValues.slice(1).reduce((sum, value, index) => sum + Math.abs(finiteValues[index] - value), 0);
+  return spread / Math.abs(indicator.ma30);
+}
+
+function preferredVegasEvidence(byInterval: Partial<Record<MultiTimeframeInterval, TimeframeIndicatorSnapshot>>, direction: "BULLISH" | "BEARISH" | null): FineVegasEvidence | null {
+  const candidates = VEGAS_INTERVALS
+    .map((interval) => byInterval[interval])
+    .filter((indicator): indicator is TimeframeIndicatorSnapshot => indicator !== undefined && (!direction || indicator.alignment === direction));
+  if (!candidates.length) return null;
+  const best = candidates.toSorted((left, right) => {
+    const modeRank = (value: TimeframeIndicatorSnapshot) => value.alignmentMode === "FULL" ? 2 : value.alignmentMode === "SHORT" ? 1 : 0;
+    return modeRank(right) - modeRank(left) || (vegasSpreadRatio(right) ?? 0) - (vegasSpreadRatio(left) ?? 0);
+  })[0];
+  if (!best) return null;
+  return { alignment: best.alignment, mode: best.alignmentMode, spreadRatio: vegasSpreadRatio(best) };
+}
+
+function trendPersistence(result: Awaited<ReturnType<typeof scanSymbol>>, direction: "LONG" | "SHORT" | "MIXED" | "NEUTRAL") {
+  if (direction === "NEUTRAL") return 0;
+  const directions = direction === "MIXED" ? (["LONG", "SHORT"] as const) : ([direction] as const);
+  return Math.max(0, ...directions.flatMap((item) => MA30_SCREEN_INTERVALS.map((interval) => countTrailingMa30Closes(result.barsByInterval[interval] ?? [], 30, item))));
+}
+
+async function buildFineScreenSnapshot(
+  symbols: readonly string[],
+  results: Map<string, Awaited<ReturnType<typeof scanSymbol>>>,
+  request: FineScreenRequest,
+  fetchers: MultiTimeframeFetchers,
+  now: Date,
+): Promise<FineScreenSnapshot> {
+  const preCandidates: Array<{ symbol: string; result: Awaited<ReturnType<typeof scanSymbol>>; matchedConditions: FineCondition[]; cheapScore: FineCandidate }> = [];
+  for (const symbol of symbols) {
+    const result = results.get(symbol);
+    if (!result) continue;
+    const match = matchesFineConditions(evaluateMa30Conditions(result.byInterval), request);
+    if (!match.passes) continue;
+    const hasLong = match.matchedConditions.some((condition) => condition.startsWith("LONG_"));
+    const hasShort = match.matchedConditions.some((condition) => condition.startsWith("SHORT_"));
+    const direction = hasLong && hasShort ? "MIXED" : hasLong ? "LONG" : "SHORT";
+    const vegas = preferredVegasEvidence(result.byInterval, direction === "LONG" ? "BULLISH" : direction === "SHORT" ? "BEARISH" : null);
+    const cheapScore = scoreFineCandidate({ symbol, matchedConditions: match.matchedConditions, trendPersistence: trendPersistence(result, direction), vegas });
+    preCandidates.push({ symbol, result, matchedConditions: match.matchedConditions, cheapScore });
+  }
+  const ordered = preCandidates.toSorted((left, right) => right.cheapScore.score - left.cheapScore.score || left.symbol.localeCompare(right.symbol));
+  const scored: FineCandidate[] = [];
+  let failedSymbols = 0;
+  for (let index = 0; index < ordered.length; index += 3) {
+    const batch = ordered.slice(index, index + 3);
+    const batchResults = await Promise.all(batch.map(async ({ symbol, result, matchedConditions, cheapScore }) => {
+      let evidence: FineHistoricalEvidence = {};
+      try {
+        const bars = result.barsByInterval["1h"] ?? [];
+        const oi = fetchers.fetchHourlyOi ? await fetchers.fetchHourlyOi(symbol, now) : [];
+        evidence = calculateHistoricalEvidence(bars, oi);
+      } catch {
+        failedSymbols += 1;
+      }
+      const direction = cheapScore.direction;
+      const vegas = preferredVegasEvidence(result.byInterval, direction === "LONG" ? "BULLISH" : direction === "SHORT" ? "BEARISH" : null);
+      const latestVolume = (result.barsByInterval["1h"] ?? []).slice(-3).map((bar) => bar.volume ?? Number.NaN).filter(Number.isFinite);
+      const liquidityScore = latestVolume.length && Math.max(...latestVolume) >= 1_000_000 ? 5 : latestVolume.length ? 2 : null;
+      return scoreFineCandidate({ symbol, matchedConditions, trendPersistence: trendPersistence(result, direction), vegas, ...evidence, liquidityScore });
+    }));
+    scored.push(...batchResults);
+  }
+  const resultsRanked = rankFineCandidates(scored);
+  return {
+    request,
+    status: failedSymbols ? "degraded" : "ready",
+    symbols: [...symbols],
+    results: resultsRanked,
+    scannedSymbols: symbols.length,
+    matchedSymbols: preCandidates.length,
+    deepScannedSymbols: ordered.length,
+    failedSymbols,
+    ...(failedSymbols ? { warning: `${failedSymbols} 个候选的深度量能/OI数据读取失败，已保留基础评分` } : {}),
+  };
 }
 
 export async function buildMultiTimeframeSnapshot(
   symbolsInput: readonly string[],
   now = new Date(),
   fetchers: MultiTimeframeFetchers,
-  options: ScanProgressOptions = {},
+  options: ScanProgressOptions & { fineRequest?: FineScreenRequest } = {},
 ): Promise<MultiTimeframeSnapshot> {
   const symbols = normalizeSymbols(symbolsInput);
   await options.onProgress?.(createScanProgress(symbols.length));
@@ -152,7 +266,7 @@ export async function buildMultiTimeframeSnapshot(
   if (insufficientLongCount) warnings.push("部分币种长期 Vegas 历史不足 676 根，已忽略长期通道，按 MA30 + 短期 Vegas 筛选");
   const progress = createScanProgress(symbols.length, symbols.length, matchedSymbols);
   await options.onProgress?.(progress);
-  return {
+  const baseSnapshot: MultiTimeframeSnapshot = {
     status: symbols.length > 0 && failedSymbols === 0 && failedIntervals === 0 && insufficientMa30Count === 0 && insufficientShortCount === 0 ? "ready" : "degraded",
     scannedAt: now.toISOString(),
     timezone: "Asia/Shanghai",
@@ -166,6 +280,9 @@ export async function buildMultiTimeframeSnapshot(
     progress,
     ...(warnings.length ? { warning: warnings.join("；") } : {}),
   };
+  if (!options.fineRequest?.conditions.length) return baseSnapshot;
+  const fine = await buildFineScreenSnapshot(symbols, results, options.fineRequest, fetchers, now);
+  return { ...baseSnapshot, fine };
 }
 
 export async function saveMultiTimeframeSnapshot(db: MultiTimeframeDb, snapshot: MultiTimeframeSnapshot) {

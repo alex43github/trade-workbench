@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createRadarHttpServer, listenRadarHttpServer } from "../services/structure-radar/http-server.ts";
+import { adaptRadarNodeRequest, createRadarHttpServer, listenRadarHttpServer } from "../services/structure-radar/http-server.ts";
 import { RadarOrchestrator, runFourExpertConsultation } from "../services/structure-radar/orchestrator.ts";
 import { RadarRepository } from "../services/structure-radar/radar-repository.ts";
 import { KlineWebSocketFeed, reconnectDelay } from "../services/structure-radar/websocket-feed.ts";
 import { loadRadarConfig } from "../services/structure-radar/config.ts";
-import { bootstrapMarket, isNotifiableSignalState } from "../services/structure-radar/runtime.ts";
+import { bootstrapMarket, isNotifiableSignalState, radarHealthStatus, trendRadarHealthStatus, SQUEEZE_SCAN_CADENCE_MS, SQUEEZE_SCAN_STALE_AFTER_MS } from "../services/structure-radar/runtime.ts";
 import { BarCache } from "../services/structure-radar/bar-cache.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -98,6 +98,19 @@ test("loopback API exposes sanitized health, list, detail, and token-protected r
   assert.equal((await api.fetch(new Request("http://127.0.0.1/rescan", { method: "POST" }))).status, 401);
   assert.equal((await api.fetch(new Request("http://127.0.0.1/rescan", { method: "POST", headers: { authorization: "Bearer local-token" } }))).status, 202);
   assert.equal(rescans, 1);
+});
+
+test("in-process Node request adapter reaches the health handler without opening a loopback listener", async () => {
+  const api = createRadarHttpServer({
+    token: "token", repository: { async list() { return []; }, async get() { return null; } },
+    health: () => ({ status: "ok" }), async rescan() { return { accepted: true }; },
+  });
+  const nodeRequest = Object.assign((async function* () {})(), {
+    headers: { host: "127.0.0.1:8790", "x-radar-test": "in-process" }, method: "GET", url: "/health",
+  });
+  const request = await adaptRadarNodeRequest(nodeRequest, "http://127.0.0.1:8790");
+  assert.equal(request.headers.get("x-radar-test"), "in-process");
+  assert.deepEqual(await (await api.fetch(request)).json(), { status: "ok" });
 });
 
 test("repository restores enriched signals and immutable consultation history", async () => {
@@ -192,6 +205,54 @@ test("daemon configuration is loopback-only and notifications default off", () =
   assert.equal(config.port, 9_000);
   assert.equal(config.notificationsEnabled, false);
   assert.deepEqual(config.timeframes, ["15m", "1h", "4h"]);
+});
+
+test("health is fresh only within two hourly squeeze scan cadences and recovers after a fresh scan", () => {
+  const now = Date.parse("2026-09-13T06:00:00.000Z");
+  assert.equal(radarHealthStatus({
+    bootstrapFailures: 12,
+    lastSuccessfulScanAt: new Date(now - SQUEEZE_SCAN_CADENCE_MS).toISOString(),
+    lastCycle: { dataSourceDegraded: 0 },
+    now,
+  }), "ok");
+  assert.equal(radarHealthStatus({
+    bootstrapFailures: 0,
+    lastSuccessfulScanAt: null,
+    lastCycle: { dataSourceDegraded: 0 },
+    now,
+  }), "degraded");
+  assert.equal(radarHealthStatus({
+    bootstrapFailures: 0,
+    lastSuccessfulScanAt: new Date(now - SQUEEZE_SCAN_STALE_AFTER_MS - 1).toISOString(),
+    lastCycle: { dataSourceDegraded: 0 },
+    now,
+  }), "degraded");
+  assert.equal(radarHealthStatus({
+    bootstrapFailures: 0,
+    lastSuccessfulScanAt: new Date(now - SQUEEZE_SCAN_STALE_AFTER_MS - 1).toISOString(),
+    lastCycle: { dataSourceDegraded: 1 },
+    now,
+  }), "degraded");
+  assert.equal(radarHealthStatus({
+    bootstrapFailures: 0,
+    lastSuccessfulScanAt: "not-a-date",
+    lastCycle: { dataSourceDegraded: 0 },
+    now,
+  }), "degraded");
+  assert.equal(radarHealthStatus({
+    bootstrapFailures: 0,
+    lastSuccessfulScanAt: new Date(now).toISOString(),
+    lastCycle: { dataSourceDegraded: 0 },
+    now,
+  }), "ok");
+});
+
+test("trend health fails closed for missing, stale, or invalid successful cycle evidence", () => {
+  const now = Date.parse("2026-09-13T06:00:00.000Z");
+  assert.equal(trendRadarHealthStatus({ lastSuccessfulCycleAt: null, now }), "degraded");
+  assert.equal(trendRadarHealthStatus({ lastSuccessfulCycleAt: "not-a-date", now }), "degraded");
+  assert.equal(trendRadarHealthStatus({ lastSuccessfulCycleAt: new Date(now - SQUEEZE_SCAN_STALE_AFTER_MS - 1).toISOString(), now }), "degraded");
+  assert.equal(trendRadarHealthStatus({ lastSuccessfulCycleAt: new Date(now).toISOString(), now }), "ok");
 });
 
 test("candidate, confirmation, add, target, and invalidation states are notifiable", () => {

@@ -58,11 +58,13 @@ test("Telegram webhook sends one private home reply only for a newly claimed upd
   assert.equal(sent.length, 1);
   assert.match(sent[0].url, /api\.telegram\.org\/bot123456:.*\/sendMessage/);
   assert.match(sent[0].body.text, /交易机器人/);
-  assert.deepEqual(sent[0].body.reply_markup.inline_keyboard.map((row) => row.map((button) => button.text)), [
-    ["建立实盘策略", "实盘持仓"],
-    ["实盘挂单", "实盘策略管理"],
-    ["挂止盈止损策略单"],
+  assert.deepEqual(sent[0].body.reply_markup.keyboard.map((row) => row.map((button) => button.text)), [
+    ["⚡ 默认下单", "⚙️ 完整策略"],
+    ["📊 实盘持仓", "📋 实盘挂单"],
+    ["🛡️ 手动持仓保护", "🗂️ 策略管理"],
+    ["❌ 取消/主菜单"],
   ]);
+  assert.equal(sent[0].body.reply_markup.is_persistent, true);
 });
 
 test("Telegram webhook rejects an unapproved account", async () => {

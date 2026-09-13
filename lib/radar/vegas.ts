@@ -96,8 +96,8 @@ export function classifyVegasAlignment(values: VegasValues | null | undefined): 
   const hasLong = [values.ema576, values.ema676].every(Number.isFinite);
   if (!hasShort) return { direction: null, mode: "NONE" };
 
-  const bullishShort = values.ma30 > values.ema144 && values.ema144 > values.ema169;
-  const bearishShort = values.ma30 < values.ema144 && values.ema144 < values.ema169;
+  const bullishShort = values.close > values.ma30 && values.ma30 > values.ema144 && values.ema144 > values.ema169;
+  const bearishShort = values.close < values.ma30 && values.ma30 < values.ema144 && values.ema144 < values.ema169;
   if (!hasLong) {
     return { direction: bullishShort ? "BULLISH" : bearishShort ? "BEARISH" : null, mode: "SHORT" };
   }

@@ -1,4 +1,5 @@
 import type { ConsultationResult } from "../advisory/orchestrator.ts";
+import { normalizeHorizontalStopLine, type HorizontalStopLine } from "./horizontal-stop-line.ts";
 
 export type PositionAnalysisStatus = "ready" | "wait" | "incomplete";
 
@@ -39,6 +40,7 @@ export type PositionAnalysisResponse = {
     note: string;
   };
   warnings: string[];
+  horizontalStopLine: HorizontalStopLine | null;
   realOrderRouteEnabled: false;
 };
 
@@ -47,12 +49,15 @@ function positiveNumber(value: unknown) {
   return Number.isFinite(number) && number > 0 ? number : null;
 }
 
-export function resolveOccupiedMargin(value: { initialMargin?: unknown; positionInitialMargin?: unknown; isolatedMargin?: unknown }) {
-  for (const candidate of [value.initialMargin, value.positionInitialMargin, value.isolatedMargin]) {
-    const number = positiveNumber(candidate);
-    if (number !== null) return number;
+export function resolveOccupiedMargin(value: { marginType?: unknown; notional?: unknown; leverage?: unknown; positionInitialMargin?: unknown; isolatedMargin?: unknown }) {
+  const marginType = String(value.marginType ?? "").toLowerCase();
+  const notional = positiveNumber(Math.abs(Number(value.notional)));
+  const leverage = positiveNumber(value.leverage);
+  const calculatedCrossMargin = notional !== null && leverage !== null ? notional / leverage : null;
+  if (marginType === "isolated") {
+    return positiveNumber(value.isolatedMargin) ?? positiveNumber(value.positionInitialMargin) ?? calculatedCrossMargin;
   }
-  return null;
+  return calculatedCrossMargin ?? positiveNumber(value.positionInitialMargin);
 }
 
 function median(values: number[]) {
@@ -72,8 +77,12 @@ function finalOpinions(result: Pick<ConsultationResult, "opinions">) {
   return result.opinions.filter((item) => item.round === "R3");
 }
 
-export function buildPositionAnalysis(result: Pick<ConsultationResult, "symbol" | "mode" | "analysisDate" | "opinions" | "failures" | "consensus">): PositionAnalysisResponse {
+export function buildPositionAnalysis(
+  result: Pick<ConsultationResult, "symbol" | "mode" | "analysisDate" | "opinions" | "failures" | "consensus">,
+  horizontalStopLine?: unknown,
+): PositionAnalysisResponse {
   const opinions = finalOpinions(result);
+  const normalizedHorizontalStopLine = normalizeHorizontalStopLine(horizontalStopLine);
   const sameDirection = opinions.filter((item) => item.direction === result.consensus.direction);
   const margin = median(sameDirection.map((item) => positiveNumber(item.marginUsdt)).filter((item): item is number => item !== null));
   const stop = median(sameDirection.map((item) => positiveNumber(item.stopPrice)).filter((item): item is number => item !== null));
@@ -85,6 +94,7 @@ export function buildPositionAnalysis(result: Pick<ConsultationResult, "symbol" 
     ...(result.mode !== "live" ? ["行情不是完整实时数据，不能形成可执行价格建议。"] : []),
     ...(result.failures.length ? [`${result.failures.length} 个专家轮次未完成。`] : []),
     ...(result.consensus.disagreement ? ["专家意见存在明确分歧，暂不生成统一挂单计划。"] : []),
+    ...(normalizedHorizontalStopLine ? [`已将用户人工水平止损线 ${normalizedHorizontalStopLine.price}（收盘${normalizedHorizontalStopLine.trigger === "BELOW" ? "跌破" : "涨破"}触发）纳入分析；不会自动执行。`] : []),
     ...(!ready ? ["当前结果只适合观望或人工复核，不自动生成订单。"] : []),
   ];
   return {
@@ -108,6 +118,7 @@ export function buildPositionAnalysis(result: Pick<ConsultationResult, "symbol" 
       note: ready ? "四位专家至少三位同向，以下为待审核计划，不是自动挂单指令。" : "没有足够的一致性和完整价格证据，暂不建议挂单。",
     },
     warnings,
+    horizontalStopLine: normalizedHorizontalStopLine,
     realOrderRouteEnabled: false,
   };
 }
@@ -121,6 +132,7 @@ export type PositionContext = {
   unrealizedPnl: number;
   leverage: number;
   occupiedMargin: number | null;
+  horizontalStopLine: HorizontalStopLine | null;
 };
 
 export function normalizePositionContext(input: unknown): PositionContext | null {
@@ -130,5 +142,8 @@ export function normalizePositionContext(input: unknown): PositionContext | null
   const side = value.side === "LONG" || value.side === "SHORT" ? value.side : null;
   const numbers = ["quantity", "entryPrice", "markPrice", "unrealizedPnl", "leverage"].map((key) => Number(value[key]));
   if (!source || !side || numbers.some((item) => !Number.isFinite(item) || item < 0)) return null;
-  return { source, side, quantity: numbers[0], entryPrice: numbers[1], markPrice: numbers[2], unrealizedPnl: numbers[3], leverage: numbers[4], occupiedMargin: positiveNumber(value.occupiedMargin) };
+  return {
+    source, side, quantity: numbers[0], entryPrice: numbers[1], markPrice: numbers[2], unrealizedPnl: numbers[3], leverage: numbers[4],
+    occupiedMargin: positiveNumber(value.occupiedMargin), horizontalStopLine: normalizeHorizontalStopLine(value.horizontalStopLine),
+  };
 }

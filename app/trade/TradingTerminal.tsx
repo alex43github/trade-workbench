@@ -3,7 +3,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import AdaptiveStrategyPanel from "./AdaptiveStrategyPanel";
+import QuickLiveStrategyPanel from "./QuickLiveStrategyPanel";
 import EquityChart, { type EquityPoint } from "./EquityChart";
+import LiveStrategyStatusList from "./LiveStrategyStatusList";
 import TradeKnowledgePanel from "./TradeKnowledgePanel";
 import TradeChart, { type ChartOverlay, type IndicatorSettings, type MarketBar } from "./TradeChart";
 import type { TradeFill } from "./strategyMath";
@@ -12,9 +14,11 @@ import { useTerminalTheme, type ThemeMode } from "../themeStore";
 import FontControl from "../components/FontControl";
 import { useFontScale } from "../uiPreferences";
 import { fetchBrowserBinanceKlines } from "../binancePublicBrowser";
+import { useWatchlist } from "../watchlist/useWatchlist";
 import type { PositionAnalysisResponse, PositionContext } from "@/lib/trade/position-analysis";
 import type { ExpertId } from "@/lib/advisory/types";
 import { resolveRealTradingStatus } from "@/lib/trade/live-mode";
+import type { QuickLiveTemplateId } from "@/lib/trade/quick-live-template";
 import { LIVE_CLOSE_PERCENT_OPTIONS, type LiveClosePercent } from "@/lib/trade/live-position-close";
 import { displayBinanceSymbol, normalizeBinanceFuturesSymbol, quoteAssetForSymbol } from "@/lib/trade/symbols";
 import type { HorizontalStopLine } from "@/lib/trade/horizontal-stop-line";
@@ -42,7 +46,7 @@ type Strategy = {
 type AccountPosition = {
   symbol: string; side: "LONG" | "SHORT"; quantity: number; entryPrice: number; breakEvenPrice: number;
   markPrice: number; unrealizedPnl: number; liquidationPrice: number; leverage: number; marginType: string; positionSide: string;
-  occupiedMargin: number | null; notional: number | null;
+  occupiedMargin: number | null; notional: number | null; realizedPnl: number;
 };
 type AccountOrder = {
   orderId: string; websiteOrderId?: string; symbol: string; side: "BUY" | "SELL"; type: string; status: string; price: number;
@@ -58,6 +62,8 @@ type AccountResponse = {
 type ProtectionStatusEntry = { symbol: string; side: "LONG" | "SHORT"; protectedQuantity: number };
 type MarketResponse = { mode: "live"; symbol: string; interval: string; updatedAt: string; warning?: string; bars: MarketBar[]; priceTickSize?: number | null };
 type EventItem = { id: string; time: string; type: "check" | "candidate" | "system"; message: string };
+type MonitorEvent = { id: string; symbol: string; side: string; timeframe: string | null; source: string; type: string; kind: "PROTECTION_FAILED" | "TAKE_PROFIT" | "STOP_LOSS" | "ENTRY_FILLED" | "EXIT_FILLED" | "STRATEGY_UPDATED"; label: string; occurredAt: string };
+type MonitorResponse = { events?: MonitorEvent[] };
 type AiStrongCoin = { symbol: string; displayName?: string; score: number; participation: string; price?: number; verdict?: string };
 type OverlayVisibility = { positions: boolean; positionCost: boolean; limits: boolean; conditional: boolean; tpsl: boolean };
 
@@ -76,13 +82,18 @@ const defaultIndicators: IndicatorSettings = {
   ma: { enabled: true, length: 30, color: "#2563eb", lineWidth: 3 },
   ema: { enabled: false, length: 20, color: "#45a9ff", lineWidth: 2 },
   atr: { upperColor: "#111827", lowerColor: "#111827", upperLineWidth: 1, lowerLineWidth: 1 },
+  atrChannels: [
+    { enabled: true, multiplier: 1, color: "#111827" },
+    { enabled: true, multiplier: 3, color: "#f59e0b" },
+    { enabled: true, multiplier: 5, color: "#ec4899" },
+  ],
   avwap: { enabled: false, anchorBars: 100, source: "hlc3", color: "#b57cff", lineWidth: 2 },
   volumeProfile: { enabled: false, rangeBars: 120, rows: 28 },
   vegas: { enabled: true, fastLength: 144, slowLength: 169, outerFastLength: 576, outerSlowLength: 676, firstColor: "#f59e0b", secondColor: "#ec4899", lineWidth: 2 },
 };
+const RADAR_ATR_PERIOD = 14;
 const LIVE_SWITCH_STORAGE_KEY = "streetlight-live-switch-v1";
 const intervals = ["1m", "5m", "15m", "1h", "4h", "1d"];
-const quickSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT"];
 type SymbolOption = { symbol: string; displayName: string; quoteAsset?: "USDT" | "USDC" };
 type SymbolsResponse = { symbols?: SymbolOption[]; warning?: string };
 type PendingAnalysis = PositionContext & { symbol: string };
@@ -102,10 +113,13 @@ function formatPrice(value: number) {
 }
 function formatMoney(value: number) { return Number.isFinite(value) ? value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 function orderDisplayPrice(order: AccountOrder) { return order.stopPrice > 0 ? order.stopPrice : order.price; }
-
-export default function TradingTerminal({ initialSymbol }: { initialSymbol: string }) {
+function formatMonitorTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); }
+export default function TradingTerminal({ initialSymbol, initialInterval = "1h" }: { initialSymbol: string; initialInterval?: "15m" | "1h" | "4h" | "1d" }) {
   const [symbol, setSymbol] = useState(initialSymbol);
-  const [interval, setIntervalValue] = useState("15m");
+  const [quickStrategySymbol, setQuickStrategySymbol] = useState(initialSymbol);
+  const [quickTemplateId, setQuickTemplateId] = useState<QuickLiveTemplateId | null>(null);
+  const [quickMarginOverride, setQuickMarginOverride] = useState<number | null>(null);
+  const [interval, setIntervalValue] = useState<string>(initialInterval);
   const [bars, setBars] = useState<MarketBar[]>([]);
   const [marketMode, setMarketMode] = useState<"live" | "unavailable">("unavailable");
   const [marketSource, setMarketSource] = useState<"server" | "browser">("server");
@@ -116,11 +130,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const [protectionStatuses, setProtectionStatuses] = useState<ProtectionStatusEntry[]>([]);
   const [aiStrongCoins, setAiStrongCoins] = useState<AiStrongCoin[]>([]);
   const [selectedAiSymbol, setSelectedAiSymbol] = useState("");
-  const [equityPoints, setEquityPoints] = useState<EquityPoint[]>(() => {
-    if (typeof window === "undefined") return [];
-    try { return (JSON.parse(window.localStorage.getItem("streetlight-equity-v1") || "[]") as EquityPoint[]).slice(-1000); }
-    catch { return []; }
-  });
+  const [equityPoints, setEquityPoints] = useState<EquityPoint[]>([]);
   const [strategy, setStrategy] = useState<Strategy>(defaultStrategy);
   const [indicators, setIndicators] = useState<IndicatorSettings>(defaultIndicators);
   const [overlayVisibility, setOverlayVisibility] = useState<OverlayVisibility>({ positions: true, positionCost: true, limits: true, conditional: true, tpsl: true });
@@ -129,11 +139,13 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const [indicatorOpen, setIndicatorOpen] = useState(false);
   const { fontScale } = useFontScale();
   const [symbolQuery, setSymbolQuery] = useState("");
+  const { watchlist, add: addWatchlistItem, remove: removeWatchlistItem } = useWatchlist();
+  const [canScrollWatchlistLeft, setCanScrollWatchlistLeft] = useState(false);
+  const [canScrollWatchlistRight, setCanScrollWatchlistRight] = useState(false);
   const [symbolSuggestions, setSymbolSuggestions] = useState<SymbolOption[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [symbolSearchWarning, setSymbolSearchWarning] = useState("");
-  const [strategyPanelWidth, setStrategyPanelWidth] = useState(390);
   const [chartHeight, setChartHeight] = useState(640);
   const [analysisState, setAnalysisState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [analysisSymbol, setAnalysisSymbol] = useState("");
@@ -146,6 +158,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const [realOrderRouteEnabled, setRealOrderRouteEnabled] = useState(false);
   const [realTradingSwitchOn, setRealTradingSwitchOn] = useState(true);
   const [accountRevision, setAccountRevision] = useState(0);
+  const [monitor, setMonitor] = useState<MonitorResponse>({ events: [] });
   const realTradingStatus = resolveRealTradingStatus({ routeEnabled: realOrderRouteEnabled, accountConnected: account.connected, switchOn: realTradingSwitchOn });
   const { themeMode, resolvedTheme, setThemeMode } = useTerminalTheme();
   const [events, setEvents] = useState<EventItem[]>([
@@ -154,12 +167,23 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const previousPositionsRef = useRef<Map<string, AccountPosition>>(new Map());
   const positionsInitializedRef = useRef(false);
   const latestQuoteRef = useRef<{ symbol: string; price: number; mode: "live" | "unavailable" }>({ symbol: initialSymbol, price: 0, mode: "unavailable" });
-  const tradeGridRef = useRef<HTMLElement | null>(null);
   const chartWorkspaceRef = useRef<HTMLDivElement | null>(null);
-  const resizeRef = useRef<"panel" | "chart" | null>(null);
+  const watchlistRef = useRef<HTMLDivElement | null>(null);
+  const resizeRef = useRef<"chart" | null>(null);
   const indicatorSettingsLoadedRef = useRef("");
   const indicatorSettingsSaveTimerRef = useRef<number | null>(null);
+  const indicatorManagerRef = useRef<HTMLDivElement | null>(null);
+  const indicatorButtonRef = useRef<HTMLButtonElement | null>(null);
   const liveSwitchPersistenceStartedRef = useRef(false);
+
+  function saveIndicatorSettings() {
+    if (indicatorSettingsLoadedRef.current !== symbol) return;
+    if (indicatorSettingsSaveTimerRef.current !== null) window.clearTimeout(indicatorSettingsSaveTimerRef.current);
+    void fetch("/api/trade/indicator-settings", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ symbol, basis: strategy.basis, maLength: strategy.maLength, entryAtrUpper: strategy.entryAtrUpper, entryAtrLower: strategy.entryAtrLower, trendAtrEnabled: strategy.trendAtrEnabled, trendAtrMultiplier: strategy.trendAtrMultiplier, atr: indicators.atr, atrChannels: indicators.atrChannels, vegas: indicators.vegas }),
+    }).catch(() => undefined);
+  }
 
   useEffect(() => {
     try {
@@ -171,6 +195,13 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   }, []);
 
   useEffect(() => {
+    try {
+      const cached = JSON.parse(window.localStorage.getItem("streetlight-equity-v1") || "[]") as EquityPoint[];
+      if (Array.isArray(cached)) setEquityPoints(cached.slice(-1000));
+    } catch { /* cached chart history is optional */ }
+  }, []);
+
+  useEffect(() => {
     if (!liveSwitchPersistenceStartedRef.current) {
       liveSwitchPersistenceStartedRef.current = true;
       return;
@@ -178,6 +209,23 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
     try { window.localStorage.setItem(LIVE_SWITCH_STORAGE_KEY, realTradingSwitchOn ? "on" : "off"); }
     catch { /* browser storage is optional */ }
   }, [realTradingSwitchOn]);
+
+  useEffect(() => {
+    const element = watchlistRef.current;
+    if (!element) return;
+    const updateScrollControls = () => {
+      setCanScrollWatchlistLeft(element.scrollLeft > 1);
+      setCanScrollWatchlistRight(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
+    };
+    const observer = new ResizeObserver(updateScrollControls);
+    observer.observe(element);
+    element.addEventListener("scroll", updateScrollControls, { passive: true });
+    updateScrollControls();
+    return () => {
+      observer.disconnect();
+      element.removeEventListener("scroll", updateScrollControls);
+    };
+  }, [watchlist]);
 
   useEffect(() => {
     let active = true;
@@ -192,7 +240,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
     let active = true;
     indicatorSettingsLoadedRef.current = "";
     fetch(`/api/trade/indicator-settings?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" })
-      .then((response) => response.ok ? response.json() as Promise<{ settings?: { basis?: "ma" | "ema"; maLength?: number; entryAtrUpper?: number; entryAtrLower?: number; trendAtrEnabled?: boolean; trendAtrMultiplier?: number; atr?: Partial<IndicatorSettings["atr"]>; vegas?: Partial<IndicatorSettings["vegas"]> } | null }> : Promise.reject(new Error("指标参数读取失败")))
+      .then((response) => response.ok ? response.json() as Promise<{ settings?: { basis?: "ma" | "ema"; maLength?: number; entryAtrUpper?: number; entryAtrLower?: number; trendAtrEnabled?: boolean; trendAtrMultiplier?: number; atr?: Partial<IndicatorSettings["atr"]>; atrChannels?: IndicatorSettings["atrChannels"]; vegas?: Partial<IndicatorSettings["vegas"]> } | null }> : Promise.reject(new Error("指标参数读取失败")))
       .then((payload) => {
         if (!active) return;
         const saved = payload.settings;
@@ -202,7 +250,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
           && savedAtr?.upperLineWidth === 1
           && savedAtr?.lowerLineWidth === 1;
         setStrategy((current) => ({ ...current, basis: saved?.basis === "ema" ? "ema" : "ma", maLength: saved?.maLength ?? defaultStrategy.maLength, entryAtrUpper: saved?.entryAtrUpper ?? defaultStrategy.entryAtrUpper, entryAtrLower: saved?.entryAtrLower ?? defaultStrategy.entryAtrLower, trendAtrEnabled: saved?.trendAtrEnabled !== false, trendAtrMultiplier: saved?.trendAtrMultiplier ?? defaultStrategy.trendAtrMultiplier }));
-        setIndicators((current) => ({ ...current, ma: { ...current.ma, length: saved?.maLength ?? defaultIndicators.ma.length }, atr: isLegacyDefaultAtr ? defaultIndicators.atr : { ...defaultIndicators.atr, ...savedAtr }, vegas: { ...defaultIndicators.vegas, ...saved?.vegas } }));
+        setIndicators((current) => ({ ...current, ma: { ...current.ma, length: saved?.maLength ?? defaultIndicators.ma.length }, atr: isLegacyDefaultAtr ? defaultIndicators.atr : { ...defaultIndicators.atr, ...savedAtr }, atrChannels: saved?.atrChannels ?? defaultIndicators.atrChannels, vegas: { ...defaultIndicators.vegas, ...saved?.vegas } }));
         indicatorSettingsLoadedRef.current = symbol;
       })
       .catch(() => { if (active) indicatorSettingsLoadedRef.current = symbol; });
@@ -212,14 +260,21 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   useEffect(() => {
     if (indicatorSettingsLoadedRef.current !== symbol) return;
     if (indicatorSettingsSaveTimerRef.current !== null) window.clearTimeout(indicatorSettingsSaveTimerRef.current);
-    indicatorSettingsSaveTimerRef.current = window.setTimeout(() => {
-      void fetch("/api/trade/indicator-settings", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ symbol, basis: strategy.basis, maLength: strategy.maLength, entryAtrUpper: strategy.entryAtrUpper, entryAtrLower: strategy.entryAtrLower, trendAtrEnabled: strategy.trendAtrEnabled, trendAtrMultiplier: strategy.trendAtrMultiplier, atr: indicators.atr, vegas: indicators.vegas }),
-      }).catch(() => undefined);
-    }, 350);
+    indicatorSettingsSaveTimerRef.current = window.setTimeout(saveIndicatorSettings, 350);
     return () => { if (indicatorSettingsSaveTimerRef.current !== null) window.clearTimeout(indicatorSettingsSaveTimerRef.current); };
-  }, [symbol, strategy.basis, strategy.maLength, strategy.entryAtrUpper, strategy.entryAtrLower, strategy.trendAtrEnabled, strategy.trendAtrMultiplier, indicators.atr, indicators.vegas]);
+  }, [symbol, strategy.basis, strategy.maLength, strategy.entryAtrUpper, strategy.entryAtrLower, strategy.trendAtrEnabled, strategy.trendAtrMultiplier, indicators.atr, indicators.atrChannels, indicators.vegas]);
+
+  useEffect(() => {
+    if (!indicatorOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || indicatorManagerRef.current?.contains(target) || indicatorButtonRef.current?.contains(target)) return;
+      saveIndicatorSettings();
+      setIndicatorOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [indicatorOpen, symbol, strategy, indicators]);
 
   useEffect(() => {
     const query = symbolQuery.trim();
@@ -253,10 +308,6 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
-      if (resizeRef.current === "panel" && tradeGridRef.current) {
-        const rect = tradeGridRef.current.getBoundingClientRect();
-        setStrategyPanelWidth(Math.max(340, Math.min(620, rect.right - event.clientX)));
-      }
       if (resizeRef.current === "chart" && chartWorkspaceRef.current) {
         const rect = chartWorkspaceRef.current.getBoundingClientRect();
         setChartHeight(Math.max(360, Math.min(900, event.clientY - rect.top)));
@@ -270,9 +321,10 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     const load = async () => {
       try {
-        const response = await fetch(`/api/market/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=1000`, { cache: "no-store" });
+        const response = await fetch(`/api/market/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=1000`, { cache: "no-store", signal: controller.signal });
         let payload: MarketResponse;
         let source: "server" | "browser" = "server";
         if (response.ok) {
@@ -286,8 +338,8 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
         const latest = payload.bars.at(-1);
         if (latest) latestQuoteRef.current = { symbol, price: latest.close, mode: payload.mode };
       } catch {
-        if (active) {
-          setMarketMode("unavailable"); setBars([]); setPriceTickSize(null);
+        if (active && !controller.signal.aborted) {
+          setMarketMode("unavailable");
           setEvents((current) => [{ id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), type: "system" as const, message: "Binance 实时行情连接失败，等待下一轮刷新。" }, ...current].slice(0, 10));
         }
       } finally {
@@ -296,7 +348,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
     };
     void load();
     const timer = window.setInterval(load, 30_000);
-    return () => { active = false; window.clearInterval(timer); };
+    return () => { active = false; controller.abort(); window.clearInterval(timer); };
   }, [symbol, interval]);
 
   useEffect(() => {
@@ -328,6 +380,11 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   }, [accountRevision, symbol]);
 
   useEffect(() => {
+    setQuickStrategySymbol(symbol);
+    setQuickTemplateId(null);
+  }, [symbol]);
+
+  useEffect(() => {
     let active = true;
     fetch("/api/trade/protection-status", { cache: "no-store" })
       .then(async (response) => response.ok ? await response.json() as { protections?: ProtectionStatusEntry[] } : { protections: [] })
@@ -336,13 +393,24 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
     return () => { active = false; };
   }, [accountRevision]);
 
+  useEffect(() => {
+    let active = true;
+    const loadMonitor = () => fetch("/api/trade/monitor?limit=10", { cache: "no-store" })
+      .then(async (response) => response.ok ? await response.json() as MonitorResponse : { events: [] })
+      .then((payload) => { if (active) setMonitor({ events: payload.events ?? [] }); })
+      .catch(() => { if (active) setMonitor({ events: [] }); });
+    void loadMonitor();
+    const timer = window.setInterval(loadMonitor, 15_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [accountRevision]);
+
   const marketState = useMemo(() => {
     const closedBars = bars.filter((bar) => bar.closed);
     const latest = closedBars.at(-1) ?? bars.at(-1);
     const indicator = strategy.basis === "ema"
       ? calculateEma(closedBars, strategy.maLength).at(-1)?.value ?? 0
       : calculateMa(closedBars, strategy.maLength).at(-1)?.value ?? 0;
-    const atr = calculateAtr(closedBars, strategy.maLength).at(-1)?.value ?? 0;
+    const atr = calculateAtr(closedBars, RADAR_ATR_PERIOD).at(-1)?.value ?? 0;
     const distance = latest && indicator ? ((latest.close - indicator) / indicator) * 100 : 0;
     const atrDistance = latest && indicator && atr > 0 ? (latest.close - indicator) / atr : null;
     const atrBand = latest && indicator && atr > 0 ? calculateAtrBand(indicator, atr, strategy.entryAtrUpper, strategy.entryAtrLower) : null;
@@ -378,6 +446,11 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
 
   const accountEquity = account.account.totalBalance + account.account.unrealizedPnl;
   const realPosition = account.positions.find((position) => position.symbol === symbol);
+  const selectedSymbolPositions = account.positions.filter((position) => position.symbol === symbol);
+  const selectedSymbolUnrealizedPnl = selectedSymbolPositions.reduce(
+    (total, position) => total + (Number.isFinite(position.unrealizedPnl) ? position.unrealizedPnl : 0),
+    0,
+  );
   const selectedPosition = realPosition;
   const selectedPositionSource = realPosition ? "binance" as const : undefined;
   const displayedEquity = accountEquity;
@@ -391,7 +464,7 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   const selectedAiCoin = aiStrongCoins.find((coin) => coin.symbol === selectedAiSymbol) ?? aiStrongCoins[0] ?? null;
 
   function chooseSymbol(next: string) {
-    const normalized = next.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const normalized = next.trim().toUpperCase().replace(/[^\p{L}\p{N}]/gu, "");
     if (!normalized) return;
     const candidate = normalized.endsWith("USDT") || normalized.endsWith("USDC") ? normalized : `${normalized}USDT`;
     let nextSymbol: string;
@@ -399,6 +472,18 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
     catch { return; }
     setLoading(true); setAccount((current) => ({ ...current, currentLeverage: null })); setSymbol(nextSymbol); setSymbolQuery(""); setSymbolSuggestions([]); setSymbolSearchOpen(false);
     const url = new URL(window.location.href); url.searchParams.set("symbol", nextSymbol); window.history.replaceState({}, "", url);
+  }
+  function scrollWatchlist(direction: "left" | "right") {
+    const element = watchlistRef.current;
+    if (!element) return;
+    const distance = Math.max(element.clientWidth * 0.75, 180);
+    element.scrollBy({ left: direction === "left" ? -distance : distance, behavior: "smooth" });
+  }
+  const isFavorite = watchlist.some((item) => item.symbol === symbol);
+  function toggleFavorite() {
+    const favorite: SymbolOption = { symbol, displayName: displayBinanceSymbol(symbol), quoteAsset: quoteAssetForSymbol(symbol) ?? "USDT" };
+    if (watchlist.some((item) => item.symbol === symbol)) void removeWatchlistItem(symbol);
+    else void addWatchlistItem(favorite);
   }
   function updateMaLength(value: number) {
     const length = Math.max(2, Math.min(500, value || 2));
@@ -438,11 +523,11 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
   function updateManualStopTrigger(trigger: HorizontalStopLine["trigger"]) {
     setManualStopLines((current) => current[symbol] ? { ...current, [symbol]: { ...current[symbol], trigger } } : current);
   }
-  function beginResize(target: "panel" | "chart") {
-    resizeRef.current = target;
-    document.body.style.cursor = target === "panel" ? "col-resize" : "row-resize";
+  function beginResize() {
+    resizeRef.current = "chart";
+    document.body.style.cursor = "row-resize";
   }
-  function resetWorkspaceSize() { setStrategyPanelWidth(390); setChartHeight(640); }
+  function resetWorkspaceSize() { setChartHeight(640); }
   function toggleRealTrading() {
     if (!realOrderRouteEnabled) {
       setEvents((current) => [{ id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), type: "system" as const, message: "实盘开关未启用：服务端交易通道尚未同时开启，币安持仓仅可只读查看。" }, ...current].slice(0, 10));
@@ -451,11 +536,11 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
     setRealTradingSwitchOn((current) => !current);
   }
   async function closeLive(position: AccountPosition, percent: LiveClosePercent) {
-    const clientOrderId = `alexMC${crypto.randomUUID().replaceAll("-", "")}`;
+    const idempotencyKey = `manual-close-${crypto.randomUUID()}`;
     const response = await fetch("/api/trade/positions/close", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ symbol: position.symbol, positionSide: position.positionSide, percent, clientOrderId, liveSwitchOn: realTradingSwitchOn, confirmation: "CLOSE_MARKET" }),
+      body: JSON.stringify({ symbol: position.symbol, positionSide: position.positionSide, percent, idempotencyKey, liveSwitchOn: realTradingSwitchOn, confirmation: "CLOSE_MARKET" }),
     });
     const payload = await response.json().catch(() => ({})) as { error?: string; order?: { orderId?: string | null }; recovered?: boolean };
     if (!response.ok) throw new Error(payload.error || "真实平仓失败");
@@ -566,6 +651,18 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
           <a href="/"><b>◎</b>妖币雷达</a><a className={styles.active} href="/trade"><b>⌁</b>合约交易</a>
           <a href="#strategy"><b>◇</b>策略构建</a><a href="#account"><b>▣</b>持仓与订单</a><a href="#trade-knowledge"><b>◫</b>操作知识库</a><a href="/settings"><b>⚙</b>连接设置</a>
         </nav>
+        <div className={styles.sidebarQuickLive}>
+          <QuickLiveStrategyPanel
+            symbol={symbol}
+            chartMa={marketState.ma}
+            chartAtr={marketState.atr}
+            totalEquityUsdt={accountEquity}
+            availableBalanceUsdt={account.account.availableBalance}
+            accountConnected={account.connected}
+            liveTradingAvailable={realTradingStatus.canPlaceOrders}
+            onStrategyCreated={() => setAccountRevision((value) => value + 1)}
+          />
+        </div>
         <div className={styles.sidebarFoot}><i className={account.connected ? styles.connected : ""} /><div><strong>{account.connected ? "币安账户已连接" : "币安账户未连接"}</strong><small>{account.connected ? "15秒刷新 · 订单与持仓只读同步" : "连接账户后可建立实盘策略"}</small></div></div>
       </aside>
 
@@ -596,6 +693,22 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
           </div>
         </section>
 
+        <section className={styles.riskMonitorStrip} aria-label="策略风险监控">
+          <article className={`${styles.monitorCard} ${styles.orderEntryCard}`}>
+            <AdaptiveStrategyPanel key={`${symbol}:${selectedPosition?.symbol ?? "entry"}`} symbol={symbol} position={selectedPosition} positionSource={selectedPositionSource} interval={interval} accountConnected={account.connected} liveTradingAvailable={realTradingStatus.canPlaceOrders} currentLeverage={account.currentLeverage} currentPrice={marketState.latest?.close ?? 0} maLength={strategy.maLength} maValue={marketState.ma} atrValue={marketState.atr} totalEquityUsdt={accountEquity} strategySymbol={quickStrategySymbol} selectedQuickTemplate={quickTemplateId} selectedQuickTotalMarginUsdt={quickMarginOverride} entryAtrUpper={strategy.entryAtrUpper} entryAtrLower={strategy.entryAtrLower} accountBalance={account.account.availableBalance} onAccountChanged={() => setAccountRevision((value) => value + 1)} />
+          </article>
+          <article className={`${styles.monitorCard} ${styles.strategyOrdersCard}`}>
+            <LiveStrategyStatusList refreshToken={accountRevision} onChanged={() => setAccountRevision((value) => value + 1)} />
+          </article>
+          <article className={`${styles.monitorCard} ${styles.strategyEventsCard}`}>
+            <header><div><small>STRATEGY EVENTS</small><h2>事件流</h2></div><span>最近 {monitor.events?.length ?? 0} 条</span></header>
+            <p>记录策略下单、成交、止盈止损与保护异常；仅展示服务端持久化事件。</p>
+            <div className={styles.monitorRows}>{monitor.events?.length ? monitor.events.map((event) => <a key={event.id} href={`/trade?symbol=${encodeURIComponent(event.symbol)}`} className={`${styles.monitorEvent} ${event.kind === "PROTECTION_FAILED" ? styles.monitorEventRisk : ""}`}>
+              <time>{formatMonitorTime(event.occurredAt)}</time><span>{event.label}</span><strong>{displayBinanceSymbol(event.symbol)}</strong><em>{event.timeframe ?? event.source}</em>
+            </a>) : <div className={styles.monitorEmpty}>暂无已归档的策略事件。</div>}</div>
+          </article>
+        </section>
+
         <section className={styles.summaryGrid}>
           <article className={styles.balanceCard}><span>币安总权益</span><strong>{displayedConnected ? `${formatMoney(displayedEquity)} USDT` : "— USDT"}</strong><small>{account.connected ? "钱包余额 + 未实现盈亏" : account.reason}</small></article>
           <article className={styles.availableCard}><span>可用资金</span><strong>{displayedConnected ? `${formatMoney(displayedAvailable)} USDT` : "— USDT"}</strong><small>只读接口 · 不暴露密钥</small></article>
@@ -615,46 +728,60 @@ export default function TradingTerminal({ initialSymbol }: { initialSymbol: stri
           </div>
         </section>
 
-        <section ref={tradeGridRef} className={styles.tradeGrid} style={{ gridTemplateColumns: `minmax(0, 1fr) 10px ${strategyPanelWidth}px` }}>
+        <section className={styles.tradeGrid}>
           <div ref={chartWorkspaceRef} className={styles.chartWorkspace} style={{ "--trade-chart-height": `${chartHeight}px` } as React.CSSProperties}>
             <div className={styles.marketHeader}>
-              <div className={styles.marketSymbolControls}>
-                <div className={styles.symbolPicker}>{quickSymbols.map((item) => <button key={item} className={symbol === item ? styles.selected : ""} onClick={() => chooseSymbol(item)}>{displayBinanceSymbol(item)}</button>)}</div>
-                <div className={styles.currentChartSymbol} aria-label={`当前图表币种 ${symbol}`}><strong>{displayBinanceSymbol(symbol)}</strong><small>{quoteAssetForSymbol(symbol) ?? "USDT"} 永续</small></div>
-                <div className={styles.symbolSearch}>
-                  <input aria-label="搜索币种" value={symbolQuery} onFocus={() => setSymbolSearchOpen(true)} onChange={(event) => { setSymbolQuery(event.target.value); setSymbolSearchOpen(true); }} onKeyDown={(event) => { if (event.key === "Enter") chooseSymbol(event.currentTarget.value); }} placeholder="搜索 BTC、TSLA 或 USDC" autoComplete="off" />
-                  {symbolSearchOpen && symbolQuery.trim() && <div className={styles.symbolSuggestions} role="listbox">
-                    {symbolSearchLoading && <small>正在匹配 Binance Futures…</small>}
-                    {!symbolSearchLoading && symbolSearchWarning && <small>{symbolSearchWarning}</small>}
-                    {!symbolSearchLoading && !symbolSearchWarning && symbolSuggestions.length === 0 && <small>没有匹配的 Binance 永续合约</small>}
-                    {!symbolSearchLoading && symbolSuggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.symbol} onClick={() => chooseSymbol(item.symbol)}><strong>{item.displayName}</strong><span>{item.symbol} · {item.quoteAsset ?? quoteAssetForSymbol(item.symbol) ?? "USDT"}</span></button>)}
-                  </div>}
+              <div className={styles.marketHeaderTop}>
+                <div className={styles.marketSymbolControls}>
+                  <div className={styles.currentSymbolControl}>
+                    <button type="button" className={`${styles.favoriteButton} ${isFavorite ? styles.favoriteActive : ""}`} aria-label={isFavorite ? `移除${displayBinanceSymbol(symbol)}自选` : `加入${displayBinanceSymbol(symbol)}自选`} aria-pressed={isFavorite} onClick={toggleFavorite}>{isFavorite ? "★" : "☆"}</button>
+                    <div className={styles.currentChartSymbol} aria-label={`当前图表币种 ${symbol}`}><strong>{displayBinanceSymbol(symbol)}</strong><small>{quoteAssetForSymbol(symbol) ?? "USDT"} 永续</small></div>
+                  </div>
+                  <div className={styles.symbolSearch}>
+                    <input aria-label="搜索币种" value={symbolQuery} onFocus={() => setSymbolSearchOpen(true)} onChange={(event) => { setSymbolQuery(event.target.value); setSymbolSearchOpen(true); }} onKeyDown={(event) => { if (event.key === "Enter") chooseSymbol(event.currentTarget.value); }} placeholder="搜索 BTC、TSLA 或 USDC" autoComplete="off" />
+                    {symbolSearchOpen && symbolQuery.trim() && <div className={styles.symbolSuggestions} role="listbox">
+                      {symbolSearchLoading && <small>正在匹配 Binance Futures…</small>}
+                      {!symbolSearchLoading && symbolSearchWarning && <small>{symbolSearchWarning}</small>}
+                      {!symbolSearchLoading && !symbolSearchWarning && symbolSuggestions.length === 0 && <small>没有匹配的 Binance 永续合约</small>}
+                      {!symbolSearchLoading && symbolSuggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.symbol} onClick={() => chooseSymbol(item.symbol)}><strong>{item.displayName}</strong><span>{item.symbol} · {item.quoteAsset ?? quoteAssetForSymbol(item.symbol) ?? "USDT"}</span></button>)}
+                    </div>}
+                  </div>
+                  <div className={styles.intervalButtons} aria-label="K线时间周期">{intervals.map((item) => <button type="button" key={item} className={interval === item ? styles.selected : ""} onClick={() => { setLoading(true); setIntervalValue(item); }}>{item}</button>)}</div>
+                </div>
+                <div className={styles.marketTopActions}>
+                  <div className={styles.overlayToggles}>
+                    <MiniToggle label="仓位" active={overlayVisibility.positions} onClick={() => toggleOverlay("positions")} />
+                    <MiniToggle label="持仓成本" active={overlayVisibility.positionCost} onClick={() => toggleOverlay("positionCost")} />
+                    <MiniToggle label="限价单" active={overlayVisibility.limits} onClick={() => toggleOverlay("limits")} />
+                    <MiniToggle label="条件单" active={overlayVisibility.conditional} onClick={() => toggleOverlay("conditional")} />
+                    <MiniToggle label="止盈止损" active={overlayVisibility.tpsl} onClick={() => toggleOverlay("tpsl")} />
+                    <button ref={indicatorButtonRef} className={styles.indicatorButton} onClick={() => setIndicatorOpen((current) => !current)}>指标 · {Object.values(indicators).filter((item) => "enabled" in item && item.enabled).length}</button>
+                    {indicators.atrChannels?.map((channel, index) => <MiniToggle key={`atr-channel-${index}`} label={`ATR ${channel.multiplier}`} active={channel.enabled} onClick={() => setIndicators((current) => ({ ...current, atrChannels: (current.atrChannels ?? []).map((item, channelIndex) => channelIndex === index ? { ...item, enabled: !item.enabled } : item) }))} />)}
+                  </div>
+                  <div className={styles.quote}>
+                    <strong>{loading ? "连接中" : `$${formatPrice(marketState.latest?.close ?? 0)}`}</strong>
+                    {selectedSymbolPositions.length > 0 && <span className={`${styles.positionPnl} ${selectedSymbolUnrealizedPnl >= 0 ? styles.up : styles.down}`} aria-label={`${displayBinanceSymbol(symbol)}未实现盈亏`}>未实现盈亏 {selectedSymbolUnrealizedPnl >= 0 ? "+" : ""}{formatMoney(selectedSymbolUnrealizedPnl)} USDT</span>}
+                    <button className={marketState.atrDistance === null ? styles.metricButton : marketState.atrDistance >= 0 ? `${styles.metricButton} ${styles.up}` : `${styles.metricButton} ${styles.down}`} onClick={() => setIndicatorOpen(true)} aria-label="打开均线与ATR设置">距 {marketState.indicatorLabel} {marketState.latest && marketState.atr > 0 ? formatAtrDistance(marketState.latest.close, marketState.ma, marketState.atr) : "ATR 数据不足"}</button>
+                  </div>
                 </div>
               </div>
-              <div className={styles.quote}><strong>{loading ? "连接中" : `$${formatPrice(marketState.latest?.close ?? 0)}`}</strong><button className={marketState.atrDistance === null ? styles.metricButton : marketState.atrDistance >= 0 ? `${styles.metricButton} ${styles.up}` : `${styles.metricButton} ${styles.down}`} onClick={() => setIndicatorOpen(true)} aria-label="打开均线与ATR设置">距 {marketState.indicatorLabel} {marketState.latest && marketState.atr > 0 ? formatAtrDistance(marketState.latest.close, marketState.ma, marketState.atr) : "ATR 数据不足"}</button><small>{marketState.label}{updatedAt ? ` · ${new Date(updatedAt).toLocaleTimeString("zh-CN")}` : ""}</small></div>
+              <div className={styles.watchlistRow} aria-label="自选币列表">
+                {canScrollWatchlistLeft && <button type="button" className={styles.watchlistArrow} aria-label="向左查看更多自选币" title="向左查看更多自选币" onClick={() => scrollWatchlist("left")}>&lsaquo;</button>}
+                <div ref={watchlistRef} className={styles.symbolPicker}>{watchlist.map((item) => <button type="button" key={item.symbol} className={symbol === item.symbol ? styles.selected : ""} onClick={() => chooseSymbol(item.symbol)}>{displayBinanceSymbol(item.symbol)}</button>)}</div>
+                {canScrollWatchlistRight && <button type="button" className={styles.watchlistArrow} aria-label="向右查看更多自选币" title="向右查看更多自选币" onClick={() => scrollWatchlist("right")}>&rsaquo;</button>}
+              </div>
             </div>
             <div className={styles.chartToolbar}>
-              <div className={styles.intervalButtons}>{intervals.map((item) => <button key={item} className={interval === item ? styles.selected : ""} onClick={() => { setLoading(true); setIntervalValue(item); }}>{item}</button>)}</div>
-              <div className={styles.overlayToggles}>
-                <MiniToggle label="仓位" active={overlayVisibility.positions} onClick={() => toggleOverlay("positions")} />
-                <MiniToggle label="持仓成本" active={overlayVisibility.positionCost} onClick={() => toggleOverlay("positionCost")} />
-                <MiniToggle label="限价单" active={overlayVisibility.limits} onClick={() => toggleOverlay("limits")} />
-                <MiniToggle label="条件单" active={overlayVisibility.conditional} onClick={() => toggleOverlay("conditional")} />
-                <MiniToggle label="止盈止损" active={overlayVisibility.tpsl} onClick={() => toggleOverlay("tpsl")} />
-              </div>
               <div className={styles.manualLineControls} aria-label="人工水平止损线">
                 <button className={drawingHorizontalLine ? styles.manualLineActive : ""} type="button" onClick={() => setDrawingHorizontalLine((current) => !current)}>{drawingHorizontalLine ? "点击图表放置横线" : "画横线"}</button>
                 {manualStopLine && <><span>人工线 {formatPrice(manualStopLine.price)}</span><button type="button" className={manualStopLine.trigger === "BELOW" ? styles.manualLineActive : ""} onClick={() => updateManualStopTrigger("BELOW")}>跌破止损</button><button type="button" className={manualStopLine.trigger === "ABOVE" ? styles.manualLineActive : ""} onClick={() => updateManualStopTrigger("ABOVE")}>涨破止损</button><button type="button" onClick={clearManualStopLine}>清除</button></>}
               </div>
-              <button className={styles.indicatorButton} onClick={() => setIndicatorOpen((current) => !current)}>指标 · {Object.values(indicators).filter((item) => "enabled" in item && item.enabled).length}</button>
             </div>
-            {indicatorOpen && <IndicatorManager indicators={indicators} basis={strategy.basis} atrUpperMultiplier={strategy.entryAtrUpper} atrLowerMultiplier={strategy.entryAtrLower} trendAtrEnabled={strategy.trendAtrEnabled} trendAtrMultiplier={strategy.trendAtrMultiplier} setIndicators={setIndicators} updateMaLength={updateMaLength} updateIndicatorLength={updateIndicatorLength} updateVegasLength={updateVegasLength} updateBasis={updateIndicatorBasis} updateAtrBand={(upper, lower) => setStrategy((current) => ({ ...current, entryAtrUpper: upper, entryAtrLower: lower }))} updateTrendAtr={(enabled, multiplier) => setStrategy((current) => ({ ...current, trendAtrEnabled: enabled, trendAtrMultiplier: multiplier }))} />}
-            <TradeChart bars={bars} fills={account.fills} key={`${symbol}:${interval}`} symbol={symbol} theme={resolvedTheme} indicators={indicators} overlays={chartOverlays} priceTickSize={priceTickSize} indicatorBasis={strategy.basis} atrLength={strategy.maLength} atrUpperMultiplier={strategy.entryAtrUpper} atrLowerMultiplier={strategy.entryAtrLower} trendAtrEnabled={strategy.trendAtrEnabled} trendAtrMultiplier={strategy.trendAtrMultiplier} drawingLine={drawingHorizontalLine} onManualLineChange={placeManualStopLine} />
-            <div className={styles.chartResizeHandle} role="separator" aria-label="拖动右下角调整图表高度" title="拖动右下角调整图表高度；双击恢复合适高度" onPointerDown={() => beginResize("chart")} onDoubleClick={resetWorkspaceSize} />
+            {indicatorOpen && <IndicatorManager managerRef={indicatorManagerRef} indicators={indicators} basis={strategy.basis} atrUpperMultiplier={strategy.entryAtrUpper} atrLowerMultiplier={strategy.entryAtrLower} trendAtrEnabled={strategy.trendAtrEnabled} trendAtrMultiplier={strategy.trendAtrMultiplier} setIndicators={setIndicators} updateMaLength={updateMaLength} updateIndicatorLength={updateIndicatorLength} updateVegasLength={updateVegasLength} updateBasis={updateIndicatorBasis} updateAtrBand={(upper, lower) => setStrategy((current) => ({ ...current, entryAtrUpper: upper, entryAtrLower: lower }))} updateTrendAtr={(enabled, multiplier) => setStrategy((current) => ({ ...current, trendAtrEnabled: enabled, trendAtrMultiplier: multiplier }))} />}
+            <TradeChart bars={bars} fills={account.fills} symbol={symbol} interval={interval} theme={resolvedTheme} indicators={indicators} overlays={chartOverlays} priceTickSize={priceTickSize} indicatorBasis={strategy.basis} atrLength={RADAR_ATR_PERIOD} atrUpperMultiplier={strategy.entryAtrUpper} atrLowerMultiplier={strategy.entryAtrLower} trendAtrEnabled={strategy.trendAtrEnabled} trendAtrMultiplier={strategy.trendAtrMultiplier} drawingLine={drawingHorizontalLine} onManualLineChange={placeManualStopLine} />
+            <div className={styles.chartResizeHandle} role="separator" aria-label="拖动右下角调整图表高度" title="拖动右下角调整图表高度；双击恢复合适高度" onPointerDown={beginResize} onDoubleClick={resetWorkspaceSize} />
             <div className={styles.chartFoot}><span>TradingView Lightweight Charts · {marketSource === "browser" ? "Binance浏览器直连行情" : "Binance Futures 行情"}</span><span>圆点仅来自 Binance 实际成交回报；买入绿 · 卖出红 · 平仓黄；紫线连接已完整平仓订单的入场/平仓中位价</span></div>
           </div>
-          <div className={styles.panelResizeHandle} role="separator" aria-label="拖动调整策略面板宽度" onPointerDown={() => beginResize("panel")} onDoubleClick={resetWorkspaceSize} />
-          <AdaptiveStrategyPanel key={`${symbol}:${selectedPosition?.symbol ?? "entry"}`} symbol={symbol} position={selectedPosition} positionSource={selectedPositionSource} interval={interval} accountConnected={account.connected} liveTradingAvailable={realTradingStatus.canPlaceOrders} currentLeverage={account.currentLeverage} currentPrice={marketState.latest?.close ?? 0} maLength={strategy.maLength} maValue={marketState.ma} entryAtrUpper={strategy.entryAtrUpper} entryAtrLower={strategy.entryAtrLower} accountBalance={account.account.availableBalance} onAccountChanged={() => setAccountRevision((value) => value + 1)} />
         </section>
 
         <section className={styles.accountPanel} id="account">
@@ -679,11 +806,12 @@ function MiniToggle({ label, active, onClick }: { label: string; active: boolean
   return <button className={active ? styles.toggleActive : ""} onClick={onClick}><i />{label}</button>;
 }
 
-function IndicatorManager({ indicators, basis, atrUpperMultiplier, atrLowerMultiplier, trendAtrEnabled, trendAtrMultiplier, setIndicators, updateMaLength, updateIndicatorLength, updateVegasLength, updateBasis, updateAtrBand, updateTrendAtr }: { indicators: IndicatorSettings; basis: "ma" | "ema"; atrUpperMultiplier: number; atrLowerMultiplier: number; trendAtrEnabled: boolean; trendAtrMultiplier: number; setIndicators: React.Dispatch<React.SetStateAction<IndicatorSettings>>; updateMaLength: (value: number) => void; updateIndicatorLength: (key: "ma" | "ema", value: number) => void; updateVegasLength: (key: "fastLength" | "slowLength" | "outerFastLength" | "outerSlowLength", value: number) => void; updateBasis: (basis: "ma" | "ema") => void; updateAtrBand: (upper: number, lower: number) => void; updateTrendAtr: (enabled: boolean, multiplier: number) => void }) {
+function IndicatorManager({ managerRef, indicators, basis, atrUpperMultiplier, atrLowerMultiplier, trendAtrEnabled, trendAtrMultiplier, setIndicators, updateMaLength, updateIndicatorLength, updateVegasLength, updateBasis, updateAtrBand, updateTrendAtr }: { managerRef: React.RefObject<HTMLDivElement | null>; indicators: IndicatorSettings; basis: "ma" | "ema"; atrUpperMultiplier: number; atrLowerMultiplier: number; trendAtrEnabled: boolean; trendAtrMultiplier: number; setIndicators: React.Dispatch<React.SetStateAction<IndicatorSettings>>; updateMaLength: (value: number) => void; updateIndicatorLength: (key: "ma" | "ema", value: number) => void; updateVegasLength: (key: "fastLength" | "slowLength" | "outerFastLength" | "outerSlowLength", value: number) => void; updateBasis: (basis: "ma" | "ema") => void; updateAtrBand: (upper: number, lower: number) => void; updateTrendAtr: (enabled: boolean, multiplier: number) => void }) {
   const toggle = (key: "ma" | "ema" | "vegas" | "avwap" | "volumeProfile") => setIndicators((current) => ({ ...current, [key]: { ...current[key], enabled: !current[key].enabled } }));
-  return <div className={styles.indicatorManager}>
+  return <div ref={managerRef} className={styles.indicatorManager}>
     <div className={styles.indicatorBasis}><strong>策略均线</strong><label>类型<select value={basis} onChange={(event) => updateBasis(event.target.value as "ma" | "ema")}><option value="ma">MA</option><option value="ema">EMA</option></select></label><label>周期<input type="number" min="2" max="500" value={indicators[basis].length} onChange={(event) => updateMaLength(Number(event.target.value))} /></label><div className={styles.atrBandControls}><strong>ATR入场确认带</strong><label>上方 ATR<input aria-label="上方 ATR" type="number" min="0" step="0.1" value={atrUpperMultiplier} onChange={(event) => updateAtrBand(Math.max(0, Number(event.target.value) || 0), atrLowerMultiplier)} />×</label><label>上方线颜色<input aria-label="ATR上方线颜色" type="color" value={indicators.atr.upperColor} onChange={(event) => setIndicators((current) => ({ ...current, atr: { ...current.atr, upperColor: event.target.value } }))} /></label><label>上方线粗细<select aria-label="ATR上方线粗细" value={indicators.atr.upperLineWidth} onChange={(event) => setIndicators((current) => ({ ...current, atr: { ...current.atr, upperLineWidth: Number(event.target.value) as 1 | 2 | 3 | 4 } }))}><option value="1">1px</option><option value="2">2px</option><option value="3">3px</option><option value="4">4px</option></select></label><label>下方 ATR<input aria-label="下方 ATR" type="number" min="0" step="0.1" value={atrLowerMultiplier} onChange={(event) => updateAtrBand(atrUpperMultiplier, Math.max(0, Number(event.target.value) || 0))} />×</label><label>下方线颜色<input aria-label="ATR下方线颜色" type="color" value={indicators.atr.lowerColor} onChange={(event) => setIndicators((current) => ({ ...current, atr: { ...current.atr, lowerColor: event.target.value } }))} /></label><label>下方线粗细<select aria-label="ATR下方线粗细" value={indicators.atr.lowerLineWidth} onChange={(event) => setIndicators((current) => ({ ...current, atr: { ...current.atr, lowerLineWidth: Number(event.target.value) as 1 | 2 | 3 | 4 } }))}><option value="1">1px</option><option value="2">2px</option><option value="3">3px</option><option value="4">4px</option></select></label><small>价格确认区间：均线 ± ATR 倍数；每个币种单独保存</small></div><small>当前距离按 ATR 倍数显示</small></div>
     <div className={styles.trendAtrControls}><label><input aria-label="趋势 ATR" type="checkbox" checked={trendAtrEnabled} onChange={(event) => updateTrendAtr(event.target.checked, trendAtrMultiplier)} />趋势 ATR×3</label><label>倍数<input aria-label="趋势 ATR 倍数" type="number" min="0" step="0.1" value={trendAtrMultiplier} onChange={(event) => updateTrendAtr(trendAtrEnabled, Math.max(0, Number(event.target.value) || 0))} /></label></div>
+    <div className={styles.atrChannelControls}><strong>ATR 通道</strong>{(indicators.atrChannels ?? []).map((channel, index) => <label key={`atr-channel-setting-${index}`}><input aria-label={`ATR 通道 ${index + 1} 开关`} type="checkbox" checked={channel.enabled} onChange={(event) => setIndicators((current) => ({ ...current, atrChannels: (current.atrChannels ?? []).map((item, channelIndex) => channelIndex === index ? { ...item, enabled: event.target.checked } : item) }))} />通道 {index + 1}</label>)}{(indicators.atrChannels ?? []).map((channel, index) => <label key={`atr-channel-multiplier-${index}`}>ATR通道 {index + 1}<input aria-label={`ATR 通道 ${index + 1} 倍数`} type="number" min="0" max="20" step="0.1" value={channel.multiplier} onChange={(event) => setIndicators((current) => ({ ...current, atrChannels: (current.atrChannels ?? []).map((item, channelIndex) => channelIndex === index ? { ...item, multiplier: Math.max(0, Math.min(20, Number(event.target.value) || 0)) } : item) }))} />×</label>)}</div>
     <IndicatorRow name="MA" description="简单移动平均线与策略入场带" enabled={indicators.ma.enabled} onToggle={() => toggle("ma")}>
       <label>周期<input type="number" min="2" max="500" value={indicators.ma.length} onChange={(event) => updateIndicatorLength("ma", Number(event.target.value))} /></label><label>颜色<input type="color" value={indicators.ma.color} onChange={(event) => setIndicators((current) => ({ ...current, ma: { ...current.ma, color: event.target.value } }))} /></label><label>粗细<select value={indicators.ma.lineWidth} onChange={(event) => setIndicators((current) => ({ ...current, ma: { ...current.ma, lineWidth: Number(event.target.value) as 1 | 2 | 3 | 4 } }))}><option value="1">1px</option><option value="2">2px</option><option value="3">3px</option><option value="4">4px</option></select></label>
     </IndicatorRow>
@@ -819,7 +947,7 @@ function ManualProtectionAction({ symbol, side, canSubmit, disabledReason, onCha
 
 function PositionTable({ positions, protections, connected, canClose, closeDisabledReason, onClose, onSelectSymbol, onAnalyze, analysisLoadingSymbol, onAccountChanged }: { positions: AccountPosition[]; protections: ProtectionStatusEntry[]; connected: boolean; canClose: boolean; closeDisabledReason: string; onClose: (position: AccountPosition, percent: LiveClosePercent) => Promise<void>; onSelectSymbol: (symbol: string) => void; onAnalyze: (position: AccountPosition) => void; analysisLoadingSymbol: string; onAccountChanged: () => void }) {
   if (!connected || !positions.length) return <div className={styles.tableEmpty}><strong>{connected ? "当前没有合约持仓" : "币安账户尚未连接"}</strong><span>{connected ? "有持仓后会实时显示均价、标记价、盈亏和爆仓价。" : "在服务端配置 API 后，这里不会使用演示数据。"}</span></div>;
-  return <div className={styles.tableWrap}><table><thead><tr><th>分析</th><th>保护</th><th>合约</th><th>方向</th><th>数量</th><th>开仓均价</th><th>标记价格</th><th>实际占用保证金</th><th>未实现盈亏</th><th>爆仓价格</th><th>杠杆</th><th>手动保护</th><th>平仓</th></tr></thead><tbody>{positions.map((item) => { const protectedQuantity = protections.filter((protection) => protection.symbol === item.symbol && protection.side === item.side).reduce((total, protection) => total + protection.protectedQuantity, 0); const protectedPercent = Math.min(100, Math.round(protectedQuantity / item.quantity * 100)); return <tr key={`${item.symbol}-${item.positionSide}`}><td><button className={styles.analysisButton} onClick={() => onAnalyze(item)} disabled={analysisLoadingSymbol === item.symbol}>{analysisLoadingSymbol === item.symbol ? "分析中" : "分析"}</button></td><td>{protectedPercent > 0 && <span className={styles.protectionBadge}><i className={styles.protectionLight} />保护中 {protectedPercent}%</span>}</td><td><button className={styles.symbolLink} onClick={() => onSelectSymbol(item.symbol)}><strong>{displayBinanceSymbol(item.symbol)}</strong><small>{quoteAssetForSymbol(item.symbol) ?? "USDT"} 永续</small></button></td><td className={item.side === "LONG" ? styles.up : styles.down}>{item.side === "LONG" ? "做多" : "做空"}</td><td>{item.quantity}</td><td>{formatPrice(item.entryPrice)}</td><td>{formatPrice(item.markPrice)}</td><td>{item.occupiedMargin === null ? "未知" : `${formatMoney(item.occupiedMargin)} USDT`}</td><td className={item.unrealizedPnl >= 0 ? styles.up : styles.down}>{item.unrealizedPnl >= 0 ? "+" : ""}{formatMoney(item.unrealizedPnl)}</td><td>{formatPrice(item.liquidationPrice)}</td><td>{item.leverage}x</td><td><ManualProtectionAction symbol={item.symbol} side={item.side} canSubmit={canClose} disabledReason={closeDisabledReason} onChanged={onAccountChanged} /></td><td><ClosePositionAction symbol={item.symbol} quantity={item.quantity} canClose={canClose} disabledReason={closeDisabledReason} onClose={(percent) => onClose(item, percent)} /></td></tr>; })}</tbody></table></div>;
+  return <div className={styles.tableWrap}><table><thead><tr><th>分析</th><th>保护</th><th>合约</th><th>方向</th><th>数量</th><th>开仓均价</th><th>标记价格</th><th>实际占用保证金</th><th>未实现盈亏</th><th>已实现盈亏</th><th>爆仓价格</th><th>杠杆</th><th>手动保护</th><th>平仓</th></tr></thead><tbody>{positions.map((item) => { const protectedQuantity = protections.filter((protection) => protection.symbol === item.symbol && protection.side === item.side).reduce((total, protection) => total + protection.protectedQuantity, 0); const protectedPercent = Math.min(100, Math.round(protectedQuantity / item.quantity * 100)); return <tr key={`${item.symbol}-${item.positionSide}`}><td><button className={styles.analysisButton} onClick={() => onAnalyze(item)} disabled={analysisLoadingSymbol === item.symbol}>{analysisLoadingSymbol === item.symbol ? "分析中" : "分析"}</button></td><td>{protectedPercent > 0 && <span className={styles.protectionBadge}><i className={styles.protectionLight} />保护中 {protectedPercent}%</span>}</td><td><button className={styles.symbolLink} onClick={() => onSelectSymbol(item.symbol)}><strong>{displayBinanceSymbol(item.symbol)}</strong><small>{quoteAssetForSymbol(item.symbol) ?? "USDT"} 永续</small></button></td><td className={item.side === "LONG" ? styles.up : styles.down}>{item.side === "LONG" ? "做多" : "做空"}</td><td>{item.quantity}</td><td>{formatPrice(item.entryPrice)}</td><td>{formatPrice(item.markPrice)}</td><td>{item.occupiedMargin === null ? "未知" : `${formatMoney(item.occupiedMargin)} USDT`}</td><td className={item.unrealizedPnl >= 0 ? styles.up : styles.down}>{item.unrealizedPnl >= 0 ? "+" : ""}{formatMoney(item.unrealizedPnl)}</td><td className={item.realizedPnl >= 0 ? styles.up : styles.down}>{item.realizedPnl >= 0 ? "+" : ""}{formatMoney(item.realizedPnl)}</td><td>{formatPrice(item.liquidationPrice)}</td><td>{item.leverage}x</td><td><ManualProtectionAction symbol={item.symbol} side={item.side} canSubmit={canClose} disabledReason={closeDisabledReason} onChanged={onAccountChanged} /></td><td><ClosePositionAction symbol={item.symbol} quantity={item.quantity} canClose={canClose} disabledReason={closeDisabledReason} onClose={(percent) => onClose(item, percent)} /></td></tr>; })}</tbody></table></div>;
 }
 
 function OrderTable({ orders, connected }: { orders: AccountOrder[]; connected: boolean }) {

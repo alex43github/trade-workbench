@@ -21,6 +21,23 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.p12
+*.pfx
+.ssh/
+/.local/
+
+# local runtime state and diagnostic artifacts
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.db
+*.har
+*.dump
+*.dmp
+*.pcap
+/logs/
+/tmp/
 
 # debug
 npm-debug.log*

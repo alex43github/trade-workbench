@@ -4,12 +4,15 @@ import { getD1 } from "../../db/index.ts";
 import { getGatewayConfig, gatewayJson } from "../binance-gateway.ts";
 import {
   computeRoiTriggerPrice,
-  nextProtectionClientOrderId,
+  stableProtectionExitClientOrderId,
   normalizeFixedPrice,
   sourceExitQuantity,
   validateFixedProtectionPrice,
 } from "./protection-math.ts";
 import { isProjectClientOrderId } from "./order-source.ts";
+import { normalizeBinanceFuturesSymbol } from "./symbols.ts";
+import { normalizeQuickLiveTemplateSnapshot, type QuickLiveExitRule, type QuickLiveTemplateId, type QuickLiveTemplateSnapshot } from "./quick-live-template.ts";
+import { selectPositionRiskRow, type EntryDirection } from "./position-mode.ts";
 import type {
   ProtectionOrderPlan,
   ProtectionOrigin,
@@ -18,6 +21,7 @@ import type {
   ProtectionMarketConfig,
   ProtectionStrategyType,
 } from "./protection-contracts.ts";
+import { recordOwnedExitOrderOutcome, reserveOwnedExitOrder } from "./live-exit-ledger.ts";
 
 type Row = Record<string, unknown>;
 type RuntimeEnv = Record<string, string | undefined>;
@@ -63,6 +67,10 @@ export type PersistedProtectionStrategy = {
   leverage: number;
   invalidCandleCount: number;
   lastClosedCandleId: string | null;
+  quickBreachCount: number;
+  quickProcessedCandleIds: string[];
+  quickCompletedTargets: number[];
+  quickExitCompleted: boolean;
   revision: number;
   orders: PersistedProtectionOrder[];
 };
@@ -75,6 +83,10 @@ export type ProtectionCreateInput = {
   fixedPrice?: number;
   timeframe?: string;
   marketConfig?: ProtectionMarketConfig;
+  /** Server-owned quick-template metadata copied from the filled live strategy. */
+  quickTemplateId?: QuickLiveTemplateId;
+  quickExitRule?: QuickLiveExitRule;
+  quickTemplateSnapshot?: QuickLiveTemplateSnapshot | unknown;
   idempotencyKey: string;
 };
 
@@ -86,7 +98,7 @@ export type ProtectionSubmissionResult = {
 };
 
 export type ProtectionStrategyDependencies = {
-  readPosition?: (symbol: string) => Promise<PositionResponse | null>;
+  readPosition?: (symbol: string, direction?: EntryDirection) => Promise<PositionResponse | null>;
   readExchangeInfo?: (symbol: string) => Promise<ExchangeInfo>;
   placeOrder?: (order: ProtectionOrderPlan) => Promise<BinanceOrderResult>;
   findOrder?: (input: { symbol: string; clientOrderId: string }) => Promise<BinanceOrderResult | null>;
@@ -144,6 +156,24 @@ function parseConfig(value: unknown): Record<string, unknown> {
   }
 }
 
+function parseStringArray(value: unknown) {
+  try {
+    const parsed = JSON.parse(String(value ?? "[]"));
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseNumberArray(value: unknown) {
+  try {
+    const parsed = JSON.parse(String(value ?? "[]"));
+    return Array.isArray(parsed) ? parsed.map(Number).filter((item) => Number.isFinite(item)) : [];
+  } catch {
+    return [];
+  }
+}
+
 function decodeOrder(row: Row): PersistedProtectionOrder {
   return {
     id: String(row.id), strategyId: String(row.strategy_id), origin: String(row.origin) as ProtectionOrigin, stage: String(row.stage),
@@ -164,6 +194,10 @@ async function hydrate(row: Row | null): Promise<PersistedProtectionStrategy | n
     status: strategyStatus(row.status), error: row.error == null ? null : String(row.error), config: parseConfig(row.config_json), initialQuantity: Number(row.initial_quantity),
     remainingQuantity: Number(row.remaining_quantity), entryPrice: Number(row.entry_price), leverage: Number(row.leverage),
     invalidCandleCount: Number(row.invalid_candle_count ?? 0), lastClosedCandleId: row.last_closed_candle_id == null ? null : String(row.last_closed_candle_id),
+    quickBreachCount: Number(row.quick_breach_count ?? row.invalid_candle_count ?? 0),
+    quickProcessedCandleIds: parseStringArray(row.quick_processed_candle_ids),
+    quickCompletedTargets: parseNumberArray(row.quick_completed_targets),
+    quickExitCompleted: Number(row.quick_exit_completed ?? 0) === 1,
     revision: Number(row.revision), orders: orders.results.map(decodeOrder),
   };
 }
@@ -242,7 +276,24 @@ async function activeSourceAllocation(db: Awaited<ReturnType<typeof getD1>>, sym
   return rows.results.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0);
 }
 
-function planConfig(input: ProtectionCreateInput, stopPrices: number[]) {
+function quickMetadata(input: ProtectionCreateInput) {
+  const source = input.source as ProtectionPosition & {
+    quickTemplateId?: unknown;
+    quickExitRule?: unknown;
+    quickTemplateSnapshot?: unknown;
+  };
+  const rawSnapshot = input.quickTemplateSnapshot ?? source.quickTemplateSnapshot;
+  const snapshot = rawSnapshot === undefined ? null : normalizeQuickLiveTemplateSnapshot(rawSnapshot);
+  const templateId = input.quickTemplateId ?? (source.quickTemplateId as QuickLiveTemplateId | undefined) ?? snapshot?.templateId;
+  const exitRule = input.quickExitRule ?? (source.quickExitRule as QuickLiveExitRule | undefined) ?? snapshot?.exitRule;
+  if (templateId === undefined && exitRule === undefined && !snapshot) return null;
+  if (!snapshot || !templateId || !exitRule || snapshot.templateId !== templateId || snapshot.exitRule !== exitRule) {
+    throw new Error("快捷模板退出快照不完整");
+  }
+  return { templateId, exitRule, snapshot };
+}
+
+function planConfig(input: ProtectionCreateInput, stopPrices: number[], quick: ReturnType<typeof quickMetadata>) {
   return {
     strategyType: input.strategyType,
     sourceOrderIds: input.source.sourceOrderIds,
@@ -253,6 +304,11 @@ function planConfig(input: ProtectionCreateInput, stopPrices: number[]) {
     roiTargets: input.strategyType === "DEFAULT_TP" ? [100, 200] : [],
     firstGuardExitPct: input.strategyType === "MA_SL" ? 50 : null,
     marketConfig: input.marketConfig ?? null,
+    ...(quick ? {
+      quickTemplateId: quick.templateId,
+      quickExitRule: quick.exitRule,
+      quickTemplateSnapshot: quick.snapshot,
+    } : {}),
   };
 }
 
@@ -265,12 +321,13 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
   if (input.origin === "ALEX" && input.source.sourceOrderIds.some((value) => isProjectClientOrderId(value))) throw new Error("保护策略来源订单不正确");
   const sourceOrderId = safeId(input.source.sourceOrderIds[0], "来源订单编号不正确");
   const sourceFillId = safeId(input.source.sourceFillId ?? sourceOrderId, "来源成交批次编号不正确");
+  const quick = quickMetadata(input);
   const validSource = input.origin === "ALEX"
     ? !isProjectClientOrderId(sourceOrderId)
     : new RegExp(`^${originPrefix(input.origin)}`, "i").test(sourceOrderId);
   if (!validSource) throw new Error("保护策略来源订单不正确");
   if (!["DEFAULT_TP", "FIXED_TP", "MA_SL", "LEVEL_SL"].includes(input.strategyType)) throw new Error("保护策略类型不正确");
-  const symbol = safeId(input.source.symbol.toUpperCase(), "交易对不正确");
+  const symbol = normalizeBinanceFuturesSymbol(input.source.symbol, "交易对不正确");
   const db = await getD1();
   await ensureProtectionSchema();
   const replay = await db.prepare("SELECT * FROM trade_protection_strategies WHERE idempotency_key = ? LIMIT 1").bind(safeIdempotencyKey(input.idempotencyKey)).first<Row>();
@@ -280,12 +337,12 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
     .bind(sourceFillId, input.strategyType).first<Row>();
   if (duplicate) throw new Error("该来源订单已有活动保护策略");
 
-  const readPosition = dependencies.readPosition ?? (async (candidate) => {
+  const readPosition = dependencies.readPosition ?? (async (candidate, direction) => {
     const rows = await gatewayJson<PositionResponse[]>("/fapi/v2/positionRisk");
-    return rows.find((item) => String(item.symbol ?? "").toUpperCase() === candidate) ?? null;
+    return selectPositionRiskRow(rows, candidate, direction);
   });
   const readExchangeInfo = dependencies.readExchangeInfo ?? ((candidate) => gatewayJson<ExchangeInfo>(`/fapi/v1/exchangeInfo?symbol=${encodeURIComponent(candidate)}`));
-  const current = await readPosition(symbol);
+  const current = await readPosition(symbol, input.source.side);
   if (!current) throw new Error("当前持仓不存在");
   const currentAmount = Number(current.positionAmt);
   const currentSide = currentAmount >= 0 ? "LONG" : "SHORT";
@@ -314,17 +371,18 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
 
   const prefix = originPrefix(input.origin);
   const id = `${prefix}-ps-${await nextSequence("strategy")}`;
-  const config = planConfig(input, stopPrices);
+  const config = planConfig(input, stopPrices, quick);
   const plans: ProtectionOrderPlan[] = [];
   const exitSide = oppositeSide(input.source.side);
   const makePlan = async (kind: "TP" | "SL", stage: string, price: number | undefined, percent: number) => {
     const quantity = sourceExitQuantity({ initialQuantity: sourceQuantity, remainingQuantity: sourceQuantity, percent, stepSize: Number(filter.stepSize) });
     if (quantity <= 0 || quantity < filter.minQty || (filter.minNotional > 0 && quantity * (price ?? markPrice) < filter.minNotional)) throw new Error("保护数量低于交易所最小数量或最小名义金额");
-    const sequence = await nextSequence("order");
-    const clientOrderId = nextProtectionClientOrderId({ origin: input.origin, kind, sequence });
+    const eventKey = `${id}:${stage}`;
+    const clientOrderId = stableProtectionExitClientOrderId({ origin: input.origin, kind, eventKey });
     plans.push({
       strategyId: id, origin: input.origin, symbol, side: exitSide, positionSide: orderPositionSide,
       type: kind === "TP" ? "TAKE_PROFIT_MARKET" : "STOP_MARKET", quantity: formatDecimal(quantity, filter.stepSize),
+      workbenchOrderIntent: "EXIT_ONLY",
       ...(price === undefined ? {} : { stopPrice: formatDecimal(price, filter.tickSize) }), reduceOnly: true,
       newClientOrderId: clientOrderId, stage,
     });
@@ -352,8 +410,17 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'RESERVED')`)
       .bind(order.id, order.strategyId, order.origin, order.stage, order.clientOrderId, order.symbol, order.side, order.type, order.quantity, order.stopPrice)),
     db.prepare("INSERT INTO trade_protection_events (id, strategy_id, type, payload_json) VALUES (?, ?, 'CREATED', ?)")
-      .bind(crypto.randomUUID(), id, JSON.stringify({ origin: input.origin, sourceOrderId, sourceFillId, strategyType: input.strategyType })),
+      .bind(crypto.randomUUID(), id, JSON.stringify({ origin: input.origin, sourceOrderId, sourceFillId, strategyType: input.strategyType, exitEventKeys: plans.map((plan) => `${id}:${plan.stage}`) })),
   ]);
+
+  // These are the only persistent Binance EXIT_ONLY producers. Ownership is
+  // recorded before submission, never inferred later from exchange fields.
+  const ownedRows = await Promise.all(plans.map((plan) => reserveOwnedExitOrder({
+    eventKey: `${id}:${plan.stage}`, strategyId: id, generationIdentity: sourceFillId,
+    clientOrderId: plan.newClientOrderId, symbol: plan.symbol, positionSide: plan.positionSide,
+    side: plan.side, type: plan.type, timeInForce: null, quantity: plan.quantity,
+    stopPrice: plan.stopPrice,
+  })));
 
   if (!plans.length) {
     const updated = await db.prepare("UPDATE trade_protection_strategies SET status = 'ACTIVE', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(id).run();
@@ -365,7 +432,7 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
     method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
     body: (() => {
       const params = new URLSearchParams({ symbol: plan.symbol, side: plan.side, type: plan.type, quantity: plan.quantity,
-        ...(plan.stopPrice ? { stopPrice: plan.stopPrice } : {}), newClientOrderId: plan.newClientOrderId });
+        ...(plan.stopPrice ? { stopPrice: plan.stopPrice } : {}), workbenchOrderIntent: plan.workbenchOrderIntent, newClientOrderId: plan.newClientOrderId });
       if (plan.positionSide === "BOTH") params.set("reduceOnly", "true");
       else params.set("positionSide", plan.positionSide);
       return params.toString();
@@ -402,6 +469,7 @@ export async function createProtectionStrategy(input: ProtectionCreateInput, dep
     await db.prepare(`UPDATE trade_protection_orders SET exchange_order_id = COALESCE(?, exchange_order_id), status = ?,
       executed_quantity = COALESCE(?, executed_quantity), error = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .bind(exchangeOrderId, status, executedQuantity ?? null, error ?? null, row.id).run();
+    await recordOwnedExitOrderOutcome(ownedRows[index].id, { exchangeOrderId, status });
     return { status, error };
   }));
   const finalStatus: ProtectionStatus = outcomes.every((item) => accepted(item.status as ProtectionOrderStatus)) ? "ACTIVE" : "RECONCILIATION_REQUIRED";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { filterTradableFuturesSymbols } from "../lib/trade/symbols.ts";
+import { filterTradableFuturesSymbols, isBinanceFuturesSymbol, normalizeBinanceFuturesSymbol } from "../lib/trade/symbols.ts";
 
 test("market symbol discovery keeps every tradable USDT and USDC perpetual", async () => {
   const symbols = filterTradableFuturesSymbols({ symbols: [
@@ -23,4 +23,14 @@ test("market symbol discovery filters by base symbol and quote asset", async () 
     { symbol: "AAPLUSDT", baseAsset: "AAPL", quoteAsset: "USDT", status: "TRADING", contractType: "PERPETUAL" },
   ] }, "USDC");
   assert.deepEqual(symbols.map((item) => item.symbol), ["BTCUSDC"]);
+});
+
+test("Binance symbols may contain Unicode base assets and still normalize safely", () => {
+  assert.equal(isBinanceFuturesSymbol("龙虾USDT"), true);
+  assert.equal(normalizeBinanceFuturesSymbol("龙虾USDT"), "龙虾USDT");
+});
+
+test("single-character Binance base assets remain valid futures symbols", () => {
+  assert.equal(isBinanceFuturesSymbol("QUSDT"), true);
+  assert.equal(normalizeBinanceFuturesSymbol("QUSDT"), "QUSDT");
 });

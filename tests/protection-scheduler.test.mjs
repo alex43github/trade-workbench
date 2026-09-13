@@ -75,6 +75,20 @@ test("scheduler re-reads MA protection strategies after fill synchronization bef
   assert.deepEqual(calls, ["sync", "list", "protect:web-ps-new"]);
 });
 
+test("scheduler fails closed when periodic owned-exit reconciliation is ambiguous", async () => {
+  const { runProtectionStrategyScheduler } = await import("../lib/trade/protection-scheduler.ts");
+  const calls = [];
+  const result = await runProtectionStrategyScheduler({
+    reconcileOwnedExits: async () => { calls.push("reconcile"); return { scanned: 1, reconciliationRequired: 1, failed: 1 }; },
+    listRefreshableStrategies: async () => [],
+    syncLiveEntries: async () => ({ scanned: 0, filled: 0, protected: 0, reconciliationRequired: 0, failed: 0 }),
+    listStrategies: async () => [],
+  });
+  assert.deepEqual(calls, ["reconcile"]);
+  assert.equal(result.reconciliationRequired, 1);
+  assert.equal(result.failed, 1);
+});
+
 test("scheduler route keeps reanchor and entry-freeze counters in its unavailable response", async () => {
   const { createProtectionSchedulerPost } = await import("../app/api/trade/protection/execute/route.ts");
   const post = createProtectionSchedulerPost({ env: {} });

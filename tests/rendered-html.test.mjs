@@ -38,12 +38,20 @@ test("keeps the completed market radar at its own route", async () => {
   assert.match(html, /筹码与链上验真/);
 });
 
-test("retires historical advisory pages in favor of the radar", async () => {
-  for (const path of ["/consultations", "/arena", "/reviews", "/replay"]) {
+test("retires historical advisory pages in favor of the radar while retaining the review dashboard", async () => {
+  for (const path of ["/consultations", "/arena", "/replay"]) {
     const response = await request(path);
     assert.ok(response.status >= 300 && response.status < 400);
     assert.equal(response.headers.get("location"), "/radar");
   }
+});
+
+test("renders the read-only trade review dashboard at its own route", async () => {
+  const response = await request("/reviews");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /交易复盘/);
+  assert.match(html, /准确且已完成/);
 });
 
 test("server-renders the live trading terminal", async () => {
@@ -85,10 +93,9 @@ test("renders the MA30 and OI expansion radar filter", async () => {
   assert.match(radarSource, /连续站上 MA30/);
   assert.match(radarSource, /立即扫描/);
   assert.match(radarSource, /立即筛选/);
-  assert.match(radarSource, /Bark：新增候选时提醒/);
-  assert.match(radarSource, /破底翻（4H\/日线）/);
-  assert.match(radarSource, /08\/20.*08\/19.*08\/18/s);
-  assert.match(radarSource, /部分历史不足/);
+  assert.match(radarSource, /MA30 ± ATR 持续/);
+  assert.match(radarSource, /结构超强势/);
+  assert.match(radarSource, /Vegas 强势/);
   assert.match(radarSource, /全部归档/);
 });
 

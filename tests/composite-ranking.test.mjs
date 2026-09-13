@@ -34,6 +34,28 @@ test("combines only same-direction evidence and ranks more conditions first", as
   assert.ok(snapshot.candidates[1].conditions.some((condition) => condition.includes("筹码")));
 });
 
+test("includes short MA30/OI evidence in the composite ranking", async () => {
+  const { buildCompositeSnapshot } = await import("../lib/radar/composite-ranking.ts");
+  const snapshot = buildCompositeSnapshot({
+    scannedAt: "2026-08-28T00:00:00.000Z",
+    ma30Oi: {
+      status: "ready",
+      scannedAt: "2026-08-28T00:00:00.000Z",
+      candidates: [{
+        symbol: "BTCUSDT", direction: "SHORT", eligible: true, currentOi: 100,
+        previousDayOi: 110, priorTenDayOiAverage: 100, oiExpansionPct: 10,
+        consecutiveAboveMa: 0, consecutiveBelowMa: 7, ma30: 110, lastClose: 90,
+        scannedAt: "2026-08-28T00:00:00.000Z",
+      }],
+    },
+    reversal: readyReversal({ "1d": [{ symbol: "BTCUSDT", direction: "SHORT" }] }),
+    multiTimeframe: readyVegas({ bearish: { "4h": ["BTCUSDT"] } }),
+  });
+  const candidate = snapshot.candidates.find((row) => row.symbol === "BTCUSDT" && row.direction === "SHORT");
+  assert.ok(candidate);
+  assert.ok(candidate.conditions.some((condition) => condition.includes("MA30×OI")));
+});
+
 test("does not promote neutral chips, opposite evidence, or unavailable sources alone", async () => {
   const { buildCompositeSnapshot } = await import("../lib/radar/composite-ranking.ts");
   const snapshot = buildCompositeSnapshot({

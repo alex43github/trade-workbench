@@ -150,7 +150,7 @@ export function getAtrLifecycleScanBucket(value: Date | number = new Date()) {
   }).formatToParts(current);
   const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "00";
   const hour = Number(part("hour"));
-  const bucketHour = Number.isFinite(hour) ? Math.floor(hour / 3) * 3 : 0;
+  const bucketHour = Number.isFinite(hour) ? hour : 0;
   return `${part("year")}-${part("month")}-${part("day")}-${String(bucketHour).padStart(2, "0")}`;
 }
 

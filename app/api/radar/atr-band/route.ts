@@ -1,9 +1,11 @@
 import { getRequestExecutionContext } from "vinext/shims/request-context";
-import { ensureAtrBandLifecycleSchema } from "@/db/ensure";
+import { ensureAtrBandLifecycleSchema, ensureWatchlistSchema } from "@/db/ensure";
 import { getD1 } from "@/db";
 import { createAtrLifecycleFetchers } from "@/lib/radar/binance-public";
 import { buildAtrLifecycleScan, getAtrLifecycleScanBucket, hasAtrLifecycleScanBucket, loadAtrLifecycleDashboard, saveAtrLifecycle } from "@/lib/radar/atr-band-lifecycle-snapshot";
+import { notifyAtrLifecycleTransitions } from "@/lib/radar/bark-notifications";
 import { requireOperatorMutation, requireScheduler } from "@/lib/security/operator-guard";
+import { syncHourlyStrongWatchlist } from "@/lib/watchlist";
 
 let running = false;
 
@@ -15,13 +17,17 @@ export async function runAtrLifecycleScan(now = new Date(), options: { force?: b
   const previous = await loadAtrLifecycleDashboard(db);
   const scan = await buildAtrLifecycleScan(createAtrLifecycleFetchers(), previous, now, { db, expectedTotalSymbols: previous.active.length });
   await saveAtrLifecycle(db, scan);
+  await ensureWatchlistSchema();
+  await syncHourlyStrongWatchlist(db, scan);
+  await notifyAtrLifecycleTransitions({ db, previous: previous.lifecycles, current: scan.lifecycles, scanBucket });
   return scan;
 }
 
 export async function GET(request: Request) {
   await ensureAtrBandLifecycleSchema();
   const direction = new URL(request.url).searchParams.get("direction");
-  const dashboard = await loadAtrLifecycleDashboard(await getD1(), direction === "LONG" || direction === "SHORT" ? direction : {});
+  const db = await getD1();
+  const dashboard = await loadAtrLifecycleDashboard(db, direction === "LONG" || direction === "SHORT" ? direction : {});
   return Response.json(dashboard, { headers: { "Cache-Control": "no-store" } });
 }
 

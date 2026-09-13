@@ -2,44 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import styles from "../advisory.module.css";
+import { useWatchlist, type WatchlistItem } from "./useWatchlist";
 
-type SymbolOption = { symbol: string; displayName: string; quoteAsset?: "USDT" | "USDC" };
+type SymbolOption = WatchlistItem;
 type SymbolsResponse = { mode: "live" | "fallback"; symbols: SymbolOption[]; warning?: string };
 
-const STORAGE_KEY = "streetlight-watchlist-v1";
-const DEFAULT_SYMBOLS: SymbolOption[] = [
-  { symbol: "BTCUSDT", displayName: "BTC" },
-  { symbol: "ETHUSDT", displayName: "ETH" },
-  { symbol: "SOLUSDT", displayName: "SOL" },
-  { symbol: "HYPEUSDT", displayName: "HYPE" },
-];
-
-function readStoredSymbols() {
-  if (typeof window === "undefined") return DEFAULT_SYMBOLS;
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null") as unknown;
-    if (!Array.isArray(parsed)) return DEFAULT_SYMBOLS;
-    const symbols = parsed.filter((item): item is SymbolOption => Boolean(item && typeof item === "object" && "symbol" in item && "displayName" in item));
-    return symbols.length ? symbols.slice(0, 12) : DEFAULT_SYMBOLS;
-  } catch {
-    return DEFAULT_SYMBOLS;
-  }
-}
-
 export default function WatchlistBanner() {
-  const [watchlist, setWatchlist] = useState<SymbolOption[]>(DEFAULT_SYMBOLS);
+  const { watchlist, add: addWatchlistItem, remove: removeWatchlistItem } = useWatchlist();
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<SymbolOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [warning, setWarning] = useState("");
-
-  // localStorage is intentionally read after hydration so the server keeps a stable default markup.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setWatchlist(readStoredSymbols()), []);
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(watchlist));
-  }, [watchlist]);
 
   useEffect(() => {
     const normalized = query.trim();
@@ -70,11 +43,11 @@ export default function WatchlistBanner() {
   const currentSymbols = useMemo(() => new Set(watchlist.map((item) => item.symbol)), [watchlist]);
   function addSymbol(item: SymbolOption) {
     if (currentSymbols.has(item.symbol)) return;
-    setWatchlist((current) => [...current, item].slice(0, 12));
+    void addWatchlistItem(item);
     setQuery("");
   }
   function removeSymbol(symbol: string) {
-    setWatchlist((current) => current.filter((item) => item.symbol !== symbol));
+    void removeWatchlistItem(symbol);
   }
 
   return <section className={styles.watchlistBanner} aria-label="自选币与币种搜索">

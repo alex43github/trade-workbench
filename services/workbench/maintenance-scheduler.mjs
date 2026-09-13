@@ -9,7 +9,8 @@ const stateFile = process.env.WORKBENCH_STATE_FILE || "/var/lib/trade-workbench/
 function key(date, job) {
   const current = parts(date);
   const day = `${current.year}-${String(current.month).padStart(2, "0")}-${String(current.day).padStart(2, "0")}`;
-  return job === "daily" ? `daily:${day}` : `4h:${day}:${String(current.hour).padStart(2, "0")}`;
+  if (job === "daily") return `daily:${day}`;
+  return `${job}:${day}:${String(current.hour).padStart(2, "0")}`;
 }
 
 function countCandidates(result) {
@@ -21,7 +22,13 @@ function countCandidates(result) {
 
 function barkSummary(payload) {
   const summary = { sent: 0, failed: 0, skipped: 0 };
-  for (const source of [payload?.notifications, payload?.reversal?.notifications, payload?.reversalDaily?.notifications, payload?.ma30Oi?.notifications]) {
+  for (const source of [
+    payload?.notifications,
+    payload?.reversal?.hourly?.notifications,
+    payload?.reversal?.fourHourly?.notifications,
+    payload?.reversalDaily?.notifications,
+    payload?.ma30Oi?.notifications,
+  ]) {
     if (!source || typeof source !== "object") continue;
     summary.sent += Number.isFinite(source.sent) ? source.sent : 0;
     summary.failed += Number.isFinite(source.failed) ? source.failed : 0;
@@ -39,7 +46,8 @@ function summarizeMaintenance(payload) {
   return {
     scannerCounts: {
       crowding: Array.isArray(payload?.crowding?.outcomes) ? payload.crowding.outcomes.length : 0,
-      reversal4h: countCandidates(payload?.reversal),
+      reversalHourly: countCandidates(payload?.reversal?.hourly),
+      reversal4h: countCandidates(payload?.reversal?.fourHourly),
       reversalDaily: countCandidates(payload?.reversalDaily),
       ma30Oi: countCandidates(payload?.ma30Oi),
     },
@@ -81,7 +89,7 @@ async function main() {
   const startedAt = new Date().toISOString();
   state.lastRunStatus = "running";
   state.lastAttemptAt = startedAt;
-  state.latestRun = { startedAt, finishedAt: null, durationMs: null, status: "running", scannerCounts: { crowding: 0, reversal4h: 0, reversalDaily: 0, ma30Oi: 0 }, bark: { sent: 0, failed: 0, skipped: 0 }, error: null };
+  state.latestRun = { startedAt, finishedAt: null, durationMs: null, status: "running", scannerCounts: { crowding: 0, reversalHourly: 0, reversal4h: 0, reversalDaily: 0, ma30Oi: 0 }, bark: { sent: 0, failed: 0, skipped: 0 }, error: null };
   await save();
   try {
     const response = await fetch(`${baseUrl}/api/advisory/maintenance`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
@@ -96,7 +104,7 @@ async function main() {
   } catch (error) {
     state.lastRunStatus = "failed";
     const finishedAt = new Date().toISOString();
-    state.latestRun = { ...(state.latestRun ?? { startedAt, scannerCounts: { crowding: 0, reversal4h: 0, reversalDaily: 0, ma30Oi: 0 }, bark: { sent: 0, failed: 0, skipped: 0 } }), finishedAt, durationMs: Date.parse(finishedAt) - Date.parse(startedAt), status: "failed", error: errorSummary(error) };
+    state.latestRun = { ...(state.latestRun ?? { startedAt, scannerCounts: { crowding: 0, reversalHourly: 0, reversal4h: 0, reversalDaily: 0, ma30Oi: 0 }, bark: { sent: 0, failed: 0, skipped: 0 } }), finishedAt, durationMs: Date.parse(finishedAt) - Date.parse(startedAt), status: "failed", error: errorSummary(error) };
     await save();
     throw error;
   }

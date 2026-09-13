@@ -8,10 +8,45 @@ let indicatorSettingsInitialized = false;
 let strategyLedgerInitialized = false;
 let telegramInitialized = false;
 let liveStrategyInitialized = false;
+let liveStrategyInitialization: Promise<void> | null = null;
 let liveManualCloseInitialized = false;
+let liveExitLedgerInitialized = false;
 let protectionInitialized = false;
 let orderArchiveInitialized = false;
 let atrBandLifecycleInitialized = false;
+let watchlistInitialized = false;
+
+export async function ensureWatchlistSchema() {
+  if (watchlistInitialized) return;
+  const db = await getD1();
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS watchlist_entries (
+      symbol TEXT PRIMARY KEY NOT NULL,
+      display_name TEXT NOT NULL,
+      quote_asset TEXT NOT NULL,
+      source TEXT NOT NULL CHECK (source IN ('MANUAL', 'ATR_BAND')),
+      added_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      removed_at TEXT
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS watchlist_entry_sources (
+      symbol TEXT NOT NULL,
+      source TEXT NOT NULL CHECK (source IN ('PINNED','POSITION','MANUAL','ATR_STRONG_1H')),
+      added_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      PRIMARY KEY(symbol, source)
+    )`),
+  ]);
+  const pinned = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT", "ENAUSDT"];
+  await db.batch(pinned.map((symbol) => db.prepare(`INSERT INTO watchlist_entries (symbol, display_name, quote_asset, source, removed_at)
+    VALUES (?, ?, 'USDT', 'MANUAL', NULL) ON CONFLICT(symbol) DO NOTHING`).bind(symbol, symbol.replace(/USDT$/, ""))));
+  await db.batch(pinned.map((symbol) => db.prepare("INSERT OR IGNORE INTO watchlist_entry_sources (symbol, source) VALUES (?, 'PINNED')").bind(symbol)));
+  await db.batch([
+    db.prepare("INSERT OR IGNORE INTO watchlist_entry_sources (symbol, source, added_at) SELECT symbol, CASE WHEN source = 'ATR_BAND' THEN 'ATR_STRONG_1H' ELSE 'MANUAL' END, added_at FROM watchlist_entries WHERE removed_at IS NULL AND symbol NOT IN ('BTCUSDT','ETHUSDT','SOLUSDT','HYPEUSDT','ENAUSDT')"),
+  ]);
+  await db.batch([
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_watchlist_entries_active_added ON watchlist_entries(removed_at, added_at DESC)"),
+  ]);
+  watchlistInitialized = true;
+}
 
 export async function ensureOrderArchiveSchema() {
   if (orderArchiveInitialized) return;
@@ -114,6 +149,10 @@ export async function ensureProtectionSchema() {
       initial_quantity TEXT NOT NULL, remaining_quantity TEXT NOT NULL,
       entry_price TEXT NOT NULL, leverage TEXT NOT NULL,
       invalid_candle_count INTEGER DEFAULT 0 NOT NULL, last_closed_candle_id TEXT,
+      quick_breach_count INTEGER DEFAULT 0 NOT NULL,
+      quick_processed_candle_ids TEXT DEFAULT '[]' NOT NULL,
+      quick_completed_targets TEXT DEFAULT '[]' NOT NULL,
+      quick_exit_completed INTEGER DEFAULT 0 NOT NULL,
       revision INTEGER DEFAULT 1 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     )`),
@@ -144,26 +183,68 @@ export async function ensureProtectionSchema() {
   } catch (error) {
     if (!String(error).toLowerCase().includes("duplicate column")) throw error;
   }
+  for (const sql of [
+    "ALTER TABLE trade_protection_strategies ADD COLUMN quick_breach_count INTEGER DEFAULT 0 NOT NULL",
+    "ALTER TABLE trade_protection_strategies ADD COLUMN quick_processed_candle_ids TEXT DEFAULT '[]' NOT NULL",
+    "ALTER TABLE trade_protection_strategies ADD COLUMN quick_completed_targets TEXT DEFAULT '[]' NOT NULL",
+    "ALTER TABLE trade_protection_strategies ADD COLUMN quick_exit_completed INTEGER DEFAULT 0 NOT NULL",
+  ]) {
+    try {
+      await db.prepare(sql).run();
+    } catch (error) {
+      if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+    }
+  }
   protectionInitialized = true;
 }
 
 export async function ensureLiveManualCloseSchema() {
   if (liveManualCloseInitialized) return;
   const db = await getD1();
-  await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS live_manual_closes (
+  await db.prepare(`CREATE TABLE IF NOT EXISTS live_manual_closes (
       id TEXT PRIMARY KEY NOT NULL, symbol TEXT NOT NULL, position_side TEXT NOT NULL,
       requested_percent INTEGER NOT NULL, quantity TEXT NOT NULL, client_order_id TEXT NOT NULL UNIQUE,
+      idempotency_key TEXT UNIQUE, semantics_json TEXT,
       exchange_order_id TEXT, status TEXT NOT NULL, recovered INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
-    )`),
+    )`).run();
+  for (const sql of [
+    "ALTER TABLE live_manual_closes ADD COLUMN idempotency_key TEXT",
+    "ALTER TABLE live_manual_closes ADD COLUMN semantics_json TEXT",
+  ]) {
+    try {
+      await db.prepare(sql).run();
+    } catch (error) {
+      if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+    }
+  }
+  await db.batch([
     db.prepare("CREATE INDEX IF NOT EXISTS idx_live_manual_closes_symbol_created ON live_manual_closes(symbol, created_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_manual_closes_idempotency_created ON live_manual_closes(idempotency_key, created_at)"),
   ]);
   liveManualCloseInitialized = true;
 }
 
-export async function ensureLiveStrategySchema() {
-  if (liveStrategyInitialized) return;
+export async function ensureLiveExitLedgerSchema() {
+  if (liveExitLedgerInitialized) return;
+  const db = await getD1();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS live_owned_exit_orders (
+      id TEXT PRIMARY KEY NOT NULL, event_key TEXT NOT NULL UNIQUE, strategy_id TEXT NOT NULL,
+      generation_identity TEXT NOT NULL, client_order_id TEXT NOT NULL UNIQUE,
+      symbol TEXT NOT NULL, position_side TEXT NOT NULL, side TEXT NOT NULL, type TEXT NOT NULL,
+      time_in_force TEXT, intended_quantity TEXT NOT NULL, intended_price TEXT, intended_stop_price TEXT,
+      exchange_order_id TEXT UNIQUE, status TEXT NOT NULL, terminal_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`).run();
+  await db.batch([
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_owned_exit_orders_symbol_side_status ON live_owned_exit_orders(symbol, position_side, status, created_at)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_owned_exit_orders_strategy_generation ON live_owned_exit_orders(strategy_id, generation_identity, status)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_live_owned_exit_orders_terminal ON live_owned_exit_orders(terminal_at)"),
+  ]);
+  liveExitLedgerInitialized = true;
+}
+
+async function ensureLiveStrategySchemaInner() {
   const db = await getD1();
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS live_strategy_sequences (
@@ -205,7 +286,7 @@ export async function ensureLiveStrategySchema() {
       id TEXT PRIMARY KEY NOT NULL, strategy_id TEXT NOT NULL, generation INTEGER NOT NULL,
       anchor_candle_id TEXT, ma_value TEXT, atr_value TEXT, next_refresh_at TEXT,
       refresh_reason TEXT NOT NULL, status TEXT DEFAULT 'ACTIVE' NOT NULL,
-      lease_token TEXT, lease_expires_at TEXT,
+      lease_token TEXT, lease_expires_at TEXT, last_error TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       UNIQUE(strategy_id, generation)
     )`),
@@ -256,6 +337,7 @@ export async function ensureLiveStrategySchema() {
     "ALTER TABLE live_strategy_orders ADD COLUMN quantity TEXT",
     "ALTER TABLE live_strategy_orders ADD COLUMN executed_quantity TEXT DEFAULT '0' NOT NULL",
     "ALTER TABLE live_strategy_orders ADD COLUMN error TEXT",
+    "ALTER TABLE live_strategy_generations ADD COLUMN last_error TEXT",
   ]) {
     try {
       await db.prepare(sql).run();
@@ -264,6 +346,17 @@ export async function ensureLiveStrategySchema() {
     }
   }
   liveStrategyInitialized = true;
+}
+
+export async function ensureLiveStrategySchema() {
+  if (liveStrategyInitialized) return;
+  if (!liveStrategyInitialization) liveStrategyInitialization = ensureLiveStrategySchemaInner();
+  try {
+    await liveStrategyInitialization;
+  } catch (error) {
+    liveStrategyInitialization = null;
+    throw error;
+  }
 }
 
 export async function ensureTelegramSchema() {
@@ -617,6 +710,8 @@ export async function ensureAdvisorySchema() {
       direction TEXT NOT NULL, signal_time INTEGER NOT NULL, score REAL NOT NULL,
       reclaim_level TEXT DEFAULT 'HIGH' NOT NULL, breakout_lookback_bars INTEGER DEFAULT 0 NOT NULL,
       breakout_lookback_capped INTEGER DEFAULT 0 NOT NULL,
+      close_breakout_lookback_bars INTEGER DEFAULT 0 NOT NULL,
+      close_breakout_lookback_capped INTEGER DEFAULT 0 NOT NULL,
       payload_json TEXT NOT NULL, outcome_json TEXT, outcome_complete INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       UNIQUE(symbol, interval, direction, signal_time)
@@ -626,6 +721,8 @@ export async function ensureAdvisorySchema() {
   try { await db.prepare("ALTER TABLE radar_reversal_archives ADD COLUMN reclaim_level TEXT DEFAULT 'HIGH' NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
   try { await db.prepare("ALTER TABLE radar_reversal_archives ADD COLUMN breakout_lookback_bars INTEGER DEFAULT 0 NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
   try { await db.prepare("ALTER TABLE radar_reversal_archives ADD COLUMN breakout_lookback_capped INTEGER DEFAULT 0 NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
+  try { await db.prepare("ALTER TABLE radar_reversal_archives ADD COLUMN close_breakout_lookback_bars INTEGER DEFAULT 0 NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
+  try { await db.prepare("ALTER TABLE radar_reversal_archives ADD COLUMN close_breakout_lookback_capped INTEGER DEFAULT 0 NOT NULL").run(); } catch (error) { if (!String(error).toLowerCase().includes("duplicate column")) throw error; }
   await db.batch([
     db.prepare("CREATE INDEX IF NOT EXISTS idx_consultations_date_symbol ON consultations(analysis_date, symbol)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_strategy_versions_expert_created ON strategy_versions(expert_id, created_at)"),
@@ -652,7 +749,7 @@ export async function ensureAdvisorySchema() {
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_composite_generated_at ON radar_composite_snapshots(generated_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_scans_interval_scanned ON radar_reversal_scans(interval, scan_source, scanned_at)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_interval_direction_time ON radar_reversal_archives(interval, direction, signal_time)"),
-    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_archive_sort ON radar_reversal_archives(signal_time, score, breakout_lookback_bars)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_archive_sort ON radar_reversal_archives(signal_time, score, close_breakout_lookback_bars)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_radar_reversal_archives_pending ON radar_reversal_archives(outcome_complete, signal_time)")
   ]);
   await db.prepare("PRAGMA optimize").run();

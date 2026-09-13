@@ -9,6 +9,7 @@ import {
 } from "./live-strategies.ts";
 import { createProtectionStrategy, listProtectionStrategiesBySourceOrderId, type ProtectionCreateInput } from "./protection-strategies.ts";
 import type { ProtectionPosition } from "./protection-contracts.ts";
+import { selectPositionRiskRow, type EntryDirection } from "./position-mode.ts";
 
 type BinanceOrder = {
   orderId?: string | number;
@@ -36,7 +37,7 @@ export type LiveEntryProtectionSyncResult = {
 export type LiveEntryProtectionSyncDependencies = {
   listStrategies?: (limit?: number) => Promise<LiveStrategy[]>;
   findOrder?: (input: { symbol: string; clientOrderId: string }) => Promise<BinanceOrder | null>;
-  readPosition?: (symbol: string) => Promise<BinancePosition | null>;
+  readPosition?: (symbol: string, direction?: EntryDirection) => Promise<BinancePosition | null>;
   recordOrder?: typeof recordLiveOrder;
   recordAttempt?: typeof recordLiveOrderAttempt;
   listLinks?: typeof listLiveEntryProtectionLinks;
@@ -97,14 +98,20 @@ function activeStrategy(strategy: LiveStrategy) {
   return ["WAITING", "ACTIVE", "RECONCILIATION_REQUIRED"].includes(strategy.status);
 }
 
+function quickProtectionFields(strategy: LiveStrategy): Pick<ProtectionCreateInput, "quickTemplateId" | "quickExitRule" | "quickTemplateSnapshot"> | Record<string, never> {
+  const { quickTemplateId, quickExitRule, quickTemplateSnapshot } = strategy.config;
+  if (!quickTemplateId || !quickExitRule || !quickTemplateSnapshot) return {};
+  return { quickTemplateId, quickExitRule, quickTemplateSnapshot };
+}
+
 export async function syncLiveEntryProtections(dependencies: LiveEntryProtectionSyncDependencies = {}): Promise<LiveEntryProtectionSyncResult> {
   const listStrategies = dependencies.listStrategies ?? listLiveStrategies;
   const findOrder = dependencies.findOrder ?? ((input) => gatewayJson<BinanceOrder>(
     `/fapi/v1/order?symbol=${encodeURIComponent(input.symbol)}&origClientOrderId=${encodeURIComponent(input.clientOrderId)}`,
   ));
-  const readPosition = dependencies.readPosition ?? (async (symbol) => {
+  const readPosition = dependencies.readPosition ?? (async (symbol, direction) => {
     const rows = await gatewayJson<BinancePosition[]>("/fapi/v2/positionRisk");
-    return rows.find((row) => String(row.symbol ?? "").toUpperCase() === symbol.toUpperCase()) ?? null;
+    return selectPositionRiskRow(rows, symbol, direction);
   });
   const recordOrder = dependencies.recordOrder ?? recordLiveOrder;
   const recordAttempt = dependencies.recordAttempt ?? recordLiveOrderAttempt;
@@ -154,7 +161,7 @@ export async function syncLiveEntryProtections(dependencies: LiveEntryProtection
       );
       const remainingToProtect = cumulativeQuantity - knownQuantity;
       if (remainingToProtect <= 1e-12) continue;
-      const source = sourcePosition(strategy, order, exchange, await readPosition(strategy.config.symbol).catch(() => null) ?? {}, cumulativeQuantity);
+      const source = sourcePosition(strategy, order, exchange, await readPosition(strategy.config.symbol, strategy.config.side).catch(() => null) ?? {}, cumulativeQuantity);
       const fillId = source.sourceFillId!;
       if (links.some((link) => link.sourceFillId === fillId && ["ERROR", "RECONCILIATION_REQUIRED"].includes(link.status))) {
         result.reconciliationRequired += 1;
@@ -168,6 +175,7 @@ export async function syncLiveEntryProtections(dependencies: LiveEntryProtection
           strategyType: "MA_SL",
           timeframe: strategy.config.timeframe,
           marketConfig: strategyMarketConfig(strategy),
+          ...quickProtectionFields(strategy),
           idempotencyKey: `live-ma-${order.clientOrderId}-${String(Number(cumulativeQuantity.toPrecision(15)))}`,
         });
         if (!submission.ok) throw new Error(submission.error ?? "止损保护未生效");

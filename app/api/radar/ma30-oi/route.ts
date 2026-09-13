@@ -67,7 +67,7 @@ export async function runMa30OiScan(previousOverride?: Ma30OiSnapshot | null) {
   });
   await saveMa30OiSnapshot(db, snapshot);
   const notifications = snapshot.status === "ready"
-    ? await notifyNewMa30OiCandidates({ db, current: snapshot.candidates, previous: previous?.candidates ?? [] })
+    ? await notifyNewMa30OiCandidates({ db, current: snapshot.candidates, previous: previous?.candidates ?? [], scanBucket: snapshot.scannedAt })
     : { attempted: 0, sent: 0, skipped: 0, failed: 0 };
   return { ...snapshot, notifications };
 }

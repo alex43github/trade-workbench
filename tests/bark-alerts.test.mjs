@@ -91,6 +91,12 @@ test("radar alerts only include candidates absent from the previous scan", () =>
   assert.deepEqual(diffNewCandidates(current, previous, ma30OiCandidateKey), [{ symbol: "ETHUSDT" }]);
 });
 
+test("MA30/OI alert identity includes direction while preserving legacy long candidates", () => {
+  assert.equal(ma30OiCandidateKey({ symbol: "BTCUSDT" }), "BTCUSDT:LONG");
+  assert.equal(ma30OiCandidateKey({ symbol: "BTCUSDT", direction: "LONG" }), "BTCUSDT:LONG");
+  assert.equal(ma30OiCandidateKey({ symbol: "BTCUSDT", direction: "SHORT" }), "BTCUSDT:SHORT");
+});
+
 test("reversal dedupe includes interval, direction, and closed signal time", () => {
   const previous = [{ symbol: "BTCUSDT", interval: "4h", direction: "LONG", signalTime: "2026-08-20T04:00:00Z" }];
   const current = [

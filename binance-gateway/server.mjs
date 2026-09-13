@@ -3,7 +3,9 @@ import http from "node:http";
 import https from "node:https";
 import crypto from "node:crypto";
 import { URL } from "node:url";
-import { validateOrderPayload } from "./order-policy.mjs";
+import { isExitOnlyOrder, matchesExitOnlySemantics, validateOrderPayload } from "./order-policy.mjs";
+import { withExitOnlyLock } from "./exit-lock.mjs";
+import { signedRequestParts } from "./signing.mjs";
 
 const VERSION = "1.0.0";
 const PORT = Number(process.env.BINANCE_GATEWAY_PORT || 8788);
@@ -91,10 +93,11 @@ function routePolicy(pathname) {
   return BINANCE_ROUTE_POLICY.find((policy) => policy.path === pathname) || null;
 }
 
-
-function hmacHex(secret, payload) {
-  return crypto.createHmac("sha256", secret).update(payload).digest("hex");
+function exitOnlyLockKey(body) {
+  const params = new URLSearchParams(body || "");
+  return `${String(params.get("symbol") ?? "").toUpperCase()}:${String(params.get("positionSide") ?? "BOTH").toUpperCase()}`;
 }
+
 
 function syncTime() {
   return new Promise((resolve, reject) => {
@@ -154,15 +157,17 @@ function forwardBinanceOnce(method, pathname, searchParams, body, signed) {
   return new Promise((resolve, reject) => {
     const steps = async () => {
       let query = searchParams.toString();
+      let requestBody = body;
       if (signed) {
         if (!API_SECRET) throw new Error("缺少 BINANCE_GATEWAY_API_SECRET，无法访问私有接口");
         await ensureTimeSync();
-        const signedParams = new URLSearchParams(query);
-        signedParams.set("timestamp", String(Date.now() + timeOffsetMs));
-        signedParams.set("recvWindow", "5000");
-        const unsigned = signedParams.toString();
-        signedParams.set("signature", hmacHex(API_SECRET, unsigned));
-        query = signedParams.toString();
+        ({ query, body: requestBody } = signedRequestParts({
+          method,
+          query,
+          body,
+          timestamp: Date.now() + timeOffsetMs,
+          secret: API_SECRET,
+        }));
       }
       const headers = { "user-agent": `binance-gateway/${VERSION}` };
       if (API_KEY) headers["X-MBX-APIKEY"] = API_KEY;
@@ -183,7 +188,7 @@ function forwardBinanceOnce(method, pathname, searchParams, body, signed) {
       );
       req.on("error", reject);
       req.on("timeout", () => req.destroy(new Error("转发币安超时")));
-      if (body) req.write(body);
+      if (requestBody) req.write(requestBody);
       req.end();
     };
     steps().catch(reject);
@@ -253,10 +258,50 @@ function handle(req, res) {
     });
     req.on("end", () => {
       const body = Buffer.concat(chunks).toString("utf8") || null;
-      const orderValidationError = validateOrderPayload(req.method, binancePath, body);
-      if (orderValidationError) return finish(400) || json(res, 400, { ok: false, message: orderValidationError });
-      forwardBinance(req.method, binancePath, url.searchParams, body, policy.signed)
-        .then((result) => {
+      const forward = async () => {
+        let outboundBody = body;
+        let authority;
+        if (req.method === "POST" && binancePath === "/fapi/v1/order" && isExitOnlyOrder(body)) {
+          const orderParams = new URLSearchParams(body || "");
+          const symbol = String(orderParams.get("symbol") ?? "").toUpperCase();
+          const clientOrderId = String(orderParams.get("newClientOrderId") ?? "");
+          const existing = await forwardBinance("GET", "/fapi/v1/order", new URLSearchParams({ symbol, origClientOrderId: clientOrderId }), null, true);
+          if (existing.status >= 200 && existing.status < 300 && existing.json) {
+            if (!matchesExitOnlySemantics(orderParams, existing.json)) throw new Error("EXIT_ONLY 同一 clientOrderId 的订单语义冲突，已拒绝");
+            return { result: existing };
+          }
+          if (!(existing.json?.code === -2013)) throw new Error("EXIT_ONLY 既有订单对账失败，已拒绝重发");
+          const firstPositions = await forwardBinance("GET", "/fapi/v2/positionRisk", new URLSearchParams(), null, true);
+          if (firstPositions.status < 200 || firstPositions.status >= 300 || !Array.isArray(firstPositions.json)) {
+            throw new Error("读取权威仓位失败，已拒绝 EXIT_ONLY 下单");
+          }
+          const openOrders = await forwardBinance("GET", "/fapi/v1/openOrders", new URLSearchParams({ symbol }), null, true);
+          if (openOrders.status < 200 || openOrders.status >= 300 || !Array.isArray(openOrders.json)) {
+            throw new Error("读取权威 openOrders 失败，已拒绝 EXIT_ONLY 下单");
+          }
+          const finalPositions = await forwardBinance("GET", "/fapi/v2/positionRisk", new URLSearchParams(), null, true);
+          if (finalPositions.status < 200 || finalPositions.status >= 300 || !Array.isArray(finalPositions.json)) {
+            throw new Error("二次读取权威仓位失败，已拒绝 EXIT_ONLY 下单");
+          }
+          authority = { positionRows: finalPositions.json, openOrders: openOrders.json, normalizedBody: null };
+        }
+        const orderValidationError = validateOrderPayload(req.method, binancePath, body, url.searchParams.toString(), authority);
+        if (orderValidationError) return { validationError: orderValidationError };
+        if (authority?.normalizedBody) outboundBody = authority.normalizedBody;
+        else if (req.method === "POST" && binancePath === "/fapi/v1/order" && body) {
+          const params = new URLSearchParams(body);
+          params.delete("workbenchOrderIntent");
+          outboundBody = params.toString();
+        }
+        return { result: await forwardBinance(req.method, binancePath, url.searchParams, outboundBody, policy.signed) };
+      };
+      const guardedForward = req.method === "POST" && binancePath === "/fapi/v1/order" && isExitOnlyOrder(body)
+        ? () => withExitOnlyLock(exitOnlyLockKey(body), forward)
+        : forward;
+      guardedForward()
+        .then((outcome) => {
+          if (outcome.validationError) return finish(400) || json(res, 400, { ok: false, message: outcome.validationError });
+          const { result } = outcome;
           if (result.json) {
             json(res, result.status, result.json);
           } else {

@@ -4,7 +4,7 @@ import { retryFailedNotifications } from "@/lib/advisory/notification-retry";
 import { POST as scanCrowdingAlerts } from "@/app/api/radar/alerts/route";
 import { runMa30OiScan } from "@/app/api/radar/ma30-oi/route";
 import { runAtrLifecycleScan } from "@/app/api/radar/atr-band/route";
-import { runReversalScan } from "@/app/api/radar/reversal/route";
+import { runReversalScan, runScheduledReversalScans } from "@/app/api/radar/reversal/route";
 import { runMultiTimeframeScan } from "@/app/api/radar/multitimeframe/route";
 import { GET as getRadar } from "@/app/api/radar/route";
 import {
@@ -20,6 +20,7 @@ import { getAtrLifecycleScanBucket, hasAtrLifecycleScanBucket } from "@/lib/rada
 import { loadReversalDashboard, REVERSAL_INTERVALS } from "@/lib/radar/reversal-snapshot";
 import { loadLatestMultiTimeframeSnapshot } from "@/lib/radar/multitimeframe";
 import { requireScheduler, schedulerToken } from "@/lib/security/operator-guard";
+import { syncGatewayPositionWatchlist } from "@/lib/trade/watchlist-position-sync";
 
 function shanghaiHour(date = new Date()) {
   return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", hourCycle: "h23" }).format(date));
@@ -66,10 +67,11 @@ export async function POST(request: Request) {
   await ensureAdvisorySchema();
   const db = await getD1();
   const notifications = await retryFailedNotifications(db, { barkBaseUrl: process.env.BARK_BASE_URL });
+  const watchlistPositions = await syncGatewayPositionWatchlist();
   const crowdingRequest = new Request(new URL("/api/radar/alerts", request.url), { method: "POST", headers: { authorization: `Bearer ${token}` } });
   const crowdingResponse = await scanCrowdingAlerts(crowdingRequest);
   const crowding = await crowdingResponse.json();
-  const reversal = await runReversalScan(["4h"], undefined, "periodic");
+  const reversal = await runScheduledReversalScans();
   const reversalOk = true;
   let reversalDaily: unknown = { status: "skipped", reason: "日线破底翻仅在北京时间 08:00 扫描" };
   const reversalDailyOk = true;
@@ -81,9 +83,9 @@ export async function POST(request: Request) {
   if (shanghaiHour() === 8) {
     ma30Oi = await runMa30OiScan();
   }
-  let atrBand: unknown = { status: "skipped", reason: "MA30 ± 3 ATR 生命周期每 3 小时扫描" };
+  let atrBand: unknown = { status: "skipped", reason: "MA30 ± 3 ATR 生命周期本小时已扫描" };
   const atrBandBucket = getAtrLifecycleScanBucket();
-  const atrBandDue = shanghaiHour() % 3 === 0 && !await hasAtrLifecycleScanBucket(db, atrBandBucket);
+  const atrBandDue = !await hasAtrLifecycleScanBucket(db, atrBandBucket);
   if (atrBandDue) {
     atrBand = await runAtrLifecycleScan();
   }
@@ -106,7 +108,8 @@ export async function POST(request: Request) {
     const symbols = [
       ...liveRadarSymbols,
       ...((ma30Oi && typeof ma30Oi === "object" && "candidates" in ma30Oi ? ma30Oi.candidates : []) as Array<{ symbol: string }>).map((item) => item.symbol),
-      ...reversalCandidates(reversal),
+      ...reversalCandidates(reversal.hourly),
+      ...(reversal.fourHourly.status === "ready" ? reversalCandidates(reversal.fourHourly) : []),
       ...reversalCandidates(reversalDaily),
     ];
     const multiTimeframe = await runMultiTimeframeScan(symbols);
@@ -114,5 +117,5 @@ export async function POST(request: Request) {
     const ma30Snapshot = await loadLatestMa30OiSnapshot(await getD1());
     composite = await runCompositeRanking({ ma30Oi: ma30Snapshot, reversal: reversalDashboard, multiTimeframe, radar: radarPayload ?? undefined });
   }
-  return Response.json({ notifications, crowding, reversal, reversalDaily, ma30Oi, atrBand, composite, realOrderRouteEnabled: false }, { status: crowdingResponse.ok && reversalOk && reversalDailyOk && ma30OiOk ? 200 : 503 });
+  return Response.json({ notifications, watchlistPositions, crowding, reversal, reversalDaily, ma30Oi, atrBand, composite, realOrderRouteEnabled: false }, { status: crowdingResponse.ok && reversalOk && reversalDailyOk && ma30OiOk ? 200 : 503 });
 }

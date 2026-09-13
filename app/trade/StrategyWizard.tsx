@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import LiveStrategyStatusList from "./LiveStrategyStatusList";
 import styles from "./trade.module.css";
 import { displayBinanceSymbol } from "@/lib/trade/symbols";
 import { keepNumberDraft, parseNumberDraft } from "./numberDraft";
+import { isQuickLiveMarketTemplate, type QuickLiveTemplateId } from "@/lib/trade/quick-live-template";
 
 type Timeframe = "5m" | "15m" | "1h" | "4h" | "1d";
 type Side = "LONG" | "SHORT";
@@ -19,6 +20,7 @@ export type StrategyWizardPosition = {
   unrealizedPnl: number;
   liquidationPrice: number;
   leverage: number;
+  occupiedMargin: number | null;
 };
 
 type Props = {
@@ -29,6 +31,10 @@ type Props = {
   currentPrice: number;
   chartTimeframe: string;
   chartMa: number;
+  availableBalance: number;
+  totalEquityUsdt?: number;
+  selectedQuickTemplate?: QuickLiveTemplateId | null;
+  selectedQuickTotalMarginUsdt?: number | null;
   liveTradingAvailable: boolean;
   onStrategyCreated: () => void;
 };
@@ -43,10 +49,6 @@ function price(value: number) {
   return Number.isFinite(value) && value > 0 ? value.toLocaleString("en-US", { maximumFractionDigits: value >= 100 ? 2 : 6 }) : "等待实时行情";
 }
 
-function clampLegCount(value: number) {
-  return Math.max(1, Math.min(10, Math.floor(Number.isFinite(value) ? value : 3)));
-}
-
 function buildEntryOffsets(count: number, multiplier: number, style: Style) {
   if (style === "HORIZONTAL" || count === 1) return Array.from({ length: count }, () => 0);
   return Array.from({ length: count }, (_, index) => Number((multiplier - (2 * multiplier * index) / (count - 1)).toFixed(8)));
@@ -59,39 +61,88 @@ function positionPrice(value: number) {
 function leverageText(value: number | null, accountConnected: boolean) {
   if (!accountConnected) return "登录后读取";
   if (!Number.isFinite(value) || value === null || value <= 0) return "读取失败";
-  return Number.isInteger(value) ? String(value) : Number(value.toFixed(2)).toString();
+  return `${Number.isInteger(value) ? String(value) : Number(value.toFixed(2)).toString()}倍`;
 }
 
-export default function StrategyWizard({ symbol, position, accountConnected, currentLeverage, currentPrice, chartTimeframe, chartMa, liveTradingAvailable, onStrategyCreated }: Props) {
+const QUICK_TEMPLATE_SIDES: Record<QuickLiveTemplateId, Side> = {
+  BALANCED_LONG_1H: "LONG",
+  BALANCED_SHORT_1H: "SHORT",
+  MARKET_BALANCED_LONG_1H: "LONG",
+  MARKET_BALANCED_SHORT_1H: "SHORT",
+  BULL_CHASE_1H: "LONG",
+  BEAR_CHASE_1H: "SHORT",
+  RANGE_LONG_1H: "LONG",
+  RANGE_SHORT_1H: "SHORT",
+};
+
+export default function StrategyWizard({ symbol, position, accountConnected, currentLeverage, currentPrice, chartTimeframe, chartMa, availableBalance, totalEquityUsdt = 0, selectedQuickTemplate = null, selectedQuickTotalMarginUsdt = null, liveTradingAvailable, onStrategyCreated }: Props) {
+  const activePosition = position?.symbol === symbol ? position : undefined;
   const [step, setStep] = useState(0);
-  const [side, setSide] = useState<Side | null>(() => position?.side ?? null);
+  const [side, setSide] = useState<Side | null>(() => activePosition?.side ?? null);
   const [timeframe, setTimeframe] = useState<Timeframe>(() => usableTimeframe(chartTimeframe));
   const [style, setStyle] = useState<Style>("MA");
   const [maKind, setMaKind] = useState<"SMA" | "EMA">("SMA");
-  const [maLength, setMaLength] = useState(30);
-  const [atrLength, setAtrLength] = useState(14);
-  const [atrMultiplier, setAtrMultiplier] = useState(1);
-  const [legCount, setLegCount] = useState(3);
-  const [totalMarginDraft, setTotalMarginDraft] = useState("90");
+  const [maLengthDraft, setMaLengthDraft] = useState("30");
+  const [atrLengthDraft, setAtrLengthDraft] = useState("14");
+  const [atrMultiplierDraft, setAtrMultiplierDraft] = useState("1");
+  const [legCountDraft, setLegCountDraft] = useState("5");
+  const [totalMarginDraft, setTotalMarginDraft] = useState("25");
   const [staticPriceDraft, setStaticPriceDraft] = useState("");
   const [horizontalGuardPriceDraft, setHorizontalGuardPriceDraft] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "error" | "saved">("idle");
   const [message, setMessage] = useState("");
-  const [liveConfirmation, setLiveConfirmation] = useState("");
   const [strategyRevision, setStrategyRevision] = useState(0);
 
-  const steps = ["方向", "周期", "策略", "参数", "确认"];
-  const hasPosition = Boolean(position);
-  const canContinue = step !== 0 || side !== null;
+  const steps = ["方向与周期", "策略与参数", "确认"];
+  const hasPosition = Boolean(activePosition);
+  const quickTemplateLocked = selectedQuickTemplate !== null;
+  const quickMarketTemplate = selectedQuickTemplate !== null && isQuickLiveMarketTemplate(selectedQuickTemplate);
+  const maLength = parseNumberDraft(maLengthDraft) ?? 0;
+  const atrLength = parseNumberDraft(atrLengthDraft) ?? 0;
+  const atrMultiplier = parseNumberDraft(atrMultiplierDraft) ?? 0;
+  const legCount = parseNumberDraft(legCountDraft) ?? 0;
+  const parametersValid = Number.isInteger(maLength) && maLength >= 2
+    && Number.isInteger(atrLength) && atrLength >= 2
+    && atrMultiplier >= 0.1
+    && Number.isInteger(legCount) && legCount >= 1 && legCount <= 10;
   const entryOffsets = useMemo(() => buildEntryOffsets(legCount, atrMultiplier, style), [atrMultiplier, legCount, style]);
   const totalMargin = parseNumberDraft(totalMarginDraft) ?? 0;
   const staticPrice = parseNumberDraft(staticPriceDraft) ?? 0;
   const horizontalGuardPrice = parseNumberDraft(horizontalGuardPriceDraft) ?? 0;
-  const marginPerLeg = totalMargin > 0 ? totalMargin / legCount : 0;
-  const entrySummary = style === "MA"
+  const marginPerLeg = totalMargin > 0 && legCount > 0 ? totalMargin / legCount : 0;
+  const entrySummary = quickMarketTemplate
+    ? "一笔市价新开仓"
+    : style === "MA"
     ? `${maKind}${maLength} ± ${atrMultiplier} ATR，${legCount}腿限价策略`
     : `横向支撑/阻力位 ${price(staticPrice)}，${legCount}腿静态限价策略`;
   const safeStaticPrice = Number(staticPrice);
+  const knownAvailableBalance = accountConnected && Number.isFinite(availableBalance) && availableBalance >= 0 ? availableBalance : null;
+  const insufficientAvailableBalance = knownAvailableBalance !== null && totalMargin > knownAvailableBalance + Number.EPSILON;
+  const canContinue = step === 0
+    ? side !== null
+    : step === 1
+      ? parametersValid && totalMargin > 0 && (style !== "HORIZONTAL" || safeStaticPrice > 0)
+      : true;
+  const positionMargin = activePosition?.occupiedMargin ?? (activePosition ? Math.abs(activePosition.quantity * activePosition.markPrice) / Math.max(activePosition.leverage, 1) : null);
+
+  useEffect(() => {
+    if (!selectedQuickTemplate) return;
+    setSide(QUICK_TEMPLATE_SIDES[selectedQuickTemplate]);
+    setTimeframe("1h");
+    setStyle("MA");
+    setMaKind("SMA");
+    setMaLengthDraft("30");
+    setAtrLengthDraft("14");
+    setAtrMultiplierDraft("1");
+    setLegCountDraft(quickMarketTemplate ? "1" : "5");
+    setTotalMarginDraft(selectedQuickTotalMarginUsdt !== null && selectedQuickTotalMarginUsdt !== undefined
+      ? String(selectedQuickTotalMarginUsdt)
+      : totalEquityUsdt > 0 ? String(totalEquityUsdt * 0.05) : "25");
+    setStaticPriceDraft("");
+    setHorizontalGuardPriceDraft("");
+    setStep(0);
+    setMessage("");
+  }, [quickMarketTemplate, selectedQuickTemplate, selectedQuickTotalMarginUsdt, totalEquityUsdt]);
 
   const preview = useMemo(() => ({
     side: side === "LONG" ? "做多" : side === "SHORT" ? "做空" : "尚未选择",
@@ -102,10 +153,11 @@ export default function StrategyWizard({ symbol, position, accountConnected, cur
 
   async function submit() {
     if (!side) { setStep(0); setMessage("请先选择做多或做空"); return; }
-    if (!(totalMargin > 0)) { setStep(3); setMessage("总投入必须大于 0"); return; }
-    if (style === "HORIZONTAL" && !(safeStaticPrice > 0)) { setStep(3); setMessage("支撑阻力位策略需要静态入场价"); return; }
+    if (!parametersValid) { setStep(1); setMessage("请完整填写有效的均线、ATR 和下单笔数参数"); return; }
+    if (!(totalMargin > 0)) { setStep(1); setMessage("总投入必须大于 0"); return; }
+    if (insufficientAvailableBalance) { setState("error"); setMessage(`可用余额不足：当前 ${price(knownAvailableBalance ?? 0)} USDT，策略需要 ${price(totalMargin)} USDT 保证金`); return; }
+    if (style === "HORIZONTAL" && !(safeStaticPrice > 0)) { setStep(1); setMessage("支撑阻力位策略需要静态入场价"); return; }
     if (!liveTradingAvailable) { setMessage("实盘通道当前不可用，请先连接币安账户并打开实盘开关"); return; }
-    if (liveConfirmation.trim() !== "CONFIRM") { setMessage("请输入 CONFIRM，确认向 Binance 提交实盘限价单"); return; }
     setState("saving"); setMessage("");
     const baseDraft = {
       symbol,
@@ -126,10 +178,14 @@ export default function StrategyWizard({ symbol, position, accountConnected, cur
       origin: "WEB",
       mode: "LIVE_ARMED",
     };
+    const draft = selectedQuickTemplate
+      ? { symbol, quickTemplateId: selectedQuickTemplate, ...(selectedQuickTotalMarginUsdt === null || selectedQuickTotalMarginUsdt === undefined ? {} : { totalMarginUsdt: selectedQuickTotalMarginUsdt }) }
+      : baseDraft;
+    const confirmation = quickMarketTemplate ? "CREATE_QUICK_MARKET_STRATEGY" : "CREATE_LIVE_STRATEGY";
     const requestInit: RequestInit = {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ draft: baseDraft, confirmation: "CREATE_LIVE_STRATEGY", confirmationNonce: crypto.randomUUID(), liveSwitchOn: true }),
+      body: JSON.stringify({ draft, confirmation, confirmationNonce: crypto.randomUUID(), liveSwitchOn: true }),
     };
     const response = await fetch("/api/trade/live-strategies", requestInit);
     const payload = await response.json() as { ok?: boolean; error?: string; strategy?: { id: string; expiresAt: string; status?: string } };
@@ -137,35 +193,33 @@ export default function StrategyWizard({ symbol, position, accountConnected, cur
       setState("error"); setMessage(payload.error || "策略保存失败，请重试"); return;
     }
     setState("saved");
-    setMessage(`策略编号 ${payload.strategy.id} 已提交 ${legCount} 腿实盘订单 · 状态 ${payload.strategy.status === "ACTIVE" ? "订单均已受理" : "需要对账"}`);
+    setMessage(`策略编号 ${payload.strategy.id} 已提交 ${quickMarketTemplate ? "一笔市价新仓" : `${legCount} 腿实盘订单`} · 状态 ${payload.strategy.status === "ACTIVE" ? "订单均已受理" : "需要对账"}`);
+    window.dispatchEvent(new CustomEvent("trade-toast", { detail: { message: `策略已下达 · ${payload.strategy.id}`, kind: "success" } }));
     setStrategyRevision((value) => value + 1);
     onStrategyCreated();
   }
 
   return <aside className={styles.strategyPanel} id="strategy">
-    <div className={styles.panelTop}><div><h2>实盘策略</h2></div><span>LIVE · LIMIT ORDERS</span></div>
-    <div className={styles.wizardInsight}><strong title="Binance 当前合约杠杆">{displayBinanceSymbol(symbol)} · {price(currentPrice)} · ✖️{leverageText(currentLeverage, accountConnected)}</strong><span>图表 {chartTimeframe} · 当前均线 {price(chartMa)}</span>{position && <small>已有{position.side === "LONG" ? "多" : "空"}仓 {position.quantity} · 均价 {positionPrice(position.entryPrice)} · 标记 {positionPrice(position.markPrice)} · PnL {position.unrealizedPnl >= 0 ? "+" : ""}{position.unrealizedPnl.toFixed(2)}</small>}<p>{hasPosition ? "当前已有实盘仓位；本向导只新增限价策略，不自动平仓。止盈止损请在真实持仓区确认。" : "AI 只提供分析建议与预填；AI不会自主开仓。最终策略必须由你手动确认。"}</p></div>
+    <div className={styles.panelTop}><div><h2>实盘策略</h2></div><span>LIVE · {quickMarketTemplate ? "MARKET ENTRY" : "LIMIT ORDERS"}</span></div>
+    <div className={styles.wizardInsight}><strong title="Binance 当前合约杠杆">{displayBinanceSymbol(symbol)} · {price(currentPrice)} · {leverageText(currentLeverage, accountConnected)}</strong><span>图表 {chartTimeframe} · 当前均线 {price(chartMa)}</span>{activePosition && <small>当前{activePosition.side === "LONG" ? "多" : "空"}仓 · 保证金 {positionMargin === null ? "—" : `${price(positionMargin)} USDT`} · 均价 {positionPrice(activePosition.entryPrice)} · 标记 {positionPrice(activePosition.markPrice)} · PnL {activePosition.unrealizedPnl >= 0 ? "+" : ""}{activePosition.unrealizedPnl.toFixed(2)}</small>}<p>{quickMarketTemplate ? "市价模板会立即开一笔独立新仓；只保护本次新仓，不会改动既有仓位，且不配置止盈。" : hasPosition ? "当前已有实盘仓位；本向导只新增限价策略，不自动平仓。止盈止损请在真实持仓区确认。" : "AI 只提供分析建议与预填；AI不会自主开仓。最终策略必须由你手动确认。"}</p></div>
     <div className={styles.strategyWizard}>
       <div className={styles.wizardProgress}>{steps.map((label, index) => <span key={label} className={index === step ? styles.wizardCurrent : index < step ? styles.wizardDone : ""}>{index + 1} {label}</span>)}</div>
-      {step === 0 && <section><h3>{hasPosition ? "已有持仓；这次策略做多还是做空？" : "这次操作做多还是做空？"}</h3><div className={styles.wizardChoices}><button className={side === "LONG" ? styles.wizardLong : ""} onClick={() => setSide("LONG")}>做多</button><button className={side === "SHORT" ? styles.wizardShort : ""} onClick={() => setSide("SHORT")}>做空</button></div>{position && <p className={styles.wizardHint}>当前仓位方向：{position.side === "LONG" ? "做多" : "做空"}；如要反向操作，请先确认账户持仓模式和风险。</p>}</section>}
-      {step === 1 && <section><h3>参与哪个周期？</h3><p>默认 1h；该周期的已收盘 K 线才会刷新均线限价单或确认止损。</p><div className={styles.wizardChoices}>{timeframes.map((item) => <button key={item} className={timeframe === item ? styles.wizardSelected : ""} onClick={() => setTimeframe(item)}>{item}</button>)}</div></section>}
-      {step === 2 && <section><h3>{hasPosition ? "按什么逻辑新增策略？" : "按什么逻辑入场？"}</h3><div className={styles.wizardMethod}><button className={style === "MA" ? styles.wizardSelected : ""} onClick={() => setStyle("MA")}><strong>均线策略</strong><span>围绕移动中的 MA 和 ATR 分层限价入场</span></button><button className={style === "HORIZONTAL" ? styles.wizardSelected : ""} onClick={() => setStyle("HORIZONTAL")}><strong>支撑阻力位策略</strong><span>在固定横向关键位挂静态限价单</span></button></div></section>}
-      {step === 3 && <section><h3>{style === "MA" ? "均线与 ATR 参数" : "关键位与风控参数"}</h3><div className={styles.wizardFields}>
-        <label>均线类型<select value={maKind} onChange={(event) => setMaKind(event.target.value as "SMA" | "EMA")}><option>SMA</option><option>EMA</option></select></label>
-        <label>均线周期<input aria-label="均线周期" type="number" min="2" value={maLength} onChange={(event) => setMaLength(Math.max(2, Number(event.target.value) || 30))} /></label>
-        <label>ATR 周期<input type="number" min="2" value={atrLength} onChange={(event) => setAtrLength(Math.max(2, Number(event.target.value) || 14))} /></label>
-        <label>ATR 倍数<input aria-label="ATR 倍数" type="number" min="0.1" step="0.1" value={atrMultiplier} onChange={(event) => setAtrMultiplier(Math.max(0.1, Number(event.target.value) || 1))} /></label>
-        <label>下单笔数<input aria-label="下单笔数" type="number" min="1" max="10" value={legCount} onChange={(event) => setLegCount(clampLegCount(Number(event.target.value)))} /></label>
-        <label>总投入 USDT（保证金）<input type="number" min="1" step="any" value={totalMarginDraft} onChange={(event) => setTotalMarginDraft(keepNumberDraft(event.target.value))} /></label>
-        {style === "HORIZONTAL" && <label>静态入场价<input aria-label="静态入场价" type="number" min="0" step="any" value={staticPriceDraft} onChange={(event) => setStaticPriceDraft(keepNumberDraft(event.target.value))} /></label>}
-        <label>横向止损价（可选）<input type="number" min="0" step="any" value={horizontalGuardPriceDraft} onChange={(event) => setHorizontalGuardPriceDraft(keepNumberDraft(event.target.value))} /></label>
-      </div><p className={styles.wizardHint}>总投入及每腿金额均为保证金；下单名义价值按 Binance 当前该合约杠杆换算。{legCount} 腿限价单：每笔约 {price(marginPerLeg)} USDT 保证金 · {entrySummary}</p></section>}
-      {step === 4 && <section><h3>确认建立实盘策略</h3><div className={styles.wizardReview}><p><b>{preview.side} · {timeframe} · {entrySummary}</b></p>{position && <p>当前已有{position.side === "LONG" ? "多" : "空"}仓；确认后只新增该策略的限价腿，不会自动平仓。</p>}<p>{preview.guard}</p><ol>{entryOffsets.map((offset, index) => <li key={`${index}-${offset}`}>第{index + 1}腿：{style === "MA" ? offset === 0 ? "均线" : `均线 ${offset > 0 ? "+" : ""}${offset} ATR` : "静态入场价"} · LIMIT GTX</li>)}</ol><ul><li>点击确认后将并发提交全部 Binance 实盘限价单，不会自动改价或市价兜底。</li><li>任一拒单或超时都会保留逐腿结果并进入需要对账状态。</li><li>每腿数量、最小名义价值和账户余额都必须满足交易所规则。</li></ul><label className={styles.liveConfirmationField}>输入 CONFIRM 才会提交订单<input aria-label="实盘确认" value={liveConfirmation} onChange={(event) => setLiveConfirmation(event.target.value)} placeholder="输入 CONFIRM" autoComplete="off" /></label></div></section>}
-      <div className={styles.wizardActions}><button disabled={step === 0} onClick={() => setStep((value) => Math.max(0, value - 1))}>返回</button>{step < 4 ? <button className={styles.wizardPrimary} disabled={!canContinue} onClick={() => setStep((value) => Math.min(4, value + 1))}>继续</button> : <button className={styles.wizardPrimary} disabled={state === "saving" || !liveTradingAvailable} onClick={() => void submit()}>{state === "saving" ? "正在提交实盘订单" : "确认建立实盘策略"}</button>}</div>
+      {step === 0 && <section><h3>方向与周期</h3><div className={styles.wizardSubsection}><h4>{hasPosition ? "已有持仓；这次策略做多还是做空？" : "这次操作做多还是做空？"}</h4><div className={styles.wizardChoices}><button type="button" disabled={quickTemplateLocked} className={side === "LONG" ? styles.wizardLong : ""} onClick={() => setSide("LONG")}>做多</button><button type="button" disabled={quickTemplateLocked} className={side === "SHORT" ? styles.wizardShort : ""} onClick={() => setSide("SHORT")}>做空</button></div>{activePosition && <p className={styles.wizardHint}>当前仓位方向：{activePosition.side === "LONG" ? "做多" : "做空"}；如要反向操作，请先确认账户持仓模式和风险。</p>}</div><div className={styles.wizardSubsection}><h4>参与哪个周期？</h4><p>默认 1h；该周期的已收盘 K 线才会刷新均线限价单或确认止损。</p><div className={styles.wizardChoices}>{timeframes.map((item) => <button type="button" disabled={quickTemplateLocked} key={item} className={timeframe === item ? styles.wizardSelected : ""} onClick={() => setTimeframe(item)}>{item}</button>)}</div></div>{quickTemplateLocked && <p className={styles.wizardHint}>快捷模板已锁定方向与 1h 周期；如需手动配置，请重新进入普通向导。</p>}</section>}
+      {step === 1 && <section><h3>策略与参数</h3><div className={styles.wizardMethod}><button type="button" disabled={quickTemplateLocked} className={style === "MA" ? styles.wizardSelected : ""} onClick={() => setStyle("MA")}><strong>均线策略</strong><span>围绕移动中的 MA 和 ATR 分层限价入场</span></button><button type="button" disabled={quickTemplateLocked} className={style === "HORIZONTAL" ? styles.wizardSelected : ""} onClick={() => setStyle("HORIZONTAL")}><strong>支撑阻力位策略</strong><span>在固定横向关键位挂静态限价单</span></button></div>{quickTemplateLocked && <p className={styles.wizardHint}>{quickMarketTemplate ? `市价模板 ${selectedQuickTemplate} 已锁定 1h、SMA30、ATR14、一笔市价新开仓和两次收盘止损；必须双向持仓模式，只保护本次新仓且无止盈。` : `快捷模板 ${selectedQuickTemplate} 已锁定 1h、SMA30、ATR14、五笔拆分和退出规则；最终确认时服务端会重新计算真实价格。`}</p>}<div className={styles.wizardFields}>
+        <label>均线类型<select disabled={quickTemplateLocked} value={maKind} onChange={(event) => setMaKind(event.target.value as "SMA" | "EMA")}><option>SMA</option><option>EMA</option></select></label>
+        <label>均线周期<input disabled={quickTemplateLocked} aria-label="均线周期" type="number" min="2" value={maLengthDraft} onChange={(event) => setMaLengthDraft(keepNumberDraft(event.target.value))} /></label>
+        <label>ATR 周期<input disabled={quickTemplateLocked} type="number" min="2" value={atrLengthDraft} onChange={(event) => setAtrLengthDraft(keepNumberDraft(event.target.value))} /></label>
+        <label>ATR 倍数<input disabled={quickTemplateLocked} aria-label="ATR 倍数" type="number" min="0.1" step="0.1" value={atrMultiplierDraft} onChange={(event) => setAtrMultiplierDraft(keepNumberDraft(event.target.value))} /></label>
+        <label>下单笔数<input disabled={quickTemplateLocked} aria-label="下单笔数" type="number" min="1" max="10" value={legCountDraft} onChange={(event) => setLegCountDraft(keepNumberDraft(event.target.value))} /></label>
+        <label>总投入 USDT（保证金）<input disabled={quickTemplateLocked} type="number" min="1" step="any" value={totalMarginDraft} onChange={(event) => setTotalMarginDraft(keepNumberDraft(event.target.value))} /></label>
+        {style === "HORIZONTAL" && <label>静态入场价<input disabled={quickTemplateLocked} aria-label="静态入场价" type="number" min="0" step="any" value={staticPriceDraft} onChange={(event) => setStaticPriceDraft(keepNumberDraft(event.target.value))} /></label>}
+        <label>横向止损价（可选）<input disabled={quickTemplateLocked} type="number" min="0" step="any" value={horizontalGuardPriceDraft} onChange={(event) => setHorizontalGuardPriceDraft(keepNumberDraft(event.target.value))} /></label>
+      </div><p className={styles.wizardHint}>{quickMarketTemplate ? "本次总保证金作为一笔市价新开仓；成交后只保护本次新仓，不会改动既有仓位。" : `总投入及每腿金额均为保证金；下单名义价值按 Binance 当前该合约杠杆换算。${legCount} 腿限价单：每笔约 ${price(marginPerLeg)} USDT 保证金`} · {entrySummary}</p></section>}
+      {step === 2 && <section><h3>确认建立实盘策略</h3><div className={styles.wizardReview}><p><b>{preview.side} · {timeframe} · {entrySummary}</b></p>{selectedQuickTemplate && <p>{quickMarketTemplate ? `市价模板：${selectedQuickTemplate} · 固定 1h SMA30 / ATR14 · ${selectedQuickTotalMarginUsdt === null || selectedQuickTotalMarginUsdt === undefined ? "留空按总权益5%保证金" : `本次总保证金 ${price(selectedQuickTotalMarginUsdt)} USDT`}，一笔市价新开仓；只保护本次新仓，不会改动既有仓位；无止盈，必须双向持仓模式。` : `快捷模板：${selectedQuickTemplate} · 固定 1h SMA30 / ATR14 · ${selectedQuickTotalMarginUsdt === null || selectedQuickTotalMarginUsdt === undefined ? "留空按总权益5%保证金" : `本次总保证金 ${price(selectedQuickTotalMarginUsdt)} USDT`}，五腿均分。`}</p>}{activePosition && <p>当前已有{activePosition.side === "LONG" ? "多" : "空"}仓；确认后{quickMarketTemplate ? "只新增一笔市价新仓，不会改动既有仓位，且保护只针对本次新仓。" : "只新增该策略的限价腿，不会自动平仓。"}</p>}<p>{preview.guard}</p>{knownAvailableBalance !== null && <p className={insufficientAvailableBalance ? styles.inlineError : styles.wizardHint}>可用余额 {price(knownAvailableBalance)} USDT{insufficientAvailableBalance ? `，不足以覆盖本策略所需 ${price(totalMargin)} USDT 保证金` : "，可覆盖本策略保证金"}</p>}<ol>{entryOffsets.map((offset, index) => <li key={`${index}-${offset}`}>{quickMarketTemplate ? "一笔市价新开仓 · MARKET" : <>第{index + 1}腿：{style === "MA" ? offset === 0 ? "均线" : `均线 ${offset > 0 ? "+" : ""}${offset} ATR` : "静态入场价"} · LIMIT GTX</>}</li>)}</ol><ul><li>{quickMarketTemplate ? "确认后立即提交一笔 Binance MARKET 市价新开仓，不会改动既有仓位或其他策略仓位。" : "点击下方按钮将并发提交全部 Binance 实盘限价单，不会自动改价或市价兜底。"}</li><li>任一拒单或超时都会保留逐腿结果并进入需要对账状态。</li><li>{quickMarketTemplate ? "成交后仅以本次实际成交数量建立保护，不配置止盈。" : "每腿数量、最小名义价值和账户余额都必须满足交易所规则。"}</li></ul></div></section>}
+      <div className={styles.wizardActions}><button type="button" disabled={step === 0} onClick={() => setStep((value) => Math.max(0, value - 1))}>返回</button>{step < 2 ? <button type="button" className={styles.wizardPrimary} disabled={!canContinue} onClick={() => setStep((value) => Math.min(2, value + 1))}>继续</button> : <button type="button" className={styles.wizardPrimary} disabled={state === "saving" || !liveTradingAvailable || insufficientAvailableBalance} onClick={() => void submit()}>{state === "saving" ? "正在提交实盘订单" : "确认建立实盘策略"}</button>}</div>
       {message && <p className={`${styles.wizardMessage} ${state === "error" ? styles.inlineError : ""}`}>{message}</p>}
-      <div className={styles.executionModePicker} aria-label="策略执行模式"><strong>实盘 LIVE</strong><small>{liveTradingAvailable ? "实盘开关、账户和服务端通道均已就绪" : "实盘需先连接币安账户并打开实盘开关"}</small><small>有效期 7天 · 仅已收盘 K 线刷新 · 部分成交不改价 · 从不市价兜底</small></div>
     </div>
-    <LiveStrategyStatusList key={`live-${strategyRevision}`} onChanged={() => {
+    <LiveStrategyStatusList refreshToken={strategyRevision} onChanged={() => {
       setStrategyRevision((value) => value + 1);
       onStrategyCreated();
     }} />

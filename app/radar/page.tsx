@@ -14,6 +14,7 @@ import { createScanProgress, type RadarScanProgress } from "@/lib/radar/scan-pro
 import type { CompositeCandidate, CompositeSnapshot } from "@/lib/radar/composite-ranking";
 import { isTransientScanTransportFailure, transientScanWarning } from "@/lib/radar/scan-transport";
 import { sameSymbolSet } from "@/lib/radar/window-symbols";
+import { calculateLifecycleDirectionalReturn, inferLegacyOutsideBandBars } from "@/lib/radar/atr-band-lifecycle";
 
 type Participation = "SQUEEZE" | "A" | "B" | "WATCH" | "AVOID";
 type CrowdMood = "SHORT_CROWD" | "TRAPPED" | "CHASE_LONG" | "MIXED" | "UNKNOWN";
@@ -114,6 +115,11 @@ type AtrLifecycleRecord = {
   endTime: number | null;
   lastUpdatedTime: number;
   entryPrice: number;
+  entryOpenPrice?: number;
+  endOpenPrice?: number | null;
+  lifecycleReturnPct?: number | null;
+  outsideBandBars?: number;
+  lifecycleBars?: number;
   currentPrice: number;
   extremePrice: number;
   maxFavorablePct: number;
@@ -201,6 +207,8 @@ type ReversalRow = {
   bodyRatio?: number;
   breakoutLookbackBars?: number;
   breakoutLookbackCapped?: boolean;
+  closeBreakoutLookbackBars?: number;
+  closeBreakoutLookbackCapped?: boolean;
   score: number;
 };
 type ReversalArchive = ReversalRow & {
@@ -210,7 +218,7 @@ type ReversalArchive = ReversalRow & {
 
 type ReversalInterval = ReversalRow["interval"];
 type ReversalScan = { status: "ready" | "degraded" | "pending"; scannedAt: string; interval: ReversalInterval; source?: "daily" | "manual" | "periodic"; candidates: ReversalRow[]; progress?: RadarScanProgress; warning?: string };
-type ReversalArchiveSort = "signalTime" | "symbol" | "interval" | "direction" | "score" | "reclaimLevel" | "breakoutLookbackBars" | "ageBars" | "outcome";
+type ReversalArchiveSort = "signalTime" | "symbol" | "interval" | "direction" | "score" | "reclaimLevel" | "breakoutLookbackBars" | "closeBreakoutLookbackBars" | "ageBars" | "outcome";
 type ReversalArchiveOrder = "asc" | "desc";
 type ReversalArchivePage = { items: ReversalArchive[]; page: number; pageSize: 60; total: number; totalPages: number; sort: ReversalArchiveSort; order: ReversalArchiveOrder };
 type ReversalResponse = { status: "ready" | "degraded" | "pending"; scans: Partial<Record<ReversalInterval, ReversalScan>>; dailyScans?: Partial<Record<ReversalInterval, ReversalScan>>; manualScans?: Partial<Record<ReversalInterval, ReversalScan>>; archives: ReversalArchivePage; warning?: string; diagnostic?: RadarDiagnostic; notifications?: { attempted: number; sent: number; skipped: number; failed: number } };
@@ -354,6 +362,13 @@ function breakoutLookbackCopy(row: ReversalRow) {
   return row.direction === "LONG" ? `破近 ${bars}${suffix} 根新低` : `破近 ${bars}${suffix} 根新高`;
 }
 
+function closeBreakoutLookbackCopy(row: ReversalRow) {
+  const rawBars = row.closeBreakoutLookbackBars ?? 0;
+  const bars = Number.isFinite(rawBars) ? Math.max(0, Math.floor(rawBars)) : 0;
+  const suffix = row.closeBreakoutLookbackCapped ?? false ? "+" : "";
+  return row.direction === "LONG" ? `收盘突破近 ${bars}${suffix} 根新高` : `收盘突破近 ${bars}${suffix} 根新低`;
+}
+
 function SortHeader({ label, active, order, onClick }: { label: string; active: boolean; order: ReversalArchiveOrder; onClick: () => void }) {
   return <th aria-sort={active ? (order === "asc" ? "ascending" : "descending") : "none"}><button type="button" className={`table-sort ${active ? "active" : ""}`} onClick={onClick}>{label}<span aria-hidden="true">{active ? (order === "asc" ? "↑" : "↓") : "↕"}</span></button></th>;
 }
@@ -372,7 +387,7 @@ function ReversalTable({ rows, title }: { rows: ReversalRow[]; title: string }) 
     const result = typeof leftValue === "number" && typeof rightValue === "number" ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue));
     return (order === "asc" ? result : -result) || left.symbol.localeCompare(right.symbol);
   });
-  return <section className="reversal-direction"><div className="reversal-direction-title"><h4>{title}</h4><span>{rows.length} 个</span></div>{rows.length ? <table className="reversal-table"><thead><tr><SortHeader label="币种" active={sort === "symbol"} order={order} onClick={() => toggle("symbol")} /><SortHeader label="周期" active={sort === "interval"} order={order} onClick={() => toggle("interval")} /><SortHeader label="实体" active={sort === "bodyRatio"} order={order} onClick={() => toggle("bodyRatio")} /><SortHeader label="收回" active={sort === "reclaimLevel"} order={order} onClick={() => toggle("reclaimLevel")} /><SortHeader label="影线" active={sort === "wickRatio"} order={order} onClick={() => toggle("wickRatio")} /><SortHeader label="突破强度" active={sort === "breakoutLookbackBars"} order={order} onClick={() => toggle("breakoutLookbackBars")} /></tr></thead><tbody>{sortedRows.map((row) => <tr key={`${row.symbol}-${row.interval}-${row.signalTime}`}><td><a href={`/trade?symbol=${encodeURIComponent(row.symbol)}&interval=${row.interval}`}>{displayBinanceSymbol(row.symbol)}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{reversalIntervalLabel(row.interval)}</td><td className="reversal-score">{formatReversalBodyRatio(row.bodyRatio)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{(row.wickRatio * 100).toFixed(0)}%</td><td>{breakoutLookbackCopy(row)}</td></tr>)}</tbody></table> : <div className="reversal-empty">本轮没有符合条件的已收盘形态。</div>}</section>;
+  return <section className="reversal-direction"><div className="reversal-direction-title"><h4>{title}</h4><span>{rows.length} 个</span></div>{rows.length ? <table className="reversal-table"><thead><tr><SortHeader label="币种" active={sort === "symbol"} order={order} onClick={() => toggle("symbol")} /><SortHeader label="周期" active={sort === "interval"} order={order} onClick={() => toggle("interval")} /><SortHeader label="实体" active={sort === "bodyRatio"} order={order} onClick={() => toggle("bodyRatio")} /><SortHeader label="收回" active={sort === "reclaimLevel"} order={order} onClick={() => toggle("reclaimLevel")} /><SortHeader label="影线" active={sort === "wickRatio"} order={order} onClick={() => toggle("wickRatio")} /><SortHeader label="扫出跨度（原突破强度）" active={sort === "breakoutLookbackBars"} order={order} onClick={() => toggle("breakoutLookbackBars")} /><th>收盘突破</th></tr></thead><tbody>{sortedRows.map((row) => <tr key={`${row.symbol}-${row.interval}-${row.signalTime}`}><td><a href={`/trade?symbol=${encodeURIComponent(row.symbol)}&interval=${row.interval}`}>{displayBinanceSymbol(row.symbol)}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{reversalIntervalLabel(row.interval)}</td><td className="reversal-score">{formatReversalBodyRatio(row.bodyRatio)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{(row.wickRatio * 100).toFixed(0)}%</td><td>{breakoutLookbackCopy(row)}</td><td>{closeBreakoutLookbackCopy(row)}</td></tr>)}</tbody></table> : <div className="reversal-empty">本轮没有符合条件的已收盘形态。</div>}</section>;
 }
 
 function Ma30OiCandidateTable({ rows, direction, title }: { rows: Ma30OiCandidate[]; direction: "LONG" | "SHORT"; title: string }) {
@@ -390,23 +405,32 @@ function filterAtrLifecycles(rows: readonly AtrLifecycleRecord[], direction: Atr
   return rows.filter((lifecycle) => (direction === "ALL" || lifecycle.direction === direction) && symbolMatchesQuery(lifecycle.symbol, query));
 }
 
-function AtrLifecycleTable({ rows, title, description, emptyMessage }: { rows: AtrLifecycleRecord[]; title: string; description: string; emptyMessage: string }) {
+function AtrLifecycleTable({ rows, title, description, emptyMessage, action }: { rows: AtrLifecycleRecord[]; title: string; description: string; emptyMessage: string; action?: React.ReactNode }) {
+  const isHistory = rows.some((row) => row.status === "HISTORY") || title === "历史区";
   return <section className="atr-lifecycle-group" aria-label={title}>
-    <div className="atr-lifecycle-group-heading"><div><h4>{title}</h4><small>{description}</small></div><strong>{rows.length}</strong></div>
+    <div className="atr-lifecycle-group-heading"><div><h4>{title}</h4><small>{description}</small></div><div className="atr-lifecycle-actions">{action}<strong>{rows.length}</strong></div></div>
     <div className="atr-lifecycle-table-wrap">
       <table className="atr-lifecycle-table">
-        <thead><tr><th>方向 / 币种</th><th>生命周期时间</th><th>价格路径</th><th>最大有利幅度</th><th>最大 ATR 倍数</th><th>OI 轨迹 / 变化</th><th>前一根 K 线偏离</th></tr></thead>
-        <tbody>{rows.length ? rows.map((lifecycle) => (
+        <thead><tr><th>方向 / 币种</th><th>生命周期时间</th><th>价格路径</th><th>最大有利幅度</th><th>最大 ATR 倍数</th><th>±3ATR 外持续 K 线</th>{isHistory && <th>入池 → 结束</th>}<th>前一根 K 线偏离</th></tr></thead>
+        <tbody>{rows.length ? rows.map((lifecycle) => {
+          const isLegacyHistory = lifecycle.status === "HISTORY" && lifecycle.lifecycleReturnPct === undefined;
+          const outsideBandBars = lifecycle.outsideBandBars ?? inferLegacyOutsideBandBars(lifecycle);
+          const lifecycleReturn = lifecycle.lifecycleReturnPct ?? (lifecycle.status === "HISTORY"
+            ? calculateLifecycleDirectionalReturn(lifecycle.direction, lifecycle.entryOpenPrice ?? lifecycle.entryPrice, lifecycle.endOpenPrice ?? lifecycle.currentPrice)
+            : null);
+          return (
           <tr key={`${lifecycle.symbol}-${lifecycle.direction}-${lifecycle.entryTime}`}>
             <td className="atr-lifecycle-symbol"><div><span className={lifecycle.direction === "LONG" ? "positive" : "negative"}>{lifecycle.direction === "LONG" ? "多" : "空"}</span> <a href={`/trade?symbol=${encodeURIComponent(lifecycle.symbol)}`}>{displayBinanceSymbol(lifecycle.symbol)}</a></div><small>{atrLifecycleStatusCopy[lifecycle.status]} · {lifecycle.symbol}</small></td>
             <td><strong>入池 {formatLifecycleTime(lifecycle.entryTime)}</strong><small>警示 {formatLifecycleTime(lifecycle.warningTime)}</small><small>结束 {formatLifecycleTime(lifecycle.endTime)}</small><small>更新 {formatLifecycleTime(lifecycle.lastUpdatedTime)}</small></td>
-            <td><strong>入池价 {formatPrice(lifecycle.entryPrice)}</strong><small>当前价 {formatPrice(lifecycle.currentPrice)}</small><small>极值价（{lifecycle.direction === "LONG" ? "峰值" : "谷值"}） {formatPrice(lifecycle.extremePrice)}</small></td>
+            <td><strong>入池开盘 {formatPrice(lifecycle.entryOpenPrice ?? lifecycle.entryPrice)}</strong><small>{lifecycle.status === "HISTORY" ? `结束开盘 ${formatPrice(lifecycle.endOpenPrice ?? lifecycle.currentPrice)}` : `当前价 ${formatPrice(lifecycle.currentPrice)}`}</small><small>极值价（{lifecycle.direction === "LONG" ? "峰值" : "谷值"}） {formatPrice(lifecycle.extremePrice)}</small></td>
             <td><strong className={valueTone(lifecycle.maxFavorablePct)}>{formatPercent(lifecycle.maxFavorablePct)}</strong><small>生命周期最高有利幅度</small></td>
             <td><strong>{formatAtrMultiple(lifecycle.maxAtrMultiple)}</strong><small>最大有利 ATR 距离</small><small>签名距离 {formatAtrMultiple(lifecycle.maxSignedAtrDistance)}</small></td>
-            <td><strong className={valueTone(lifecycle.oiChangePct ?? 0)}>变化 {optionalPercent(lifecycle.oiChangePct, 2)}</strong><small>入池 {formatOpenInterest(lifecycle.entryOi)} · 当前 {formatOpenInterest(lifecycle.currentOi)}</small><small>峰值 {formatOpenInterest(lifecycle.peakOi)}</small></td>
+            <td><strong>{lifecycle.direction === "LONG" ? "+3ATR" : "-3ATR"} 外 {outsideBandBars} 根</strong><small>从首次收盘突破阈值开始累计</small></td>
+            {isHistory && <td><strong className={valueTone(lifecycleReturn ?? 0)}>{optionalPercent(lifecycleReturn, 2)}</strong><small>{isLegacyHistory ? "旧记录按结束收盘估算" : "从入池开盘到结束开盘"}</small></td>}
             <td><strong>收盘 {formatPrice(lifecycle.previousClose)}</strong><small>相对 MA30 {formatPercent(lifecycle.previousMa30DeviationPct)}</small><small>相对阈值 {formatPercent(lifecycle.previousBandDeviationPct)}</small><small>MA30 {formatPrice(lifecycle.previousMa30)} · 阈值 {formatPrice(lifecycle.previousThreshold)}</small></td>
           </tr>
-        )) : <tr><td className="atr-lifecycle-empty" colSpan={7}>{emptyMessage}</td></tr>}</tbody>
+          );
+        }) : <tr><td className="atr-lifecycle-empty" colSpan={isHistory ? 8 : 7}>{emptyMessage}</td></tr>}</tbody>
       </table>
     </div>
   </section>;
@@ -937,7 +961,6 @@ export default function Home() {
     setArchiveQuery(next);
     void loadReversal(next);
   };
-
   return (
     <main className="app-shell radar-terminal" data-theme={resolvedTheme} style={{ "--site-font-scale": fontScale } as React.CSSProperties}>
       <aside className="radar-sidebar">
@@ -1025,8 +1048,8 @@ export default function Home() {
 
          {filter === "composite" ? <CompositePanel snapshot={composite} query={normalizedQuery} /> : filter === "atrband" ? (
             <div className="atr-lifecycle-panel">
-              <div className="atr-lifecycle-heading"><div><p className="section-kicker">ATR BAND LIFECYCLE · RESEARCH ONLY</p><h3>MA30 ± 3ATR 生命周期</h3><p>每 3 小时读取全市场 Binance USDT 永续的 1H 已收盘 K 线。连续 3 根站在阈值外进入强势池，回到阈值内进入警示区，跌破/升破 MA30 后进入历史区；结果只读，不连接交易执行。</p></div><div className="atr-lifecycle-actions"><span className={`atr-lifecycle-status ${atrBand?.diagnostic ? "degraded" : atrBand?.status ?? "pending"}`}>{atrBandScanning ? "扫描中" : atrBand?.diagnostic ? "连接失败" : atrBand?.status === "ready" ? "已更新" : atrBand?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runAtrBandNow()} disabled={atrBandScanning}>{atrBandScanning ? "正在扫描…" : "立即扫描"}</button></div></div>
-              <ManualProgress active={atrBandScanning} progress={atrBand?.progress} label="正在读取全市场 1H 已收盘 K 线与 OI" estimate="每 3 小时自动维护；手动扫描需要数分钟" />
+              <div className="atr-lifecycle-heading"><div><p className="section-kicker">ATR BAND LIFECYCLE · RESEARCH ONLY</p><h3>MA30 ± 3ATR 生命周期</h3><p>每小时收盘后读取全市场 Binance USDT 永续的 1H 已收盘 K 线。连续 3 根站在阈值外进入强势池，回到阈值内进入警示区，跌破/升破 MA30 后进入历史区；结果只读，不连接交易执行。</p></div><div className="atr-lifecycle-actions"><span className={`atr-lifecycle-status ${atrBand?.diagnostic ? "degraded" : atrBand?.status ?? "pending"}`}>{atrBandScanning ? "扫描中" : atrBand?.diagnostic ? "连接失败" : atrBand?.status === "ready" ? "已更新" : atrBand?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runAtrBandNow()} disabled={atrBandScanning}>{atrBandScanning ? "正在扫描…" : "立即扫描"}</button></div></div>
+              <ManualProgress active={atrBandScanning} progress={atrBand?.progress} label="正在读取全市场 1H 已收盘 K 线与 OI" estimate="每小时自动维护；手动扫描需要数分钟" />
               <div className="atr-lifecycle-meta"><span>阈值：MA30 ± {atrBand?.multiplier ?? 3} ATR(14)</span><span>扫描：{atrBand?.scannedAt ? formatRadarTime(atrBand.scannedAt) : "尚未执行"}</span><span>桶：{atrBand?.scanBucket ?? "尚未生成"}</span><span>强势 {atrLifecycleGroups.strong.length} · 警示 {atrLifecycleGroups.warning.length} · 历史 {atrLifecycleGroups.history.length}</span></div>
               <div className="atr-lifecycle-direction-toggle" role="tablist" aria-label="ATR 生命周期方向">
                 {(["ALL", "LONG", "SHORT"] as const).map((direction) => {
@@ -1037,9 +1060,10 @@ export default function Home() {
               </div>
               {atrBand?.warningMessage && <p className="atr-lifecycle-warning" role="status">{atrBand.warningMessage}</p>}
               <div className="atr-lifecycle-groups">
-                <AtrLifecycleTable title="强势池" description="连续 3 根 1H 收盘位于 MA30 ± 3ATR 外侧的活动生命周期" rows={atrLifecycleGroups.strong} emptyMessage="当前方向暂无强势生命周期。" />
+                <AtrLifecycleTable title="强势池" description="连续 3 根 1H 收盘位于 MA30 ± 3ATR 外侧的活动生命周期；每次扫描完成后会自动同步到自选。" rows={atrLifecycleGroups.strong} emptyMessage="当前方向暂无强势生命周期。" />
                 <AtrLifecycleTable title="警示区" description="价格回到阈值内，等待 MA30 确认是否结束" rows={atrLifecycleGroups.warning} emptyMessage="当前方向暂无警示生命周期。" />
-                <AtrLifecycleTable title="历史区" description="已经结束的生命周期仍保留完整价格、OI 与偏离统计" rows={atrLifecycleGroups.history} emptyMessage="当前方向暂无已结束生命周期。" />
+                <section className="atr-lifecycle-group" aria-label="历史导出"><div className="atr-lifecycle-group-heading"><div><h4>历史区导出</h4><small>导出为可直接交给 ChatGPT 分析的 Markdown，不含账户或下单数据。</small></div><div className="atr-lifecycle-actions"><button type="button" onClick={() => { window.location.href = "/api/radar/atr-band/export?range=24h"; }}>最近24小时</button><button type="button" onClick={() => { window.location.href = "/api/radar/atr-band/export?range=7d"; }}>一周</button><button type="button" onClick={() => { window.location.href = "/api/radar/atr-band/export?range=30d"; }}>一个月</button></div></div></section>
+                <AtrLifecycleTable title="历史区" description="已经结束的生命周期保留入池到结束的价格、持续时间与最大有利幅度。" rows={atrLifecycleGroups.history} emptyMessage="当前方向暂无已结束生命周期。" />
               </div>
             </div>
          ) : filter === "reversal" ? (
@@ -1051,7 +1075,7 @@ export default function Home() {
               {reversal?.diagnostic && <div className="reversal-diagnostic" role="alert"><strong>扫描诊断 · {reversal.diagnostic.code}</strong><span>发生时间：{formatRadarTime(reversal.diagnostic.occurredAt)}</span><p>原因：{reversal.diagnostic.detail}</p><ul>{reversal.diagnostic.checks.map((check) => <li key={check}>检查项：{check}</li>)}</ul></div>}
               {reversal?.warning && !reversal.diagnostic && <p className="reversal-scan-warning" role="status">{reversal.warning}</p>}
              <div className="reversal-direction-grid"><ReversalTable title="多头 · 破底翻" rows={bucketedReversalCandidates.filter((candidate) => candidate.direction === "LONG")} /><ReversalTable title="空头 · 破顶翻" rows={bucketedReversalCandidates.filter((candidate) => candidate.direction === "SHORT")} /></div>
-              <div className="reversal-archive"><div className="reversal-direction-title"><h4>全部归档 · 13 根 K 线学习结果</h4><span>第 {archive.page}/{archive.totalPages} 页 · 每页 60 条</span></div>{archive.items.length ? <><table className="reversal-table archive-table"><thead><tr><SortHeader label="方向 / 币种" active={archive.sort === "symbol" || archive.sort === "direction"} order={archive.order} onClick={() => changeArchiveSort("symbol")} /><SortHeader label="周期" active={archive.sort === "interval"} order={archive.order} onClick={() => changeArchiveSort("interval")} /><SortHeader label="信号评分" active={archive.sort === "score"} order={archive.order} onClick={() => changeArchiveSort("score")} /><SortHeader label="收回位置" active={archive.sort === "reclaimLevel"} order={archive.order} onClick={() => changeArchiveSort("reclaimLevel")} /><SortHeader label="突破强度" active={archive.sort === "breakoutLookbackBars"} order={archive.order} onClick={() => changeArchiveSort("breakoutLookbackBars")} /><SortHeader label="距今 K 线" active={archive.sort === "ageBars"} order={archive.order} onClick={() => changeArchiveSort("ageBars")} /><SortHeader label="13 根后最高有利幅度" active={archive.sort === "outcome"} order={archive.order} onClick={() => changeArchiveSort("outcome")} /></tr></thead><tbody>{archive.items.map((row) => <tr key={row.id}><td><span className={row.direction === "LONG" ? "positive" : "negative"}>{row.direction === "LONG" ? "多" : "空"}</span> <a href={`/trade?symbol=${encodeURIComponent(row.symbol)}&interval=${row.interval}`}>{displayBinanceSymbol(row.symbol)}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{reversalIntervalLabel(row.interval)}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{breakoutLookbackCopy(row)}</td><td>{reversalElapsedBars(row.signalTime, row.interval, radarNow?.getTime() ?? Date.now())} 根</td><td>{row.outcome?.complete && row.outcome.maxFavorablePct !== null ? `${row.outcome.maxFavorablePct.toFixed(2)}%` : `观察中 · ${row.outcome?.barsObserved ?? 0}/13`}</td></tr>)}</tbody></table><div className="archive-pagination"><button type="button" onClick={() => changeArchivePage(archive.page - 1)} disabled={archive.page <= 1}>上一页</button><span>{archive.page} / {archive.totalPages}</span><button type="button" onClick={() => changeArchivePage(archive.page + 1)} disabled={archive.page >= archive.totalPages}>下一页</button></div></> : <div className="reversal-empty">扫描完成后，所有命中的多空形态都会在这里归档。</div>}</div>
+              <div className="reversal-archive"><div className="reversal-direction-title"><h4>全部归档 · 13 根 K 线学习结果</h4><span>第 {archive.page}/{archive.totalPages} 页 · 每页 60 条</span></div>{archive.items.length ? <><table className="reversal-table archive-table"><thead><tr><SortHeader label="方向 / 币种" active={archive.sort === "symbol" || archive.sort === "direction"} order={archive.order} onClick={() => changeArchiveSort("symbol")} /><SortHeader label="周期" active={archive.sort === "interval"} order={archive.order} onClick={() => changeArchiveSort("interval")} /><SortHeader label="信号评分" active={archive.sort === "score"} order={archive.order} onClick={() => changeArchiveSort("score")} /><SortHeader label="收回位置" active={archive.sort === "reclaimLevel"} order={archive.order} onClick={() => changeArchiveSort("reclaimLevel")} /><SortHeader label="扫出跨度（原突破强度）" active={archive.sort === "breakoutLookbackBars"} order={archive.order} onClick={() => changeArchiveSort("breakoutLookbackBars")} /><SortHeader label="收盘突破" active={archive.sort === "closeBreakoutLookbackBars"} order={archive.order} onClick={() => changeArchiveSort("closeBreakoutLookbackBars")} /><SortHeader label="距今 K 线" active={archive.sort === "ageBars"} order={archive.order} onClick={() => changeArchiveSort("ageBars")} /><SortHeader label="13 根后最高有利幅度" active={archive.sort === "outcome"} order={archive.order} onClick={() => changeArchiveSort("outcome")} /></tr></thead><tbody>{archive.items.map((row) => <tr key={row.id}><td><span className={row.direction === "LONG" ? "positive" : "negative"}>{row.direction === "LONG" ? "多" : "空"}</span> <a href={`/trade?symbol=${encodeURIComponent(row.symbol)}&interval=${row.interval}`}>{displayBinanceSymbol(row.symbol)}</a><small>{formatReversalTime(row.signalTime)}</small></td><td>{reversalIntervalLabel(row.interval)}</td><td className="reversal-score">{row.score.toFixed(0)}</td><td>{reversalLevelCopy(row.reclaimLevel)}</td><td>{breakoutLookbackCopy(row)}</td><td>{closeBreakoutLookbackCopy(row)}</td><td>{reversalElapsedBars(row.signalTime, row.interval, radarNow?.getTime() ?? Date.now())} 根</td><td>{row.outcome?.complete && row.outcome.maxFavorablePct !== null ? `${row.outcome.maxFavorablePct.toFixed(2)}%` : `观察中 · ${row.outcome?.barsObserved ?? 0}/13`}</td></tr>)}</tbody></table><div className="archive-pagination"><button type="button" onClick={() => changeArchivePage(archive.page - 1)} disabled={archive.page <= 1}>上一页</button><span>{archive.page} / {archive.totalPages}</span><button type="button" onClick={() => changeArchivePage(archive.page + 1)} disabled={archive.page >= archive.totalPages}>下一页</button></div></> : <div className="reversal-empty">扫描完成后，所有命中的多空形态都会在这里归档。</div>}</div>
             </div>
          ) : filter === "vegas" ? (
             <div className="vegas-panel"><div className="vegas-heading"><div><p className="section-kicker">VEGAS CHANNEL SCREEN</p><h3>Vegas 多周期强势归档</h3><p>只使用最新已收盘 K 线；多头还必须收盘在 MA30 上方，严格满足 MA30 &gt; EMA144 &gt; EMA169 &gt; EMA576 &gt; EMA676；空头则收盘在 MA30 下方且顺序相反。长期 Vegas 历史不足 676 根时忽略长期通道，按 MA30 + 短期 Vegas 分别归档多空结果。结果仅作研究筛选，不连接交易执行。</p></div><div className="vegas-actions"><span className={`reversal-status ${multiTimeframe?.status === "ready" && !isMultiTimeframeSnapshotFresh(multiTimeframe) ? "degraded" : multiTimeframe?.status ?? "pending"}`}>{multiTimeframeScanning ? "筛选中" : multiTimeframe?.status === "ready" && !isMultiTimeframeSnapshotFresh(multiTimeframe) ? "快照已过期" : multiTimeframe?.status === "ready" ? "已归档" : multiTimeframe?.status === "degraded" && multiTimeframe.warning?.includes("历史不足") ? "部分历史不足" : multiTimeframe?.status === "degraded" ? "数据不足" : "待执行"}</span><button type="button" onClick={() => void runMultiTimeframeNow()} disabled={multiTimeframeScanning || !multiTimeframeSymbols.length}>{multiTimeframeScanning ? "正在筛选…" : "立即筛选"}</button></div></div>

@@ -12,7 +12,11 @@ function normalizeSymbol(value: string | undefined) {
   catch { return "BTCUSDT"; }
 }
 
-export default async function TradePage({ searchParams }: { searchParams: Promise<{ symbol?: string }> }) {
+function normalizeInterval(value: string | undefined) {
+  return ["15m", "1h", "4h", "1d"].includes(value ?? "") ? value as "15m" | "1h" | "4h" | "1d" : "1h";
+}
+
+export default async function TradePage({ searchParams }: { searchParams: Promise<{ symbol?: string; interval?: string }> }) {
   const params = await searchParams;
-  return <TradingTerminal initialSymbol={normalizeSymbol(params.symbol)} />;
+  return <TradingTerminal initialSymbol={normalizeSymbol(params.symbol)} initialInterval={normalizeInterval(params.interval)} />;
 }

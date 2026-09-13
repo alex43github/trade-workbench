@@ -127,6 +127,7 @@ export class RadarScanner {
         expiresAfterBars: 6,
         lastProcessedBarTime: candidate.detectedAt,
         processedBars: 0,
+        score: candidate.score,
         geometry: geometryFromCandidate(candidate),
       };
       await this.#store.save(signal);

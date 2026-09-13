@@ -13,6 +13,12 @@ export type VegasIndicatorSettings = {
   lineWidth: LineWidth;
 };
 
+export type AtrChannelSettings = {
+  enabled: boolean;
+  multiplier: number;
+  color: string;
+};
+
 export type PersistedIndicatorSettings = {
   symbol: string;
   basis: "ma" | "ema";
@@ -21,6 +27,7 @@ export type PersistedIndicatorSettings = {
   entryAtrLower: number;
   trendAtrEnabled: boolean;
   trendAtrMultiplier: number;
+  atrChannels: AtrChannelSettings[];
   atr: {
     upperColor: string;
     lowerColor: string;
@@ -37,6 +44,11 @@ export const defaultPersistedIndicatorSettings = {
   entryAtrLower: 1,
   trendAtrEnabled: true,
   trendAtrMultiplier: 3,
+  atrChannels: [
+    { enabled: true, multiplier: 1, color: "#111827" },
+    { enabled: true, multiplier: 3, color: "#f59e0b" },
+    { enabled: true, multiplier: 5, color: "#ec4899" },
+  ],
   atr: {
     upperColor: "#111827",
     lowerColor: "#111827",
@@ -76,6 +88,7 @@ export function normalizeIndicatorSettings(symbolInput: unknown, input: unknown)
   const source = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
   const atr = source.atr && typeof source.atr === "object" && !Array.isArray(source.atr) ? source.atr as Record<string, unknown> : {};
   const vegas = source.vegas && typeof source.vegas === "object" && !Array.isArray(source.vegas) ? source.vegas as Record<string, unknown> : {};
+  const atrChannels = Array.isArray(source.atrChannels) ? source.atrChannels : [];
   return {
     symbol,
     basis: source.basis === "ema" ? "ema" : "ma",
@@ -84,6 +97,16 @@ export function normalizeIndicatorSettings(symbolInput: unknown, input: unknown)
     entryAtrLower: numberInRange(source.entryAtrLower, defaultPersistedIndicatorSettings.entryAtrLower, 0, 20),
     trendAtrEnabled: source.trendAtrEnabled !== false,
     trendAtrMultiplier: numberInRange(source.trendAtrMultiplier, defaultPersistedIndicatorSettings.trendAtrMultiplier, 0, 20),
+    atrChannels: defaultPersistedIndicatorSettings.atrChannels.map((fallback, index) => {
+      const channel = atrChannels[index] && typeof atrChannels[index] === "object" && !Array.isArray(atrChannels[index])
+        ? atrChannels[index] as Record<string, unknown>
+        : {};
+      return {
+        enabled: channel.enabled !== false,
+        multiplier: numberInRange(channel.multiplier, fallback.multiplier, 0, 20),
+        color: color(channel.color, fallback.color),
+      };
+    }),
     atr: {
       upperColor: color(atr.upperColor, defaultPersistedIndicatorSettings.atr.upperColor),
       lowerColor: color(atr.lowerColor, defaultPersistedIndicatorSettings.atr.lowerColor),

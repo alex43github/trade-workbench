@@ -70,6 +70,8 @@ test("returns the latest closed SMA/ATR candle with its strategy identity", asyn
     id: "AKEUSDT:1h:2000",
     isNewClosedCandle: true,
     close: 107,
+    high: 108,
+    low: 104,
     timeframe: "1h",
     maKind: "SMA",
     maLength: 3,

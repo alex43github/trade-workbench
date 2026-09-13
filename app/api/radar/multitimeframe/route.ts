@@ -2,7 +2,8 @@ import { getRequestExecutionContext } from "vinext/shims/request-context";
 import { ensureAdvisorySchema } from "@/db/ensure";
 import { getD1 } from "@/db";
 import { BinancePublicError } from "@/lib/binance-public";
-import { fetchClosedBars } from "@/lib/radar/binance-public";
+import { fetchClosedBars, fetchClosedHourlyOi } from "@/lib/radar/binance-public";
+import { FINE_SCREEN_CONDITIONS, type FineCombinationMode, type FineCondition, type FineScreenRequest } from "@/lib/radar/fine-screen";
 import {
   buildMultiTimeframeSnapshot,
   loadLatestMultiTimeframeSnapshot,
@@ -15,7 +16,7 @@ import { requireOperatorMutation } from "@/lib/security/operator-guard";
 let running = false;
 const MAX_MULTI_TIMEFRAME_SYMBOLS = 250;
 
-function pendingSnapshot(symbols: string[], scannedAt = new Date().toISOString(), progress = createScanProgress(symbols.length)): MultiTimeframeSnapshot {
+function pendingSnapshot(symbols: string[], scannedAt = new Date().toISOString(), progress = createScanProgress(symbols.length), fineRequest?: FineScreenRequest): MultiTimeframeSnapshot {
   return {
     status: "pending",
     scannedAt,
@@ -29,6 +30,7 @@ function pendingSnapshot(symbols: string[], scannedAt = new Date().toISOString()
     failedSymbols: 0,
     progress,
     warning: "扫描任务已开始，正在读取 Binance Futures 已收盘 K 线",
+    ...(fineRequest ? { fine: { request: fineRequest, status: "pending", symbols, results: [], scannedSymbols: 0, matchedSymbols: 0, deepScannedSymbols: 0, failedSymbols: 0 } } : {}),
   };
 }
 
@@ -41,15 +43,26 @@ function normalizeSymbols(input: unknown) {
   return symbols;
 }
 
-function failureSnapshot(symbols: string[], error: unknown, scannedAt: string): MultiTimeframeSnapshot {
+function failureSnapshot(symbols: string[], error: unknown, scannedAt: string, fineRequest?: FineScreenRequest): MultiTimeframeSnapshot {
   const message = error instanceof BinancePublicError
     ? error.message + "：" + error.hint
     : error instanceof Error ? error.message : "多周期筛选失败";
   return {
-    ...pendingSnapshot(symbols, scannedAt),
+    ...pendingSnapshot(symbols, scannedAt, createScanProgress(symbols.length), fineRequest),
     status: "degraded",
     warning: message,
   };
+}
+
+function normalizeFineRequest(input: unknown): FineScreenRequest | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const body = input as { conditions?: unknown; mode?: unknown };
+  const conditions = Array.isArray(body.conditions)
+    ? [...new Set(body.conditions.filter((value): value is FineCondition => typeof value === "string" && (FINE_SCREEN_CONDITIONS as readonly string[]).includes(value)))]
+    : [];
+  if (!conditions.length) return undefined;
+  const mode: FineCombinationMode = body.mode === "OR" ? "OR" : "AND";
+  return { conditions, mode };
 }
 
 function appendWarning(snapshot: MultiTimeframeSnapshot, warning?: string) {
@@ -62,16 +75,16 @@ export async function GET() {
   return Response.json(snapshot ?? pendingSnapshot([]), { headers: { "Cache-Control": "no-store" } });
 }
 
-export async function runMultiTimeframeScan(symbolsInput: readonly string[]) {
+export async function runMultiTimeframeScan(symbolsInput: readonly string[], fineRequest?: FineScreenRequest) {
   const normalized = normalizeSymbols(symbolsInput);
   const truncated = normalized.length > MAX_MULTI_TIMEFRAME_SYMBOLS;
   const symbols = normalized.slice(0, MAX_MULTI_TIMEFRAME_SYMBOLS);
   const truncationWarning = truncated ? `来源并集去重后超过 ${MAX_MULTI_TIMEFRAME_SYMBOLS} 个，已截断为前 ${MAX_MULTI_TIMEFRAME_SYMBOLS} 个` : undefined;
   if (running) {
-    return appendWarning({ ...pendingSnapshot(symbols), warning: "已有多周期筛选任务进行中，请等待当前任务完成" }, truncationWarning);
+    return appendWarning({ ...pendingSnapshot(symbols, new Date().toISOString(), createScanProgress(symbols.length), fineRequest), warning: "已有多周期筛选任务进行中，请等待当前任务完成" }, truncationWarning);
   }
   running = true;
-  const pending = appendWarning(pendingSnapshot(symbols), truncationWarning);
+  const pending = appendWarning(pendingSnapshot(symbols, new Date().toISOString(), createScanProgress(symbols.length), fineRequest), truncationWarning);
   let db: Awaited<ReturnType<typeof getD1>> | undefined;
   try {
     await ensureAdvisorySchema();
@@ -79,12 +92,13 @@ export async function runMultiTimeframeScan(symbolsInput: readonly string[]) {
     await saveMultiTimeframeSnapshot(db, pending);
     const snapshot = await buildMultiTimeframeSnapshot(symbols, new Date(), {
       fetchClosedBars: (symbol, interval, now) => fetchClosedBars(symbol, interval, now, 1_000),
-    });
+      fetchHourlyOi: (symbol, now) => fetchClosedHourlyOi(symbol, now, 720),
+    }, { fineRequest });
     const completed = appendWarning(snapshot, truncationWarning);
     await saveMultiTimeframeSnapshot(db, completed);
     return completed;
   } catch (error) {
-    const failed = appendWarning(failureSnapshot(symbols, error, pending.scannedAt), truncationWarning);
+    const failed = appendWarning(failureSnapshot(symbols, error, pending.scannedAt, fineRequest), truncationWarning);
     if (db) {
       try { await saveMultiTimeframeSnapshot(db, failed); } catch { /* preserve the original scan error */ }
     }
@@ -103,22 +117,25 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "no-store" },
     });
   }
-  const body = await request.json().catch(() => null) as { symbols?: unknown } | null;
+  const body = await request.json().catch(() => null) as { symbols?: unknown; conditions?: unknown; mode?: unknown } | null;
   const symbols = normalizeSymbols(body?.symbols);
   if (!symbols.length) return Response.json({ status: "degraded", warning: "没有可扫描的候选币种" }, { status: 400 });
   if (symbols.length > 250) return Response.json({ status: "degraded", warning: "单次最多扫描 250 个候选币种" }, { status: 413 });
   running = true;
-  const pending = pendingSnapshot(symbols);
+  const fineRequest = normalizeFineRequest(body);
+  const pending = pendingSnapshot(symbols, new Date().toISOString(), createScanProgress(symbols.length), fineRequest);
   try {
     await ensureAdvisorySchema();
     const db = await getD1();
     await saveMultiTimeframeSnapshot(db, pending);
     const task = buildMultiTimeframeSnapshot(symbols, new Date(), {
       fetchClosedBars: (symbol, interval, now) => fetchClosedBars(symbol, interval, now, 1_000),
+      fetchHourlyOi: (symbol, now) => fetchClosedHourlyOi(symbol, now, 720),
     }, {
+      fineRequest,
       onProgress: async (progress: RadarScanProgress) => {
         try {
-          await saveMultiTimeframeSnapshot(db, pendingSnapshot(symbols, pending.scannedAt, progress));
+          await saveMultiTimeframeSnapshot(db, pendingSnapshot(symbols, pending.scannedAt, progress, fineRequest));
         } catch {
           // A progress write must not interrupt the market-data scan.
         }
@@ -127,7 +144,7 @@ export async function POST(request: Request) {
       await saveMultiTimeframeSnapshot(db, snapshot);
       return snapshot;
     }).catch(async (error) => {
-      const failed = failureSnapshot(symbols, error, pending.scannedAt);
+      const failed = failureSnapshot(symbols, error, pending.scannedAt, fineRequest);
       try { await saveMultiTimeframeSnapshot(db, failed); } catch { /* preserve the original scan error */ }
       return failed;
     }).finally(() => {
@@ -139,7 +156,7 @@ export async function POST(request: Request) {
     return Response.json(pending, { status: 202, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     running = false;
-    const failed = failureSnapshot(symbols, error, pending.scannedAt);
+    const failed = failureSnapshot(symbols, error, pending.scannedAt, fineRequest);
     return Response.json(failed, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }

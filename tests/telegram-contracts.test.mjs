@@ -80,9 +80,12 @@ test("accepts Binance manual source ids and rejects project source ids", async (
   const { applyConversationInput, newConversation } = await contracts();
   const candidate = {
     candidateId: "candidate-1", symbol: "BTCUSDT", side: "LONG", quantity: 1,
-    entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["binance-123"],
+    entryPrice: 100, markPrice: 100, leverage: 10, sourceOrderIds: ["ios_coin_123"],
   };
   assert.doesNotThrow(() => applyConversationInput(newConversation("42"), { alexCandidates: [candidate] }));
+  assert.doesNotThrow(() => applyConversationInput(newConversation("42"), {
+    alexCandidates: [{ ...candidate, sourceOrderIds: ["web_binance_aa1abc1234def567ghi890"] }],
+  }));
   for (const sourceOrderId of ["alex0001", "tele0001", "web0001", "tw0001"]) {
     assert.throws(
       () => applyConversationInput(newConversation("42"), { alexCandidates: [{ ...candidate, sourceOrderIds: [sourceOrderId] }] }),

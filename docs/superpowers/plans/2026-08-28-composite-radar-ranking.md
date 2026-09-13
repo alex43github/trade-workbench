@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Treat MA30×OI as bullish only; reversal and Vegas retain their explicit direction; neutral chip evidence may only attach to an existing directional result.
+- Preserve the explicit LONG/SHORT direction from MA30×OI; reversal and Vegas retain their explicit direction; neutral chip evidence may only attach to an existing directional result.
 - Require at least two distinct conditions, keep opposite directions separate, and rank condition count before bounded quality score.
 - Only `ready`, current-run source snapshots count; missing, pending, degraded, stale, demo, or `AVOID` data never counts.
 - Keep composite data research-only: no order, strategy, position, stop-loss or gateway imports.
@@ -178,8 +178,8 @@ Load the composite endpoint on mount without delaying radar, preserve the existi
 
 - [ ] **Step 4: Run focused UI tests to verify GREEN**
 
-Run: `node --test tests/composite-ranking-ui.test.mjs tests/radar-multitimeframe-ui.test.mjs tests/tvscreener-ui.test.mjs tests/rendered-html.test.mjs`  
-Expected: PASS and the existing TradingView and Vegas panels remain advisory-only.
+Run: `node --test tests/composite-ranking-ui.test.mjs tests/radar-multitimeframe-ui.test.mjs tests/rendered-html.test.mjs`
+Expected: PASS and the existing Vegas panel remains advisory-only.
 
 ### Task 4: Final verification
 
@@ -188,7 +188,7 @@ Expected: PASS and the existing TradingView and Vegas panels remain advisory-onl
 
 - [ ] **Step 1: Run complete relevant verification**
 
-Run: `node --test tests/composite-ranking.test.mjs tests/composite-ranking-api.test.mjs tests/composite-ranking-ui.test.mjs tests/ma30-oi-snapshot.test.mjs tests/reversal-snapshot.test.mjs tests/radar-multitimeframe.test.mjs tests/radar-multitimeframe-api.test.mjs tests/radar-multitimeframe-ui.test.mjs tests/advisory-maintenance.test.mjs tests/operator-guard.test.mjs tests/tvscreener-api.test.mjs && npx tsc --noEmit && npm run build && git diff --check`
+Run: `node --test tests/composite-ranking.test.mjs tests/composite-ranking-api.test.mjs tests/composite-ranking-ui.test.mjs tests/ma30-oi-snapshot.test.mjs tests/reversal-snapshot.test.mjs tests/radar-multitimeframe.test.mjs tests/radar-multitimeframe-api.test.mjs tests/radar-multitimeframe-ui.test.mjs tests/advisory-maintenance.test.mjs tests/operator-guard.test.mjs && npx tsc --noEmit && npm run build && git diff --check`
 
 Expected: every test passes, TypeScript and build exit 0, and no whitespace errors.
 

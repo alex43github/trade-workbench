@@ -3,6 +3,7 @@ import { runProtectionStrategyTick, type ProtectionTickResult } from "./protecti
 import { syncLiveEntryProtections, type LiveEntryProtectionSyncResult } from "./live-entry-protection.ts";
 import { listRefreshableLiveStrategies, markLiveStrategyStatus } from "./live-strategies.ts";
 import { runLiveEntryReanchorTick, type LiveEntryReanchorResult } from "./live-entry-reanchor.ts";
+import { reconcileAllOwnedExitOrders } from "./live-exit-reconciliation.ts";
 
 export type ProtectionSchedulerResult = {
   scanned: number;
@@ -23,6 +24,7 @@ export type ProtectionSchedulerDependencies = {
   listRefreshableStrategies?: (limit?: number) => ReturnType<typeof listRefreshableLiveStrategies>;
   runReanchorTick?: (strategyId: string) => Promise<LiveEntryReanchorResult>;
   markLiveStrategyReconciliationRequired?: (strategyId: string) => Promise<unknown>;
+  reconcileOwnedExits?: () => Promise<{ scanned: number; reconciliationRequired: number; failed: number }>;
 };
 
 export async function runProtectionStrategyScheduler(dependencies: ProtectionSchedulerDependencies = {}): Promise<ProtectionSchedulerResult> {
@@ -34,9 +36,13 @@ export async function runProtectionStrategyScheduler(dependencies: ProtectionSch
   const runReanchorTick = dependencies.runReanchorTick ?? runLiveEntryReanchorTick;
   const markLiveStrategyReconciliationRequired = dependencies.markLiveStrategyReconciliationRequired
     ?? ((strategyId) => markLiveStrategyStatus(strategyId, "RECONCILIATION_REQUIRED"));
+  const reconcileOwnedExits = dependencies.reconcileOwnedExits ?? reconcileAllOwnedExitOrders;
   const result: ProtectionSchedulerResult = {
     scanned: 0, reanchored: 0, entryFrozen: 0, executed: 0, closed: 0, reconciliationRequired: 0, failed: 0, realOrderRouteEnabled: true,
   };
+  const ownedExitReconciliation = await reconcileOwnedExits();
+  result.reconciliationRequired += ownedExitReconciliation.reconciliationRequired;
+  result.failed += ownedExitReconciliation.failed;
   const refreshable = await listRefreshableStrategies(100);
   for (const strategy of refreshable) {
     try {

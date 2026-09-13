@@ -12,16 +12,19 @@ import {
   recordLiveExecutionFill,
   recordLiveOrderAttempt,
 } from "./live-strategies.ts";
-import { nextProtectionClientOrderId } from "./protection-math.ts";
+import { stableProtectionExitClientOrderId } from "./protection-math.ts";
+import { cleanupProtectionOwnedExits } from "./live-exit-reconciliation.ts";
+import { evaluateQuickLiveExit, type QuickLiveExitState } from "./quick-live-exits.ts";
 import type { ProtectionOrderPlan, ProtectionPositionSide } from "./protection-contracts.ts";
 import type { StrategyTimeframe } from "./strategy-contracts.ts";
+import { selectPositionRiskRow, type EntryDirection } from "./position-mode.ts";
 
 type PositionResponse = { symbol?: string; positionAmt?: string | number; entryPrice?: string | number; markPrice?: string | number; positionSide?: string };
 type ExchangeFilter = { filterType?: string; tickSize?: string; stepSize?: string; minQty?: string; notional?: string; minNotional?: string };
 type ExchangeInfo = { symbols?: Array<{ symbol?: string; filters?: ExchangeFilter[] }> };
 type OrderFill = { id?: string | number; quantity?: string | number; price?: string | number; executedAt?: string };
 type OrderResult = { orderId?: string | number; clientOrderId?: string; status?: string; executedQty?: string | number; fills?: OrderFill[] };
-type Candle = { id: string; close: number; ma: number; atr: number; timeframe?: string };
+type Candle = { id: string; close: number; ma: number; atr: number; high?: number; low?: number; timeframe?: string };
 
 export type ProtectionTickResult = {
   action: "NOOP" | "PARTIAL_EXIT" | "FULL_EXIT" | "CLOSED" | "RECONCILIATION_REQUIRED";
@@ -33,7 +36,7 @@ export type ProtectionTickResult = {
 
 export type ProtectionExecutorDependencies = {
   readMarket?: (input: { symbol: string; timeframe: string; marketConfig: { ma: { kind: "SMA" | "EMA"; length: number }; atr: { length: number }; atrMultiplier: number } }) => Promise<{ closedCandle: Candle }>;
-  readPosition?: (symbol: string) => Promise<PositionResponse | null>;
+  readPosition?: (symbol: string, direction?: EntryDirection) => Promise<PositionResponse | null>;
   readExchangeInfo?: (symbol: string) => Promise<ExchangeInfo>;
   placeOrder?: (order: ProtectionOrderPlan) => Promise<OrderResult>;
   findOrder?: (input: { symbol: string; clientOrderId: string }) => Promise<OrderResult | null>;
@@ -41,10 +44,12 @@ export type ProtectionExecutorDependencies = {
   cancelEntryOrder?: (input: { symbol: string; exchangeOrderId: string; clientOrderId: string }) => Promise<OrderResult>;
   freezeLinkedEntries?: (input: { protectionStrategyId: string; sourceOrderId: string; reason: "ENTRY_FROZEN_BY_STOP" }) => Promise<{ frozen: boolean; reconciliationRequired: boolean }>;
   recordExitFills?: (input: { sourceOrderId: string; fills: OrderFill[] }) => Promise<void>;
+  cleanupOwnedExits?: (input: { protectionStrategyId: string; strategyTerminal: boolean }) => Promise<{ ok: boolean; reason?: string }>;
 };
 
 function changed(result: unknown) { return Number((result as { meta?: { changes?: number }} | undefined)?.meta?.changes ?? 0); }
 function positive(value: unknown, label: string) { const parsed = Number(value); if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${label}必须大于0`); return parsed; }
+function safeError(error: unknown) { return String(error instanceof Error ? error.message : error ?? "未知错误").slice(0, 240); }
 function stepDetails(info: ExchangeInfo, symbol: string) {
   const filters = info.symbols?.find((item) => String(item.symbol ?? "").toUpperCase() === symbol)?.filters;
   const lot = filters?.find((item) => item.filterType === "MARKET_LOT_SIZE") ?? filters?.find((item) => item.filterType === "LOT_SIZE");
@@ -164,20 +169,304 @@ function marketConfig(strategy: Awaited<ReturnType<typeof getProtectionStrategy>
   }
   return { ma: { kind: kind as "SMA" | "EMA", length }, atr: { length: atrLength }, atrMultiplier };
 }
-async function nextSequence() {
+async function updateStrategy(id: string, fields: {
+  status: string;
+  remainingQuantity?: number;
+  invalidCandleCount: number;
+  candleId: string | null;
+  error?: string | null;
+  quickState?: QuickLiveExitState;
+}) {
   const db = await getD1();
-  await db.prepare("INSERT OR IGNORE INTO trade_protection_sequences (name, value) VALUES ('order', 0)").run();
-  const row = await db.prepare("UPDATE trade_protection_sequences SET value = value + 1 WHERE name = 'order' RETURNING value").first<Record<string, unknown>>();
-  const value = Number(row?.value);
-  if (!Number.isSafeInteger(value) || value <= 0) throw new Error("保护单序号生成失败");
-  return value;
+  const quick = fields.quickState;
+  await db.prepare(`UPDATE trade_protection_strategies SET status = ?, remaining_quantity = COALESCE(?, remaining_quantity),
+    invalid_candle_count = ?, last_closed_candle_id = ?, error = ?,
+    quick_breach_count = COALESCE(?, quick_breach_count),
+    quick_processed_candle_ids = COALESCE(?, quick_processed_candle_ids),
+    quick_completed_targets = COALESCE(?, quick_completed_targets),
+    quick_exit_completed = COALESCE(?, quick_exit_completed),
+    revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .bind(fields.status, fields.remainingQuantity === undefined ? null : String(fields.remainingQuantity), fields.invalidCandleCount, fields.candleId, fields.error ?? null,
+      quick ? String(quick.breachCount ?? 0) : null,
+      quick ? JSON.stringify(quick.processedCandleIds ?? []) : null,
+      quick ? JSON.stringify(quick.completedTargets ?? quick.completedTargetOffsets ?? []) : null,
+      quick ? (quick.exitCompleted ? 1 : 0) : null,
+      id).run();
 }
 
-async function updateStrategy(id: string, fields: { status: string; remainingQuantity?: number; invalidCandleCount: number; candleId: string | null; error?: string | null }) {
+type ProtectionStrategyRecord = NonNullable<Awaited<ReturnType<typeof getProtectionStrategy>>>;
+
+type ExitExecutionInput = {
+  strategy: ProtectionStrategyRecord;
+  dependencies: ProtectionExecutorDependencies;
+  position: PositionResponse;
+  amount: number;
+  targetRemaining: number;
+  kind: "TP" | "SL";
+  stage: string;
+  candleId: string;
+  invalidCandleCount: number;
+  quickState?: QuickLiveExitState;
+  entryFrozen?: boolean;
+  entryReconciliationRequired?: boolean;
+};
+
+/**
+ * Submit every dynamic exit through the same reserved reduce-only protection
+ * order path used by the original MA stop executor.
+ */
+async function executeProtectionExit(input: ExitExecutionInput): Promise<ProtectionTickResult> {
+  const { strategy, dependencies, position, amount } = input;
+  const readExchangeInfo = dependencies.readExchangeInfo ?? ((symbol: string) => gatewayJson<ExchangeInfo>(`/fapi/v1/exchangeInfo?symbol=${encodeURIComponent(symbol)}`));
+  const { stepSize, minQty, minNotional } = stepDetails(await readExchangeInfo(strategy.symbol), strategy.symbol);
+  const maxAvailable = Math.min(strategy.remainingQuantity, Math.abs(amount));
+  const rawQuantity = Math.max(0, maxAvailable - input.targetRemaining);
+  const exitQuantity = floorStep(rawQuantity, stepSize);
+  if (rawQuantity <= 0) {
+    await updateStrategy(strategy.id, {
+      status: input.targetRemaining <= 0 ? "CLOSED" : "PARTIALLY_PROTECTED",
+      invalidCandleCount: input.invalidCandleCount,
+      candleId: input.candleId,
+      quickState: input.quickState,
+    });
+    return { action: input.targetRemaining <= 0 ? "FULL_EXIT" : "NOOP", entryFrozen: input.entryFrozen, entryReconciliationRequired: input.entryReconciliationRequired };
+  }
+  const markPrice = Number(position.markPrice);
+  if (exitQuantity <= 0 || exitQuantity < minQty || (minNotional > 0 && (!Number.isFinite(markPrice) || markPrice <= 0 || exitQuantity * markPrice < minNotional))) {
+    await updateStrategy(strategy.id, {
+      status: "RECONCILIATION_REQUIRED",
+      invalidCandleCount: input.invalidCandleCount,
+      candleId: input.candleId,
+      error: "止损数量不满足交易所最小数量或最小名义金额",
+      quickState: input.quickState,
+    });
+    return { action: "RECONCILIATION_REQUIRED", entryFrozen: input.entryFrozen, entryReconciliationRequired: input.entryReconciliationRequired };
+  }
+
+  const eventKey = `${strategy.id}:${input.stage}`;
+  const clientOrderId = stableProtectionExitClientOrderId({ origin: strategy.origin, kind: input.kind, eventKey });
+  const orderPositionSide = protectionPositionSide(position.positionSide, strategy.side);
+  const plan: ProtectionOrderPlan = {
+    strategyId: strategy.id,
+    origin: strategy.origin,
+    symbol: strategy.symbol,
+    side: strategy.side === "LONG" ? "SELL" : "BUY",
+    positionSide: orderPositionSide,
+    type: "MARKET",
+    quantity: formatQuantity(exitQuantity, stepSize),
+    workbenchOrderIntent: "EXIT_ONLY",
+    reduceOnly: true,
+    newClientOrderId: clientOrderId,
+    stage: input.stage,
+  };
   const db = await getD1();
-  await db.prepare(`UPDATE trade_protection_strategies SET status = ?, remaining_quantity = COALESCE(?, remaining_quantity),
-    invalid_candle_count = ?, last_closed_candle_id = ?, error = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    .bind(fields.status, fields.remainingQuantity === undefined ? null : String(fields.remainingQuantity), fields.invalidCandleCount, fields.candleId, fields.error ?? null, id).run();
+  const orderPrefix = strategy.origin === "ALEX" ? "alex" : strategy.origin === "TELEGRAM" ? "tele" : "web";
+  const orderId = `${orderPrefix}-po-${crypto.randomUUID()}`;
+  await db.prepare(`INSERT INTO trade_protection_orders
+    (id, strategy_id, origin, stage, client_order_id, symbol, side, type, quantity, reduce_only, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'RESERVED')`)
+    .bind(orderId, strategy.id, strategy.origin, plan.stage, plan.newClientOrderId, plan.symbol, plan.side, plan.type, plan.quantity).run();
+
+  const placeOrder = dependencies.placeOrder ?? ((order: ProtectionOrderPlan) => gatewayJson<OrderResult>("/fapi/v1/order", {
+    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: (() => {
+      const params = new URLSearchParams({ symbol: order.symbol, side: order.side, type: order.type, quantity: order.quantity,
+        workbenchOrderIntent: order.workbenchOrderIntent, newClientOrderId: order.newClientOrderId });
+      if (order.positionSide === "BOTH") params.set("reduceOnly", "true");
+      else params.set("positionSide", order.positionSide);
+      return params.toString();
+    })(),
+  }));
+  const findOrder = dependencies.findOrder ?? ((order: { symbol: string; clientOrderId: string }) => gatewayJson<OrderResult>(`/fapi/v1/order?symbol=${encodeURIComponent(order.symbol)}&origClientOrderId=${encodeURIComponent(order.clientOrderId)}`));
+  let result: OrderResult | null = null;
+  let status: "SUBMITTED" | "FILLED" | "UNKNOWN" | "REJECTED" = "REJECTED";
+  let error: string | null = null;
+  try {
+    result = await placeOrder(plan);
+    if (!safeOrderId(result)) throw new Error("Binance 回报缺少订单编号");
+    const observedStatus = protectionOrderStatus(result);
+    if (!observedStatus || observedStatus === "CANCELED") throw new Error("保护市价单回报状态不确定");
+    status = observedStatus;
+  } catch (caught) {
+    if (timeout(caught)) {
+      result = await findOrder({ symbol: plan.symbol, clientOrderId }).catch(() => null);
+      const observedStatus = result ? protectionOrderStatus(result) : null;
+      if (result && matchesProtectionClientOrderId(result, clientOrderId) && safeOrderId(result) && observedStatus && observedStatus !== "CANCELED") status = observedStatus;
+      else { result = null; status = "UNKNOWN"; error = "网关超时，按 client order ID 查询不到一致结果"; }
+    } else error = String(caught instanceof Error ? caught.message : caught).slice(0, 240);
+  }
+  const exchangeOrderId = result && safeOrderId(result);
+  const executed = result?.executedQty === undefined ? (status === "FILLED" ? plan.quantity : "0") : String(result.executedQty);
+  await db.prepare(`UPDATE trade_protection_orders SET exchange_order_id = COALESCE(?, exchange_order_id), status = ?, executed_quantity = ?, error = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .bind(exchangeOrderId, status, executed, error, orderId).run();
+  if (!["SUBMITTED", "FILLED"].includes(status)) {
+    await updateStrategy(strategy.id, {
+      status: "RECONCILIATION_REQUIRED",
+      invalidCandleCount: input.invalidCandleCount,
+      candleId: input.candleId,
+      error: error ?? "保护市价单未获得确定回报",
+      quickState: input.quickState,
+    });
+    return { action: "RECONCILIATION_REQUIRED", quantity: plan.quantity, clientOrderId,
+      entryFrozen: input.entryFrozen, entryReconciliationRequired: input.entryReconciliationRequired };
+  }
+  const executedQuantity = Number(executed);
+  const recordExitFills = dependencies.recordExitFills ?? recordLinkedExitFills;
+  if (result?.fills?.length) await recordExitFills({ sourceOrderId: strategy.sourceOrderId, fills: result.fills });
+  const remaining = Math.max(0, strategy.remainingQuantity - (Number.isFinite(executedQuantity) && executedQuantity > 0 ? executedQuantity : 0));
+  const cleanupOwnedExits = dependencies.cleanupOwnedExits ?? cleanupProtectionOwnedExits;
+  if (remaining <= 0) {
+    const cleanup = await cleanupOwnedExits({ protectionStrategyId: strategy.id, strategyTerminal: true });
+    if (!cleanup.ok) {
+      await updateStrategy(strategy.id, { status: "RECONCILIATION_REQUIRED", invalidCandleCount: input.invalidCandleCount,
+        candleId: input.candleId, error: cleanup.reason ?? "保护终态 EXIT_ONLY 清理未确认", quickState: input.quickState });
+      return { action: "RECONCILIATION_REQUIRED", quantity: plan.quantity, clientOrderId, entryFrozen: input.entryFrozen, entryReconciliationRequired: input.entryReconciliationRequired };
+    }
+  }
+  await updateStrategy(strategy.id, {
+    status: remaining <= 0 ? "CLOSED" : "PARTIALLY_PROTECTED",
+    remainingQuantity: remaining,
+    invalidCandleCount: input.invalidCandleCount,
+    candleId: input.candleId,
+    quickState: input.quickState,
+  });
+  return {
+    action: remaining <= 0 ? "FULL_EXIT" : "PARTIAL_EXIT",
+    quantity: plan.quantity,
+    clientOrderId,
+    entryFrozen: input.entryFrozen,
+    entryReconciliationRequired: input.entryReconciliationRequired,
+  };
+}
+
+function quickExitState(strategy: ProtectionStrategyRecord): QuickLiveExitState {
+  const processedCandleIds = strategy.quickProcessedCandleIds.length
+    ? strategy.quickProcessedCandleIds
+    : strategy.lastClosedCandleId ? [strategy.lastClosedCandleId] : [];
+  return {
+    processedCandleIds,
+    breachCount: strategy.quickBreachCount,
+    independentBreachCount: strategy.quickBreachCount,
+    completedTargets: strategy.quickCompletedTargets,
+    completedTargetOffsets: strategy.quickCompletedTargets,
+    exitCompleted: strategy.quickExitCompleted,
+  };
+}
+
+function quickMarketConfig() {
+  return { ma: { kind: "SMA" as const, length: 30 }, atr: { length: 14 }, atrMultiplier: 1 };
+}
+
+async function runQuickProtectionStrategyTick(
+  strategy: ProtectionStrategyRecord,
+  dependencies: ProtectionExecutorDependencies,
+): Promise<ProtectionTickResult> {
+  if (String(strategy.config.timeframe ?? "") !== "1h") {
+    await updateStrategy(strategy.id, {
+      status: "RECONCILIATION_REQUIRED",
+      invalidCandleCount: strategy.quickBreachCount,
+      candleId: strategy.lastClosedCandleId,
+      error: "快捷退出只允许使用已收盘 1h K 线",
+      quickState: quickExitState(strategy),
+    });
+    return { action: "RECONCILIATION_REQUIRED" };
+  }
+  const readMarket = dependencies.readMarket ?? (async ({ symbol }) => {
+    const snapshot = await fetchPaperStrategyMarketSnapshot({ config: { symbol, timeframe: "1h", ma: { kind: "SMA", length: 30 }, atr: { length: 14 } } });
+    const closed = snapshot.closedCandle as typeof snapshot.closedCandle & { high?: number; low?: number; isNewClosedCandle?: boolean };
+    return {
+      closedCandle: {
+        id: closed.id,
+        close: closed.close!,
+        ma: closed.ma,
+        atr: closed.atr,
+        high: closed.high,
+        low: closed.low,
+        timeframe: "1h",
+        isNewClosedCandle: closed.isNewClosedCandle,
+      },
+    };
+  });
+  const readPosition = dependencies.readPosition ?? (async (symbol, direction) => {
+    const rows = await gatewayJson<PositionResponse[]>("/fapi/v2/positionRisk");
+    return selectPositionRiskRow(rows, symbol, direction);
+  });
+  const candle = (await readMarket({ symbol: strategy.symbol, timeframe: "1h", marketConfig: quickMarketConfig() })).closedCandle;
+  if (!candle || ("isNewClosedCandle" in candle && candle.isNewClosedCandle === false)) return { action: "NOOP" };
+  const state = quickExitState(strategy);
+  let decision: ReturnType<typeof evaluateQuickLiveExit>;
+  try {
+    decision = evaluateQuickLiveExit({
+      snapshot: strategy.config.quickTemplateSnapshot,
+      candle: { id: candle.id, timeframe: candle.timeframe, close: candle.close, high: candle.high, low: candle.low },
+      state,
+    });
+  } catch (error) {
+    await updateStrategy(strategy.id, {
+      status: "RECONCILIATION_REQUIRED",
+      invalidCandleCount: strategy.quickBreachCount,
+      candleId: strategy.lastClosedCandleId,
+      error: `快捷退出快照无效，需对账：${safeError(error)}`,
+      quickState: state,
+    });
+    return { action: "RECONCILIATION_REQUIRED" };
+  }
+  if (decision.action === "NOOP") {
+    await updateStrategy(strategy.id, {
+      status: decision.nextState.exitCompleted ? "CLOSED" : "ACTIVE",
+      invalidCandleCount: decision.breachCount,
+      candleId: decision.candleId,
+      quickState: decision.nextState,
+    });
+    return { action: "NOOP" };
+  }
+
+  const position = await readPosition(strategy.symbol, strategy.side);
+  const amount = Number(position?.positionAmt);
+  const currentSide = amount >= 0 ? "LONG" : "SHORT";
+  if (!position || !Number.isFinite(amount) || amount === 0) {
+    await updateStrategy(strategy.id, {
+      status: "CLOSED",
+      invalidCandleCount: decision.breachCount,
+      candleId: decision.candleId,
+      quickState: { ...decision.nextState, exitCompleted: true },
+    });
+    return { action: "CLOSED" };
+  }
+  if (currentSide !== strategy.side || Math.abs(amount) + Number.EPSILON < strategy.remainingQuantity) {
+    await updateStrategy(strategy.id, {
+      status: "RECONCILIATION_REQUIRED",
+      invalidCandleCount: decision.breachCount,
+      candleId: decision.candleId,
+      error: "来源账本数量与交易所当前持仓不一致",
+      quickState: decision.nextState,
+    });
+    return { action: "RECONCILIATION_REQUIRED" };
+  }
+
+  const isStop = decision.reason === "STOP_CLOSE" || decision.reason === "BALANCED_FIRST_BREACH";
+  const freezeLinkedEntries = dependencies.freezeLinkedEntries ?? ((input) => freezeLinkedLiveEntries(input, dependencies));
+  const freeze = isStop
+    ? await freezeLinkedEntries({ protectionStrategyId: strategy.id, sourceOrderId: strategy.sourceOrderId, reason: "ENTRY_FROZEN_BY_STOP" })
+    : { frozen: false, reconciliationRequired: false };
+  const targetRemaining = decision.exitPercent === 50 ? strategy.initialQuantity * 0.5 : 0;
+  const stage = decision.reason === "TAKE_PROFIT_TOUCH"
+    ? `QUICK_TP_${decision.completedTargets.at(-1) ?? "FULL"}`
+    : decision.breachCount > 1 ? "QUICK_STOP_SECOND" : "QUICK_STOP_FIRST";
+  return executeProtectionExit({
+    strategy,
+    dependencies,
+    position,
+    amount,
+    targetRemaining,
+    kind: decision.reason === "TAKE_PROFIT_TOUCH" ? "TP" : "SL",
+    stage,
+    candleId: decision.candleId,
+    invalidCandleCount: decision.breachCount,
+    quickState: decision.nextState,
+    entryFrozen: freeze.frozen,
+    entryReconciliationRequired: freeze.reconciliationRequired,
+  });
 }
 
 async function reconcilePendingProtectionExit(
@@ -185,7 +474,8 @@ async function reconcilePendingProtectionExit(
   dependencies: ProtectionExecutorDependencies,
 ): Promise<ProtectionTickResult | null> {
   if (!strategy) return null;
-  const pending = strategy.orders.filter((order) => ["RESERVED", "SUBMITTED", "UNKNOWN"].includes(order.status) && order.stage.startsWith("MA_"));
+  const pending = strategy.orders.filter((order) => ["RESERVED", "SUBMITTED", "UNKNOWN"].includes(order.status)
+    && (order.stage.startsWith("MA_") || order.stage.startsWith("QUICK_")));
   if (!pending.length) return null;
   if (pending.length !== 1 || pending[0].status !== "SUBMITTED") {
     await updateStrategy(strategy.id, { status: "RECONCILIATION_REQUIRED", invalidCandleCount: strategy.invalidCandleCount, candleId: strategy.lastClosedCandleId, error: "存在状态不确定的止损市价单" });
@@ -227,25 +517,34 @@ export async function runProtectionStrategyTick(strategyId: string, dependencies
   if (!strategy || strategy.strategyType !== "MA_SL" || !["ACTIVE", "PARTIALLY_PROTECTED", "TRIGGERING"].includes(strategy.status)) return { action: "NOOP" };
   const pendingResult = await reconcilePendingProtectionExit(strategy, dependencies);
   if (pendingResult) return pendingResult;
+  if (strategy.config.quickExitRule && strategy.config.quickTemplateSnapshot) {
+    return runQuickProtectionStrategyTick(strategy, dependencies);
+  }
   const timeframe = String(strategy.config.timeframe ?? "1h");
   const indicatorConfig = marketConfig(strategy);
   const readMarket = dependencies.readMarket ?? (async ({ symbol, timeframe: period }) => {
     const snapshot = await fetchPaperStrategyMarketSnapshot({ config: { symbol, timeframe: period as StrategyTimeframe, ma: indicatorConfig.ma, atr: indicatorConfig.atr } });
     return { closedCandle: { id: snapshot.closedCandle.id, close: snapshot.closedCandle.close, ma: snapshot.closedCandle.ma, atr: snapshot.closedCandle.atr, timeframe: period } };
   });
-  const readPosition = dependencies.readPosition ?? (async (symbol) => {
+  const readPosition = dependencies.readPosition ?? (async (symbol, direction) => {
     const rows = await gatewayJson<PositionResponse[]>("/fapi/v2/positionRisk");
-    return rows.find((item) => String(item.symbol ?? "").toUpperCase() === symbol) ?? null;
+    return selectPositionRiskRow(rows, symbol, direction);
   });
-  const readExchangeInfo = dependencies.readExchangeInfo ?? ((symbol) => gatewayJson<ExchangeInfo>(`/fapi/v1/exchangeInfo?symbol=${encodeURIComponent(symbol)}`));
   const candle = (await readMarket({ symbol: strategy.symbol, timeframe, marketConfig: indicatorConfig })).closedCandle;
   if (!candle || strategy.lastClosedCandleId === candle.id) return { action: "NOOP" };
   const close = Number(candle.close);
   if (!Number.isFinite(close)) return { action: "NOOP" };
-  const position = await readPosition(strategy.symbol);
+  const position = await readPosition(strategy.symbol, strategy.side);
   const amount = Number(position?.positionAmt);
   const currentSide = amount >= 0 ? "LONG" : "SHORT";
   if (!position || !Number.isFinite(amount) || amount === 0) {
+    const cleanupOwnedExits = dependencies.cleanupOwnedExits ?? cleanupProtectionOwnedExits;
+    const cleanup = await cleanupOwnedExits({ protectionStrategyId: strategy.id, strategyTerminal: true });
+    if (!cleanup.ok) {
+      await updateStrategy(strategy.id, { status: "RECONCILIATION_REQUIRED", invalidCandleCount: strategy.invalidCandleCount,
+        candleId: candle.id, error: cleanup.reason ?? "保护终态 EXIT_ONLY 清理未确认" });
+      return { action: "RECONCILIATION_REQUIRED" };
+    }
     await updateStrategy(strategy.id, { status: "CLOSED", invalidCandleCount: strategy.invalidCandleCount, candleId: candle.id });
     return { action: "CLOSED" };
   }
@@ -266,77 +565,20 @@ export async function runProtectionStrategyTick(strategyId: string, dependencies
     ? await freezeLinkedEntries({ protectionStrategyId: strategy.id, sourceOrderId: strategy.sourceOrderId, reason: "ENTRY_FROZEN_BY_STOP" })
     : { frozen: false, reconciliationRequired: false };
   const targetRemaining = invalidCount === 1 ? strategy.initialQuantity * 0.5 : 0;
-  const maxAvailable = Math.min(strategy.remainingQuantity, Math.abs(amount));
-  const rawQuantity = Math.max(0, maxAvailable - targetRemaining);
   const pendingExit = strategy.orders.some((order) => ["RESERVED", "SUBMITTED", "UNKNOWN"].includes(order.status)
     && order.stage.startsWith("MA_"));
   if (pendingExit) return { action: "NOOP" };
-  const { stepSize, minQty, minNotional } = stepDetails(await readExchangeInfo(strategy.symbol), strategy.symbol);
-  const quantity = floorStep(rawQuantity, stepSize);
-  if (rawQuantity <= 0) {
-    await updateStrategy(strategy.id, { status: "PARTIALLY_PROTECTED", invalidCandleCount: invalidCount, candleId: candle.id });
-    return { action: "NOOP" };
-  }
-  const markPrice = Number(position.markPrice);
-  if (quantity <= 0 || quantity < minQty || (minNotional > 0 && (!Number.isFinite(markPrice) || markPrice <= 0 || quantity * markPrice < minNotional))) {
-    await updateStrategy(strategy.id, { status: "RECONCILIATION_REQUIRED", invalidCandleCount: invalidCount, candleId: candle.id, error: "止损数量不满足交易所最小数量或最小名义金额" });
-    return { action: "RECONCILIATION_REQUIRED" };
-  }
-  const clientOrderId = nextProtectionClientOrderId({ origin: strategy.origin, kind: "SL", sequence: await nextSequence() });
-  const orderPositionSide = protectionPositionSide(position.positionSide, strategy.side);
-  const plan: ProtectionOrderPlan = {
-    strategyId: strategy.id, origin: strategy.origin, symbol: strategy.symbol, side: strategy.side === "LONG" ? "SELL" : "BUY",
-    positionSide: orderPositionSide, type: "MARKET", quantity: formatQuantity(quantity, stepSize), reduceOnly: true,
-    newClientOrderId: clientOrderId, stage: invalidCount === 1 ? "MA_FIRST" : "MA_SECOND",
-  };
-  const db = await getD1();
-  const orderPrefix = strategy.origin === "ALEX" ? "alex" : strategy.origin === "TELEGRAM" ? "tele" : "web";
-  const orderId = `${orderPrefix}-po-${crypto.randomUUID()}`;
-  await db.prepare(`INSERT INTO trade_protection_orders
-    (id, strategy_id, origin, stage, client_order_id, symbol, side, type, quantity, reduce_only, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'RESERVED')`)
-    .bind(orderId, strategy.id, strategy.origin, plan.stage, plan.newClientOrderId, plan.symbol, plan.side, plan.type, plan.quantity).run();
-  const placeOrder = dependencies.placeOrder ?? ((order: ProtectionOrderPlan) => gatewayJson<OrderResult>("/fapi/v1/order", {
-    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: (() => {
-      const params = new URLSearchParams({ symbol: order.symbol, side: order.side, type: order.type, quantity: order.quantity,
-        newClientOrderId: order.newClientOrderId });
-      if (order.positionSide === "BOTH") params.set("reduceOnly", "true");
-      else params.set("positionSide", order.positionSide);
-      return params.toString();
-    })(),
-  }));
-  const findOrder = dependencies.findOrder ?? ((order: { symbol: string; clientOrderId: string }) => gatewayJson<OrderResult>(`/fapi/v1/order?symbol=${encodeURIComponent(order.symbol)}&origClientOrderId=${encodeURIComponent(order.clientOrderId)}`));
-  let result: OrderResult | null = null;
-  let status: "SUBMITTED" | "FILLED" | "UNKNOWN" | "REJECTED" = "REJECTED";
-  let error: string | null = null;
-  try {
-    result = await placeOrder(plan);
-    if (!safeOrderId(result)) throw new Error("Binance 回报缺少订单编号");
-    const observedStatus = protectionOrderStatus(result);
-    if (!observedStatus || observedStatus === "CANCELED") throw new Error("止损市价单回报状态不确定");
-    status = observedStatus;
-  } catch (caught) {
-    if (timeout(caught)) {
-      result = await findOrder({ symbol: plan.symbol, clientOrderId }).catch(() => null);
-      const observedStatus = result ? protectionOrderStatus(result) : null;
-      if (result && matchesProtectionClientOrderId(result, clientOrderId) && safeOrderId(result) && observedStatus && observedStatus !== "CANCELED") status = observedStatus;
-      else { result = null; status = "UNKNOWN"; error = "网关超时，按 client order ID 查询不到一致结果"; }
-    } else error = String(caught instanceof Error ? caught.message : caught).slice(0, 240);
-  }
-  const exchangeOrderId = result && safeOrderId(result);
-  const executed = result?.executedQty === undefined ? (status === "FILLED" ? plan.quantity : "0") : String(result.executedQty);
-  await db.prepare(`UPDATE trade_protection_orders SET exchange_order_id = COALESCE(?, exchange_order_id), status = ?, executed_quantity = ?, error = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    .bind(exchangeOrderId, status, executed, error, orderId).run();
-  if (!["SUBMITTED", "FILLED"].includes(status)) {
-    await updateStrategy(strategy.id, { status: "RECONCILIATION_REQUIRED", invalidCandleCount: invalidCount, candleId: candle.id, error: error ?? "止损市价单未获得确定回报" });
-    return { action: "RECONCILIATION_REQUIRED", quantity: plan.quantity, clientOrderId };
-  }
-  const executedQuantity = Number(executed);
-  const recordExitFills = dependencies.recordExitFills ?? recordLinkedExitFills;
-  if (result?.fills?.length) await recordExitFills({ sourceOrderId: strategy.sourceOrderId, fills: result.fills });
-  const remaining = Math.max(0, strategy.remainingQuantity - (Number.isFinite(executedQuantity) && executedQuantity > 0 ? executedQuantity : 0));
-  await updateStrategy(strategy.id, { status: remaining <= 0 ? "CLOSED" : "PARTIALLY_PROTECTED", remainingQuantity: remaining, invalidCandleCount: invalidCount, candleId: candle.id });
-  return { action: remaining <= 0 ? "FULL_EXIT" : "PARTIAL_EXIT", quantity: plan.quantity, clientOrderId,
-    entryFrozen: freeze.frozen, entryReconciliationRequired: freeze.reconciliationRequired };
+  return executeProtectionExit({
+    strategy,
+    dependencies,
+    position,
+    amount,
+    targetRemaining,
+    kind: "SL",
+    stage: invalidCount === 1 ? "MA_FIRST" : "MA_SECOND",
+    candleId: candle.id,
+    invalidCandleCount: invalidCount,
+    entryFrozen: freeze.frozen,
+    entryReconciliationRequired: freeze.reconciliationRequired,
+  });
 }

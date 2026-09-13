@@ -226,3 +226,9 @@ BINANCE_FUTURES_API_SECRET=...
 推荐使用一组专门的只读密钥，并在 Binance API 管理中关闭交易和提现权限。不要把密钥写进网页代码或发在聊天消息中；本地开发写入未提交的环境配置，私有站点使用托管环境的加密变量。
 
 开源参考采用“按需吸收”方式：图表直接使用 Lightweight Charts；实时刷新与日志结构参考 polyrec；回测、Dry Run和实盘隔离参考 Freqtrade。fredapi 与 prediction-market-backtesting 当前不进入依赖树。
+
+### 新需求的开源整合优先级
+
+新增链上数据、交易所 API、EVM 交互、做市/套利、策略回测或 24 小时监控需求时，先阅读 [`docs/open-source-integrations.md`](docs/open-source-integrations.md)，再查询其中对应的 GitHub 项目是否已有可复用能力：Dune Skills、CCXT、web3.py、Hummingbot、Freqtrade、NautilusTrader 和 Prometheus。查询结果要记录在对应 feature spec/plan 中，并明确采用、旁路参考或不采用的理由。
+
+这条规则不改变现有安全边界：外部项目默认只读、缓存、测试网或 dry-run；Binance 私有执行仍经过现有 Gateway、风险闸门和人工确认，链上签名交易与真实订单不得因为接入开源项目而自动开启。

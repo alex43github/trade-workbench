@@ -9,9 +9,10 @@ const progressComponent = fs.readFileSync(path.join(root, "app/components/Manual
 const globalStyles = fs.readFileSync(path.join(root, "app/globals.css"), "utf8");
 
 test("radar manual scans render progress feedback for every scan action", () => {
-  assert.equal((radarPage.match(/<ManualProgress\b/g) ?? []).length, 3);
+  assert.equal((radarPage.match(/<ManualProgress\b/g) ?? []).length, 4);
   assert.match(radarPage, /active=\{reversalScanning\}/);
   assert.match(radarPage, /active=\{ma30Scanning\}/);
+  assert.match(radarPage, /active=\{atrBandScanning\}/);
 });
 
 test("manual scan progress exposes elapsed time and deterministic coin counts", () => {

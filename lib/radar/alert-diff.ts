@@ -1,5 +1,5 @@
-export function ma30OiCandidateKey(candidate: { symbol: string }) {
-  return candidate.symbol;
+export function ma30OiCandidateKey(candidate: { symbol: string; direction?: string }) {
+  return `${candidate.symbol}:${candidate.direction ?? "LONG"}`;
 }
 
 export function reversalCandidateKey(candidate: { symbol: string; interval: string; direction: string; signalTime: string | number }) {

@@ -1,5 +1,6 @@
 import { BinancePublicError, binancePublicJson } from "@/lib/binance-public";
 import { normalizeBinanceFuturesSymbol } from "@/lib/trade/symbols";
+import { resolvePriceTickSize } from "@/app/trade/priceFormat";
 
 type Kline = {
   time: number;
@@ -38,7 +39,12 @@ export async function GET(request: Request) {
     endpoint.searchParams.set("symbol", symbol);
     endpoint.searchParams.set("interval", interval);
     endpoint.searchParams.set("limit", String(limit));
-    const result = await binancePublicJson<unknown>(`${endpoint.pathname}${endpoint.search}`, { signal: AbortSignal.timeout(7_000) });
+    const exchangeInfoEndpoint = new URL("https://fapi.binance.com/fapi/v1/exchangeInfo");
+    exchangeInfoEndpoint.searchParams.set("symbol", symbol);
+    const [result, exchangeInfo] = await Promise.all([
+      binancePublicJson<unknown>(`${endpoint.pathname}${endpoint.search}`, { signal: AbortSignal.timeout(7_000) }),
+      binancePublicJson<unknown>(`${exchangeInfoEndpoint.pathname}${exchangeInfoEndpoint.search}`, { signal: AbortSignal.timeout(7_000) }).catch(() => null),
+    ]);
     const payload = result.data;
     if (!Array.isArray(payload)) throw new Error("invalid_kline_payload");
     const now = Date.now();
@@ -52,7 +58,7 @@ export async function GET(request: Request) {
       .filter((bar) => bar.time > 0 && bar.close > 0)
       .sort((a, b) => a.time - b.time);
     if (bars.length < 30) throw new Error("insufficient_klines");
-    return Response.json({ mode: "live", source: result.source, symbol, interval, updatedAt: new Date().toISOString(), bars }, {
+    return Response.json({ mode: "live", source: result.source, symbol, interval, updatedAt: new Date().toISOString(), bars, priceTickSize: resolvePriceTickSize(exchangeInfo?.data, symbol) }, {
       headers: { "cache-control": "public, max-age=5, s-maxage=15" },
     });
   } catch (error) {
@@ -61,7 +67,7 @@ export async function GET(request: Request) {
       mode: "unavailable", source: publicError?.source ?? "direct", symbol, interval, updatedAt: new Date().toISOString(),
       warning: publicError?.message ?? "Binance 实时行情暂不可用。",
       hint: publicError?.hint ?? "请检查 Binance 网络出口。",
-      bars: [],
+      bars: [], priceTickSize: null,
     }, { status: 503, headers: { "cache-control": "no-store" } });
   }
 }

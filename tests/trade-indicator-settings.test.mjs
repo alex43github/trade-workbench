@@ -14,6 +14,11 @@ test("indicator settings normalize per-symbol ATR values and line styles", () =>
     entryAtrLower: 0.6,
     trendAtrEnabled: true,
     trendAtrMultiplier: 3,
+    atrChannels: [
+      { enabled: true, multiplier: 1, color: "#111827" },
+      { enabled: true, multiplier: 3, color: "#f59e0b" },
+      { enabled: true, multiplier: 5, color: "#ec4899" },
+    ],
     atr: { upperColor: "#12ABCD", lowerColor: "#345678", upperLineWidth: 4, lowerLineWidth: 2 },
   });
   assert.deepEqual(settings, {
@@ -24,6 +29,11 @@ test("indicator settings normalize per-symbol ATR values and line styles", () =>
     entryAtrLower: 0.6,
     trendAtrEnabled: true,
     trendAtrMultiplier: 3,
+    atrChannels: [
+      { enabled: true, multiplier: 1, color: "#111827" },
+      { enabled: true, multiplier: 3, color: "#f59e0b" },
+      { enabled: true, multiplier: 5, color: "#ec4899" },
+    ],
     atr: { upperColor: "#12abcd", lowerColor: "#345678", upperLineWidth: 4, lowerLineWidth: 2 },
     vegas: { enabled: true, fastLength: 144, slowLength: 169, outerFastLength: 576, outerSlowLength: 676, firstColor: "#f59e0b", secondColor: "#ec4899", lineWidth: 2 },
   });
@@ -42,6 +52,28 @@ test("invalid values fall back safely and invalid symbols are rejected", () => {
  assert.deepEqual(settings?.atr, { upperColor: "#111827", lowerColor: "#111827", upperLineWidth: 4, lowerLineWidth: 1 });
   assert.deepEqual(settings?.vegas, { enabled: true, fastLength: 144, slowLength: 169, outerFastLength: 576, outerSlowLength: 676, firstColor: "#f59e0b", secondColor: "#ec4899", lineWidth: 2 });
  assert.equal(normalizeIndicatorSettings("BTC", {}), null);
+});
+
+test("three symmetric ATR channels default to enabled and normalize independently", () => {
+  const defaults = normalizeIndicatorSettings("CRVUSDT", {});
+  assert.deepEqual(defaults?.atrChannels, [
+    { enabled: true, multiplier: 1, color: "#111827" },
+    { enabled: true, multiplier: 3, color: "#f59e0b" },
+    { enabled: true, multiplier: 5, color: "#ec4899" },
+  ]);
+
+  const customized = normalizeIndicatorSettings("CRVUSDT", {
+    atrChannels: [
+      { enabled: false, multiplier: 1.5 },
+      { multiplier: 3.25, color: "#ABCDEF" },
+      { enabled: true, multiplier: 999, color: "invalid" },
+    ],
+  });
+  assert.deepEqual(customized?.atrChannels, [
+    { enabled: false, multiplier: 1.5, color: "#111827" },
+    { enabled: true, multiplier: 3.25, color: "#abcdef" },
+    { enabled: true, multiplier: 20, color: "#ec4899" },
+  ]);
 });
 
 test("trade UI persists ATR settings and applies custom line styles", () => {

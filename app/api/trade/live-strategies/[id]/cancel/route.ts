@@ -8,6 +8,7 @@ import {
   type LiveStrategy,
   type LiveStrategyOrder,
 } from "../../../../../../lib/trade/live-strategies.ts";
+import { cleanupLiveStrategyOwnedExits } from "../../../../../../lib/trade/live-exit-reconciliation.ts";
 
 type RuntimeEnv = Record<string, string | undefined>;
 type BinanceCancelResult = { status?: string; executedQty?: string | number };
@@ -23,6 +24,7 @@ type LiveStrategyCancelDependencies = {
   recordOrder?: typeof recordLiveOrder;
   markStrategyStatus?: typeof markLiveStrategyStatus;
   cancelStrategy?: typeof cancelLiveStrategy;
+  cleanupOwnedExits?: (input: { strategyId: string; strategyTerminal: boolean }) => Promise<{ ok: boolean; reason?: string }>;
 };
 
 function liveTradingEnabled(env: RuntimeEnv) {
@@ -68,13 +70,14 @@ export function createLiveStrategyCancelPost(dependencies: LiveStrategyCancelDep
   const env = dependencies.env ?? process.env;
   const getStrategy = dependencies.getStrategy ?? getLiveStrategy;
   const cancelOrder = dependencies.cancelOrder ?? ((order: CancelOrderInput) => gatewayJson<BinanceCancelResult>(
-    `/fapi/v1/order?symbol=${encodeURIComponent(order.symbol)}&orderId=${encodeURIComponent(order.exchangeOrderId)}`,
+    `/fapi/v1/order?${new URLSearchParams({ symbol: order.symbol, orderId: order.exchangeOrderId, origClientOrderId: order.clientOrderId }).toString()}`,
     { method: "DELETE" },
   ));
   const recordOrder = dependencies.recordOrder ?? recordLiveOrder;
   const markStrategyStatus = dependencies.markStrategyStatus ?? markLiveStrategyStatus;
   const finishStrategy = dependencies.cancelStrategy
     ?? (dependencies.markStrategyStatus ? null : cancelLiveStrategy);
+  const cleanupOwnedExits = dependencies.cleanupOwnedExits ?? cleanupLiveStrategyOwnedExits;
 
   return async function POST(request: Request) {
     const denied = await requireOperatorMutation(request, env);
@@ -127,6 +130,12 @@ export function createLiveStrategyCancelPost(dependencies: LiveStrategyCancelDep
       }
     }
 
+    const cleanup = await cleanupOwnedExits({ strategyId: strategy.id, strategyTerminal: true });
+    if (!cleanup.ok) {
+      const updated = await markStrategyStatus(strategy.id, "RECONCILIATION_REQUIRED");
+      return Response.json({ ok: false, strategy: updated, orders: updated.orders,
+        error: `EXIT_ONLY 生命周期清理未确认：${cleanup.reason ?? "未知状态"}` } satisfies LiveStrategyCancelResult, { status: 409, headers: { "cache-control": "no-store" } });
+    }
     const updated = finishStrategy
       ? await finishStrategy(strategy.id)
       : await markStrategyStatus(strategy.id, "CANCELED");

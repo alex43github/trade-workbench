@@ -1,13 +1,8 @@
 [Unit]
-Description=Run Trade Workbench maintenance scheduler after each 4H candle close
+Description=Run Trade Workbench maintenance scheduler after each 1H candle close
 
 [Timer]
-OnCalendar=*-*-* 00:05:00 UTC
-OnCalendar=*-*-* 04:05:00 UTC
-OnCalendar=*-*-* 08:05:00 UTC
-OnCalendar=*-*-* 12:05:00 UTC
-OnCalendar=*-*-* 16:05:00 UTC
-OnCalendar=*-*-* 20:05:00 UTC
+OnCalendar=*-*-* *:05:00 UTC
 Persistent=true
 RandomizedDelaySec=20
 Unit=trade-workbench-maintenance.service

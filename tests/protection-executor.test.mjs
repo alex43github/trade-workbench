@@ -69,6 +69,29 @@ test("closed-candle MA stop exits source quantity in two isolated stages", async
   assert.equal(placed.length, 2);
 });
 
+test("full protection exit does not complete until owned persistent exits are cleaned", async () => {
+  const { runProtectionStrategyTick } = await executor();
+  const strategy = await createMaStrategy("LTCUSDT", "terminal-owned-exit");
+  let candleId = 0;
+  let amount = 2;
+  const result = await runProtectionStrategyTick(strategy.strategy.id, {
+    readMarket: async () => ({ closedCandle: { id: `terminal-${++candleId}`, close: 98, ma: 100, atr: 1, timeframe: "1h" } }),
+    readPosition: async () => ({ symbol: "LTCUSDT", positionAmt: String(amount), entryPrice: "100", markPrice: "98" }),
+    readExchangeInfo: async () => ({ symbols: [{ symbol: "LTCUSDT", filters }] }),
+    placeOrder: async (order) => { amount -= Number(order.quantity); return { orderId: "terminal-market", status: "FILLED", executedQty: order.quantity }; },
+    cleanupOwnedExits: async () => ({ ok: false, reason: "owned cancel confirmation missing" }),
+  });
+  assert.equal(result.action, "PARTIAL_EXIT");
+  const terminal = await runProtectionStrategyTick(strategy.strategy.id, {
+    readMarket: async () => ({ closedCandle: { id: `terminal-${++candleId}`, close: 98, ma: 100, atr: 1, timeframe: "1h" } }),
+    readPosition: async () => ({ symbol: "LTCUSDT", positionAmt: String(amount), entryPrice: "100", markPrice: "98" }),
+    readExchangeInfo: async () => ({ symbols: [{ symbol: "LTCUSDT", filters }] }),
+    placeOrder: async (order) => { amount -= Number(order.quantity); return { orderId: "terminal-market-2", status: "FILLED", executedQty: order.quantity }; },
+    cleanupOwnedExits: async () => ({ ok: false, reason: "owned cancel confirmation missing" }),
+  });
+  assert.equal(terminal.action, "RECONCILIATION_REQUIRED");
+});
+
 test("safe closed candle resets invalid count and repeated candle does not submit again", async () => {
   const { runProtectionStrategyTick } = await executor();
   const strategy = await createMaStrategy("ETHUSDT", "manual-exec-2");

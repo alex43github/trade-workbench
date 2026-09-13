@@ -48,6 +48,43 @@ test("cancels each known submitted Binance order before marking the strategy can
   assert.equal(payload.strategy.status, "CANCELED");
 });
 
+test("sends the Binance cancel identifiers in the gateway DELETE query", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousEnv = {
+    BINANCE_GATEWAY_BASE_URL: process.env.BINANCE_GATEWAY_BASE_URL,
+    BINANCE_GATEWAY_TOKEN: process.env.BINANCE_GATEWAY_TOKEN,
+  };
+  const requests = [];
+  Object.assign(process.env, {
+    BINANCE_GATEWAY_BASE_URL: env.BINANCE_GATEWAY_BASE_URL,
+    BINANCE_GATEWAY_TOKEN: env.BINANCE_GATEWAY_TOKEN,
+  });
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), init });
+    return new Response(JSON.stringify({ status: "CANCELED", executedQty: "0" }), { status: 200 });
+  };
+  try {
+    const strategy = strategyWithOrders();
+    const POST = createLiveStrategyCancelPost({
+      env,
+      getStrategy: async () => strategy,
+      recordOrder: async () => ({ ...strategy.orders[0], status: "CANCELED" }),
+      markStrategyStatus: async (_id, status) => ({ ...strategy, status, orders: [{ ...strategy.orders[0], status: "CANCELED" }] }),
+    });
+    const response = await POST(request());
+    assert.equal(response.status, 200);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, "http://127.0.0.1:8788/api/binance/fapi/v1/order?symbol=BTCUSDT&orderId=123&origClientOrderId=TWLB1");
+    assert.equal(requests[0].init?.method, "DELETE");
+    assert.equal(requests[0].init?.body, undefined);
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
 test("does not cancel an order whose timeout result is still unknown", async () => {
   let cancelled = false;
   const strategy = strategyWithOrders("UNKNOWN");
@@ -62,4 +99,20 @@ test("does not cancel an order whose timeout result is still unknown", async () 
   assert.equal(response.status, 409);
   assert.equal(cancelled, false);
   assert.equal(payload.strategy.status, "RECONCILIATION_REQUIRED");
+});
+
+test("does not mark a live strategy canceled when owned-exit cleanup is ambiguous", async () => {
+  const statuses = [];
+  const strategy = strategyWithOrders("CANCELED");
+  const POST = createLiveStrategyCancelPost({
+    env,
+    getStrategy: async () => strategy,
+    cleanupOwnedExits: async () => ({ ok: false, reason: "owned exit status ambiguous" }),
+    markStrategyStatus: async (_id, status) => { statuses.push(status); return { ...strategy, status }; },
+  });
+  const response = await POST(request());
+  const payload = await response.json();
+  assert.equal(response.status, 409);
+  assert.deepEqual(statuses, ["RECONCILIATION_REQUIRED"]);
+  assert.match(payload.error, /owned exit status ambiguous/);
 });

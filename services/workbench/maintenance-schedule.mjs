@@ -9,8 +9,8 @@ export function parts(date = new Date()) {
 export function dueJobs(date = new Date()) {
   const current = parts(date);
   if (current.minute !== 5) return [];
-  const jobs = [];
-  if (current.hour % 4 === 0) jobs.push("4h");
+  const jobs = ["atr-band", "reversal-hourly"];
+  if (current.hour % 4 === 0) jobs.push("reversal-four-hour");
   if (current.hour === 8) jobs.push("daily");
   return jobs;
 }

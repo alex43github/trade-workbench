@@ -141,7 +141,7 @@ test("persists a completed lifecycle and keeps it in the historical dashboard", 
   assert.equal(Number(rows.total), 1);
 });
 
-test("uses one stable Beijing scan bucket for a three-hour window", async () => {
+test("uses one stable Beijing scan bucket for each hourly closed-candle window", async () => {
   const { buildAtrLifecycleScan } = api();
   const bars = makeBars([...Array(30).fill(100), 130, 130, 130]);
   const values = [...Array(30).fill(80), 100, 100, 100];
@@ -151,11 +151,11 @@ test("uses one stable Beijing scan bucket for a three-hour window", async () => 
   );
   const afterBoundary = await buildAtrLifecycleScan(
     fetchers(bars, values),
-    new Date("2026-09-01T07:00:00.000Z"),
+    new Date("2026-09-01T05:00:00.000Z"),
   );
 
-  assert.equal(beforeBoundary.scanBucket, "2026-09-01-12");
-  assert.equal(afterBoundary.scanBucket, "2026-09-01-15");
+  assert.equal(beforeBoundary.scanBucket, "2026-09-01-14");
+  assert.equal(afterBoundary.scanBucket, "2026-09-01-13");
   assert.notEqual(beforeBoundary.scanBucket, afterBoundary.scanBucket);
 });
 

@@ -1,4 +1,5 @@
 import type { ProtectionKind, ProtectionOrigin, ProtectionSide } from "./protection-contracts.ts";
+import crypto from "node:crypto";
 
 function positive(value: number, label: string) {
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${label}必须大于0`);
@@ -100,6 +101,23 @@ export function nextProtectionClientOrderId({
   if (!Number.isSafeInteger(sequence) || sequence <= 0) throw new Error("保护单序号不正确");
   const prefix = origin === "ALEX" ? "alex" : origin === "TELEGRAM" ? "tele" : "web";
   return `${prefix}${kind}${String(sequence).padStart(8, "0")}`;
+}
+
+/** A durable strategy/stage identity, not an authorization token. */
+export function stableProtectionExitClientOrderId({
+  origin,
+  kind,
+  eventKey,
+}: {
+  origin: ProtectionOrigin;
+  kind: Extract<ProtectionKind, "TP" | "SL">;
+  eventKey: string;
+}) {
+  if (!/^[A-Za-z0-9:_-]{1,240}$/.test(eventKey)) throw new Error("退出事件编号不正确");
+  const prefix = origin === "ALEX" ? "alex" : origin === "TELEGRAM" ? "tele" : "web";
+  // Keep the historical numeric suffix: ownership classifiers already rely on it.
+  const digest = BigInt(`0x${crypto.createHash("sha256").update(eventKey).digest("hex")}`);
+  return `${prefix}${kind}${(digest % (10n ** 22n)).toString().padStart(22, "0")}`;
 }
 
 export function guardRemainingPercent(invalidCandleCount: number) {

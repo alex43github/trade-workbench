@@ -52,6 +52,14 @@ test("Vegas alignment classifies full and short-only directions", async () => {
   assert.deepEqual(classifyVegasAlignment({ close: 1, ma30: 2, ema144: 3, ema169: 4, ema576: Number.NaN, ema676: Number.NaN }), { direction: "BEARISH", mode: "SHORT" });
 });
 
+test("Vegas bearish alignment requires the latest close below MA30", async () => {
+  const { classifyVegasAlignment } = await import("../lib/radar/vegas.ts");
+  assert.deepEqual(
+    classifyVegasAlignment({ close: 10, ma30: 2, ema144: 3, ema169: 4, ema576: 5, ema676: 6 }),
+    { direction: null, mode: "FULL" },
+  );
+});
+
 test("forming candles are excluded before MA30 bucketing", async () => {
   const { buildMultiTimeframeSnapshot } = await import("../lib/radar/multitimeframe.ts");
   const now = new Date(30_000);

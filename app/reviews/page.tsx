@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import TradeReviewDashboard from "../trade/TradeReviewDashboard";
 
 export default function ReviewsPage() {
-  redirect("/radar");
+  return <TradeReviewDashboard />;
 }

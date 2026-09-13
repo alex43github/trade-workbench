@@ -1,0 +1,25 @@
+[Unit]
+Description=Trade Workbench Binance USDT-M squeeze radar (research monitoring only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trade-workbench
+Group=trade-workbench
+WorkingDirectory=/opt/trade-workbench
+EnvironmentFile=/etc/trade-workbench/workbench.env
+Environment=RADAR_DATA_DIRECTORY=/var/lib/trade-workbench/structure-radar
+ExecStart=/usr/bin/env RADAR_NOTIFY_ENABLED=true /usr/bin/node /opt/trade-workbench/services/structure-radar/main.ts
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/trade-workbench
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

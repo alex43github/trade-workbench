@@ -22,3 +22,23 @@ test("all radar windows expose closed-candle MA30 buckets and Vegas ordering", a
   assert.match(source, /scanSymbols/);
   assert.match(source, /长期 Vegas.*忽略/);
 });
+
+test("composite post-filter sends its own candidate window to the scanner", async () => {
+  const source = await readFile(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /filter === "composite"/);
+  assert.match(source, /compositeSymbols/);
+  assert.match(source, /filter === "vegas"/);
+});
+
+test("MA30/OI renders separate long and short candidate sections", async () => {
+  const source = await readFile(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /连续站上 MA30 \+ OI 扩张/);
+  assert.match(source, /连续低于 MA30 \+ OI 扩张/);
+  assert.match(source, /candidate\.direction === "LONG"/);
+  assert.match(source, /candidate\.direction === "SHORT"/);
+});
+
+test("post-filter snapshot matching uses symbol membership instead of array order", async () => {
+  const source = await readFile(new URL("../app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /sameSymbolSet\(snapshot\?\.symbols/);
+});

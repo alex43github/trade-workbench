@@ -27,6 +27,7 @@ const exchangeInfo = { symbols: [{ symbol: "BTCUSDT", filters: [
 test("submits three Telegram-origin live legs through the shared coordinator", async () => {
   const placed = [];
   const reserved = [];
+  let createdInput = null;
   let active = 0;
   let maxActive = 0;
   let strategyStatus = "WAITING";
@@ -47,10 +48,12 @@ test("submits three Telegram-origin live legs through the shared coordinator", a
     origin: "TELEGRAM", draft, confirmation: "CREATE_LIVE_STRATEGY", confirmationNonce: "telegram_live_nonce_01", liveSwitchOn: true,
   }, {
     env,
-    createStrategy: async () => strategy,
+    createStrategy: async (input) => { createdInput = input; return strategy; },
     readMarket: async () => market,
     readExchangeInfo: async () => exchangeInfo,
     readAccount: async () => ({ availableBalance: "100" }),
+    readLeverage: async () => 1,
+    readPositionMode: async () => "HEDGE",
     reserveOrder: async (strategyId, legId, intent, plan) => {
       const order = { id: `ORDER-${reserved.length + 1}`, strategyId, legId, intent, clientOrderId: plan.newClientOrderId, status: "RESERVED", ...plan };
       reserved.push(order);
@@ -82,8 +85,114 @@ test("submits three Telegram-origin live legs through the shared coordinator", a
   assert.equal(strategyStatus, "ACTIVE");
   assert.equal(maxActive, 3);
   assert.equal(placed.length, 3);
+  assert.equal(createdInput.draft.entryLeverageAtSubmission, 1);
   assert.ok(placed.every((order) => /^teleIN\d+[A-Za-z0-9]+$/.test(order.newClientOrderId)));
   assert.deepEqual(placed.map((order) => [order.side, order.type, order.timeInForce]), [
     ["BUY", "LIMIT", "GTX"], ["BUY", "LIMIT", "GTX"], ["BUY", "LIMIT", "GTX"],
   ]);
+  assert.deepEqual(placed.map((order) => order.positionSide), ["LONG", "LONG", "LONG"]);
 });
+
+test("owned-exit preflight failure blocks every initial live entry before Binance submission", async () => {
+  const placed = [];
+  const strategy = {
+    id: "TW-L-S-preflight-1", confirmationNonce: "preflight_live_nonce_01", origin: "WEB", status: "WAITING",
+    config: { ...draft }, expiresAt: "2026-09-03T00:00:00.000Z", revision: 1,
+    legs: [{ id: "LEG-preflight", websiteOrderId: "web-preflight", atrOffset: 0, marginUsdt: 90, status: "WAITING" }], orders: [],
+  };
+  const result = await submitLiveStrategy({
+    origin: "WEB", draft: { ...draft, legs: [{ atrOffset: 0, marginUsdt: 90 }] }, confirmation: "CREATE_LIVE_STRATEGY", confirmationNonce: "preflight_live_nonce_01", liveSwitchOn: true,
+  }, {
+    env, createStrategy: async () => strategy, readMarket: async () => market, readExchangeInfo: async () => exchangeInfo,
+    readAccount: async () => ({ availableBalance: "100" }), readLeverage: async () => 1, readPositionMode: async () => "HEDGE",
+    preflightOwnedExits: async () => ({ ok: false, reason: "owned exit terminal confirmation missing" }),
+    reserveOrder: async (_strategyId, legId, intent, plan) => ({ id: "ORDER-preflight", strategyId: strategy.id, legId, intent, clientOrderId: plan.newClientOrderId, status: "RESERVED", ...plan }),
+    recordOrder: async () => { throw new Error("must not record an entry"); },
+    markStrategyStatus: async (_id, status) => ({ ...strategy, status, orders: [] }),
+    placeOrder: async (order) => { placed.push(order); return { orderId: "unexpected", status: "NEW" }; },
+  });
+  assert.equal(result.status, 409);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /owned exit terminal confirmation missing/);
+  assert.equal(placed.length, 0);
+});
+
+test("treats a rejected initial entry response with an order id as reconciliation required", async () => {
+  const reserved = [];
+  let markedStatus = null;
+  const strategy = {
+    id: "TW-L-S-rejected-1", confirmationNonce: "rejected_live_nonce_01", origin: "WEB", status: "WAITING",
+    config: { ...draft }, expiresAt: "2026-09-03T00:00:00.000Z", revision: 1,
+    legs: [{ id: "LEG-rejected", websiteOrderId: "web-rejected", atrOffset: 0, marginUsdt: 90, status: "WAITING" }], orders: [],
+  };
+  const result = await submitLiveStrategy({
+    origin: "WEB", draft: { ...draft, legs: [{ atrOffset: 0, marginUsdt: 90 }] }, confirmation: "CREATE_LIVE_STRATEGY", confirmationNonce: "rejected_live_nonce_01", liveSwitchOn: true,
+  }, {
+    env,
+    createStrategy: async () => strategy,
+    readMarket: async () => market,
+    readExchangeInfo: async () => exchangeInfo,
+    readAccount: async () => ({ availableBalance: "100" }),
+    readLeverage: async () => 1,
+    readPositionMode: async () => "HEDGE",
+    reserveOrder: async (_strategyId, legId, intent, plan) => {
+      const order = { id: "ORDER-rejected", strategyId: strategy.id, legId, intent, clientOrderId: plan.newClientOrderId, status: "RESERVED", ...plan };
+      reserved.push(order);
+      return order;
+    },
+    recordOrder: async (_orderId, exchangeOrderId, status, options = {}) => {
+      const order = reserved[0];
+      Object.assign(order, { exchangeOrderId, status, executedQuantity: options.executedQuantity || "0", error: options.error || null });
+      return order;
+    },
+    markStrategyStatus: async (_strategyId, status) => { markedStatus = status; return { ...strategy, status, orders: reserved }; },
+    placeOrder: async (order) => ({ orderId: "exchange-rejected", clientOrderId: order.newClientOrderId, status: "REJECTED", executedQty: "0" }),
+    findOrder: async () => null,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 409);
+  assert.equal(markedStatus, "RECONCILIATION_REQUIRED");
+  assert.equal(reserved[0].status, "REJECTED");
+});
+
+for (const exchangeStatus of ["EXPIRED", "UNRECOGNIZED"]) {
+  test(`does not activate a strategy when the initial entry response is ${exchangeStatus}`, async () => {
+    const reserved = [];
+    let markedStatus = null;
+    const strategy = {
+      id: `TW-L-S-${exchangeStatus.toLowerCase()}-1`, confirmationNonce: `${exchangeStatus.toLowerCase()}_live_nonce_01`, origin: "WEB", status: "WAITING",
+      config: { ...draft }, expiresAt: "2026-09-03T00:00:00.000Z", revision: 1,
+      legs: [{ id: `LEG-${exchangeStatus}`, websiteOrderId: `web-${exchangeStatus.toLowerCase()}`, atrOffset: 0, marginUsdt: 90, status: "WAITING" }], orders: [],
+    };
+    const result = await submitLiveStrategy({
+      origin: "WEB", draft: { ...draft, legs: [{ atrOffset: 0, marginUsdt: 90 }] }, confirmation: "CREATE_LIVE_STRATEGY", confirmationNonce: `${exchangeStatus.toLowerCase()}_live_nonce_01`, liveSwitchOn: true,
+    }, {
+      env,
+      createStrategy: async () => strategy,
+      readMarket: async () => market,
+      readExchangeInfo: async () => exchangeInfo,
+      readAccount: async () => ({ availableBalance: "100" }),
+      readLeverage: async () => 1,
+      readPositionMode: async () => "HEDGE",
+      reserveOrder: async (_strategyId, legId, intent, plan) => {
+        const order = { id: `ORDER-${exchangeStatus}`, strategyId: strategy.id, legId, intent, clientOrderId: plan.newClientOrderId, status: "RESERVED", ...plan };
+        reserved.push(order);
+        return order;
+      },
+      recordOrder: async (_orderId, exchangeOrderId, status, options = {}) => {
+        const order = reserved[0];
+        Object.assign(order, { exchangeOrderId, status, executedQuantity: options.executedQuantity || "0", error: options.error || null });
+        return order;
+      },
+      markStrategyStatus: async (_strategyId, status) => { markedStatus = status; return { ...strategy, status, orders: reserved }; },
+      placeOrder: async (order) => ({ orderId: `exchange-${exchangeStatus}`, clientOrderId: order.newClientOrderId, status: exchangeStatus, executedQty: "0" }),
+      findOrder: async () => null,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 409);
+    assert.equal(markedStatus, "RECONCILIATION_REQUIRED");
+    assert.equal(reserved[0].status, exchangeStatus === "EXPIRED" ? "CANCELED" : "UNKNOWN");
+  });
+}

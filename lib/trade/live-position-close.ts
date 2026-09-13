@@ -23,6 +23,7 @@ export type MarketCloseOrder = {
   side: "BUY" | "SELL";
   type: "MARKET";
   quantity: string;
+  workbenchOrderIntent: "EXIT_ONLY";
   positionSide?: Exclude<PositionSide, "BOTH">;
   reduceOnly?: true;
   newClientOrderId: string;
@@ -73,7 +74,7 @@ export function buildMarketCloseOrder({
   clientOrderId: string;
 }): MarketCloseOrder {
   if (!isLiveClosePercent(percent)) throw new Error("平仓比例只能是 10%、25%、50%、75% 或 100%");
-  if (!/^webMC[A-Za-z0-9]{16,32}$/.test(clientOrderId)) throw new Error("真实平仓请求编号无效");
+  if (!/^alexMC[A-Za-z0-9]{16,32}$/.test(clientOrderId)) throw new Error("真实平仓请求编号无效");
   const positionAmount = Number(position.positionAmt);
   if (!Number.isFinite(positionAmount) || positionAmount === 0) throw new Error("当前没有可平仓位");
   const positionSide = normalizePositionSide(position.positionSide);
@@ -100,6 +101,7 @@ export function buildMarketCloseOrder({
     side: positionAmount > 0 ? "SELL" : "BUY",
     type: "MARKET",
     quantity: formatQuantity(quantity, lotFilter.stepSize),
+    workbenchOrderIntent: "EXIT_ONLY",
     ...(positionSide === "BOTH" ? { reduceOnly: true } : { positionSide }),
     newClientOrderId: clientOrderId,
   };

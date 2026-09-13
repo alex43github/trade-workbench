@@ -1,7 +1,10 @@
 export const BINANCE_FUTURES_QUOTE_ASSETS = ["USDT", "USDC"] as const;
 export type BinanceFuturesQuoteAsset = typeof BINANCE_FUTURES_QUOTE_ASSETS[number];
 
-const SYMBOL_PATTERN = /^[A-Z0-9]{2,24}(?:USDT|USDC)$/;
+// Binance has listed perpetuals whose base asset contains Unicode letters
+// (for example, 龙虾USDT). Keep the quote suffix strict while allowing the
+// same letter/number range used by exchangeInfo for the base asset.
+const SYMBOL_PATTERN = /^[\p{L}\p{N}]{1,24}(?:USDT|USDC)$/u;
 
 export type BinanceFuturesSymbolOption = {
   symbol: string;
@@ -15,7 +18,7 @@ export function isBinanceFuturesSymbol(value: unknown): value is string {
 }
 
 export function normalizeBinanceFuturesSymbol(value: unknown, message = "币种格式不正确") {
-  const symbol = String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const symbol = String(value ?? "").trim().toUpperCase().replace(/[^\p{L}\p{N}]/gu, "");
   if (!isBinanceFuturesSymbol(symbol)) throw new Error(message);
   return symbol;
 }

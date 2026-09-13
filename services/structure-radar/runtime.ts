@@ -1,6 +1,7 @@
 import type { ClosedBar, SignalState, Timeframe } from "../../lib/structure-radar/types.ts";
 import { BarCache } from "./bar-cache.ts";
 import { buildKlineStreamBatches } from "./binance-public.ts";
+import { HOURLY_RADAR_CADENCE_MS } from "./radar-cadence.ts";
 
 const NOTIFIABLE_STATES = new Set<SignalState>([
   "CANDIDATE",
@@ -10,10 +11,32 @@ const NOTIFIABLE_STATES = new Set<SignalState>([
   "INVALIDATED",
 ]);
 
+export const SQUEEZE_SCAN_CADENCE_MS = HOURLY_RADAR_CADENCE_MS;
+export const SQUEEZE_SCAN_STALE_AFTER_MS = SQUEEZE_SCAN_CADENCE_MS * 2;
+
 export type NotifiableSignalState = "CANDIDATE" | "CONFIRMED" | "ADD_CANDIDATE" | "TAKE_PROFIT_WATCH" | "INVALIDATED";
 
 export function isNotifiableSignalState(state: SignalState): state is NotifiableSignalState {
   return NOTIFIABLE_STATES.has(state);
+}
+
+export function radarHealthStatus(input: {
+  bootstrapFailures: number;
+  lastSuccessfulScanAt: string | null;
+  lastCycle: { dataSourceDegraded: number };
+  now?: number;
+}) {
+  if (!input.lastSuccessfulScanAt || input.lastCycle.dataSourceDegraded > 0) return "degraded";
+  const lastSuccessfulScanAt = Date.parse(input.lastSuccessfulScanAt);
+  if (!Number.isFinite(lastSuccessfulScanAt) || (input.now ?? Date.now()) - lastSuccessfulScanAt > SQUEEZE_SCAN_STALE_AFTER_MS) return "degraded";
+  return "ok";
+}
+
+export function trendRadarHealthStatus(input: { lastSuccessfulCycleAt: string | null; now?: number }) {
+  if (!input.lastSuccessfulCycleAt) return "degraded";
+  const cycleAt = Date.parse(input.lastSuccessfulCycleAt);
+  if (!Number.isFinite(cycleAt) || (input.now ?? Date.now()) - cycleAt > SQUEEZE_SCAN_STALE_AFTER_MS) return "degraded";
+  return "ok";
 }
 
 export async function bootstrapMarket(options: {

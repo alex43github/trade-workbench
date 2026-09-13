@@ -1,4 +1,4 @@
-import { countTrailingClosesAboveMa, passesOiExpansion, rankMa30OiCandidates, type Ma30OiCandidate } from "./ma30-oi.ts";
+import { countTrailingClosesAboveMa, countTrailingClosesBelowMa, passesOiExpansion, rankMa30OiCandidates, type Ma30OiCandidate, type Ma30OiDirection } from "./ma30-oi.ts";
 import { createRadarDiagnosticFromError, type RadarDiagnostic } from "./scan-diagnostic.ts";
 import { createScanProgress, type RadarScanProgress, type ScanProgressOptions } from "./scan-progress.ts";
 
@@ -8,7 +8,9 @@ export type Ma30OiSnapshotCandidate = Ma30OiCandidate & {
   previousDayOi: number;
   priorTenDayOiAverage: number;
   oiExpansionPct: number;
+  direction: Ma30OiDirection;
   consecutiveAboveMa: number;
+  consecutiveBelowMa: number;
   ma30: number;
   lastClose: number;
   scannedAt: string;
@@ -65,9 +67,11 @@ async function scanOne(symbol: string, fetchers: Ma30OiFetchers, now: Date): Pro
     }
 
     const consecutiveAboveMa = countTrailingClosesAboveMa(closes, 30);
+    const consecutiveBelowMa = countTrailingClosesBelowMa(closes, 30);
+    const direction = consecutiveAboveMa >= 7 ? "LONG" : consecutiveBelowMa >= 7 ? "SHORT" : null;
     const previousDayOi = dailyOi[dailyOi.length - 1];
     const priorTenDayOi = dailyOi.slice(-11, -1);
-    if (consecutiveAboveMa < 7 || !passesOiExpansion(previousDayOi, priorTenDayOi)) {
+    if (!direction || !passesOiExpansion(previousDayOi, priorTenDayOi)) {
       return { successful: true };
     }
 
@@ -86,7 +90,9 @@ async function scanOne(symbol: string, fetchers: Ma30OiFetchers, now: Date): Pro
         previousDayOi,
         priorTenDayOiAverage,
         oiExpansionPct: Math.round(((previousDayOi / priorTenDayOiAverage) - 1) * 10000) / 100,
+        direction,
         consecutiveAboveMa,
+        consecutiveBelowMa,
         ma30,
         lastClose,
         scannedAt: now.toISOString(),

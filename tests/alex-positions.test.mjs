@@ -80,3 +80,26 @@ test("does not expose a candidate when account lookup fails", async () => {
   const result = await getAlexManualPositions({ readPositionRisk: async () => { throw new Error("gateway down"); } });
   assert.deepEqual(result, { connected: false, reason: "币安持仓来源查询暂时不可用", positions: [] });
 });
+
+test("keeps Binance native web client ids while excluding only known project id formats", async () => {
+  const { getAlexManualPositions } = await positions();
+  const result = await getAlexManualPositions({
+    readPositionRisk: async () => [{ symbol: "DEXEUSDT", positionAmt: "2", entryPrice: "10", markPrice: "10", leverage: "10" }],
+    readAllOrders: async () => [
+      { clientOrderId: "web_binance_aa1abc1234def567ghi890", side: "BUY", executedQty: "1", reduceOnly: false },
+      { clientOrderId: "webIN1abc123", side: "BUY", executedQty: "1", reduceOnly: false },
+    ],
+  });
+  assert.equal(result.connected, true);
+  assert.deepEqual(result.positions.map((item) => item.sourceOrderIds), [["web_binance_aa1abc1234def567ghi890"]]);
+});
+
+test("uses an ASCII-safe source fill id for a Unicode Binance symbol", async () => {
+  const { getAlexManualPositions } = await positions();
+  const result = await getAlexManualPositions({
+    readPositionRisk: async () => [{ symbol: "龙虾USDT", positionAmt: "-2", entryPrice: "10", markPrice: "10", leverage: "10" }],
+    readAllOrders: async () => [{ clientOrderId: "web_binance_manual_01", side: "SELL", executedQty: "2", reduceOnly: false }],
+  });
+  assert.equal(result.connected, true);
+  assert.match(result.positions[0].sourceFillId, /^[A-Za-z0-9:_-]{1,160}$/);
+});
