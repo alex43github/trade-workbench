@@ -20,16 +20,21 @@ test("log-normalized slope follows the scanner formula exactly", async () => {
   almostEqual(logNormalizedSlopePct(ma, 6), expected);
 });
 
-test("MA30 snapshot exposes Slope3/6/12/20 using only positive finite closes", async () => {
+test("MA30 snapshot exposes finite positive Slope3/6/12/20 values", async () => {
   const { computeMa30SlopeSnapshot } = await modulePromise;
   const closes = Array.from({ length: 80 }, (_, index) => 100 + index);
   const snapshot = computeMa30SlopeSnapshot(closes);
   assert.ok(snapshot);
   assert.equal(snapshot.ma30Points, 51);
   assert.equal(snapshot.currentPrice, 179);
-  assert.ok(snapshot.slope3 > snapshot.slope6);
-  assert.ok(snapshot.slope6 > snapshot.slope12);
-  assert.ok(snapshot.slope12 > snapshot.slope20);
+  for (const value of [snapshot.slope3, snapshot.slope6, snapshot.slope12, snapshot.slope20]) {
+    assert.ok(Number.isFinite(value));
+    assert.ok(value > 0);
+  }
+  // A linear absolute rise becomes a gently decelerating percentage rise as price grows.
+  assert.ok(snapshot.slope3 < snapshot.slope6);
+  assert.ok(snapshot.slope6 < snapshot.slope12);
+  assert.ok(snapshot.slope12 < snapshot.slope20);
 });
 
 test("snapshot returns null when 50 closes are not available for Slope20", async () => {
