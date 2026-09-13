@@ -1,0 +1,66 @@
+name: Focus Radar Candidate CI
+
+on:
+  push:
+    branches:
+      - chatgpt/source-of-truth-20260913
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RADAR_NOTIFY_ENABLED: "false"
+      BARK_BASE_URL: ""
+      BARK_API_KEY: ""
+      BINANCE_FUTURES_API_KEY: ""
+      BINANCE_FUTURES_API_SECRET: ""
+      STREETLIGHT_LOCAL_TEST_MODE: "false"
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Focus and radar regression tests
+        run: npm run radar:test
+
+      - name: Binance gateway safety regression
+        run: node --test binance-gateway/test.mjs tests/*live*.test.mjs tests/*gateway*.test.mjs
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Diff check against source baseline
+        run: git diff --check origin/source-baseline/20260913-current...HEAD
+
+      - name: Reject runtime or secret-bearing file classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only origin/source-baseline/20260913-current...HEAD > /tmp/changed-files.txt
+          if grep -E '(^|/)(\.env($|\.)|.*\.(pem|key|p12|pfx|sqlite|sqlite3|db|log)$|node_modules/|\.data/|logs?/|tmp/|cache/)' /tmp/changed-files.txt; then
+            echo 'Unsafe runtime/secret-bearing file class detected in candidate diff.' >&2
+            exit 1
+          fi
+          if git diff origin/source-baseline/20260913-current...HEAD -- . ':!package-lock.json' | grep -E 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}|-----BEGIN PRIVATE KEY-----'; then
+            echo 'Potential embedded secret detected in candidate diff.' >&2
+            exit 1
+          fi
+          echo 'Changed-file secret/runtime class scan: CLEAN'
