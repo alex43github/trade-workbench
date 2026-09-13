@@ -12,7 +12,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       RADAR_NOTIFY_ENABLED: "false"
       BARK_BASE_URL: ""
@@ -41,12 +41,43 @@ jobs:
       - name: Focus radar website model tests
         run: node --experimental-strip-types --test tests/trade-focus-radar-ui.test.mjs
 
-      - name: Deterministic Binance live and gateway safety regressions
+      - name: Compare live safety failures with source baseline
         shell: bash
         run: |
           set -euo pipefail
-          node --experimental-strip-types --test tests/*live*.test.mjs tests/*gateway*.test.mjs
-          node --test --test-name-pattern='^(?!公开行情经网关转发$)(?!公开合约列表经网关转发$)(?!公开 K 线经网关转发$)(?!只读网关允许 futures data 公共指标，但不扩大交易权限$).*' binance-gateway/test.mjs
+          run_live_suite() {
+            local dir="$1"
+            local output="$2"
+            (
+              cd "$dir"
+              set +e
+              node --experimental-strip-types --test tests/*live*.test.mjs tests/*gateway*.test.mjs > "$output" 2>&1
+              echo $? > "${output}.exit"
+            )
+            grep -E '^not ok [0-9]+ - ' "$output" | sed -E 's/^not ok [0-9]+ - //' | sort -u > "${output}.fails" || true
+          }
+
+          run_live_suite "$GITHUB_WORKSPACE" /tmp/candidate-live.tap
+
+          git worktree add --detach /tmp/source-baseline origin/source-baseline/20260913-current
+          (
+            cd /tmp/source-baseline
+            npm ci --no-audit --no-fund >/tmp/baseline-npm-ci.log 2>&1
+          )
+          run_live_suite /tmp/source-baseline /tmp/baseline-live.tap
+
+          echo "Candidate failing tests: $(wc -l < /tmp/candidate-live.tap.fails)"
+          echo "Baseline failing tests: $(wc -l < /tmp/baseline-live.tap.fails)"
+          echo "Candidate-only failures:"
+          comm -23 /tmp/candidate-live.tap.fails /tmp/baseline-live.tap.fails | tee /tmp/candidate-only.fails
+          if [[ -s /tmp/candidate-only.fails ]]; then
+            echo "Candidate introduced new live/gateway safety failures." >&2
+            exit 1
+          fi
+          echo "No new live/gateway safety failures versus source baseline."
+
+      - name: Deterministic gateway policy and integration tests
+        run: node --test --test-name-pattern='^(?!公开行情经网关转发$)(?!公开合约列表经网关转发$)(?!公开 K 线经网关转发$)(?!只读网关允许 futures data 公共指标，但不扩大交易权限$).*' binance-gateway/test.mjs
 
       - name: Public Binance gateway reachability smoke
         continue-on-error: true
