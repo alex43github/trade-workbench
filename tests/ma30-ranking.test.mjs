@@ -7,7 +7,7 @@ test("computeMa30NewHighBars counts consecutive prior MA points below current", 
   const { computeMa30NewHighBars } = await modulePromise;
   assert.equal(computeMa30NewHighBars([10, 12, 11, 11.5, 13]), 4);
   assert.equal(computeMa30NewHighBars([10, 12, 11, 11.5, 11.7]), 2);
-  assert.equal(computeMa30NewHighBars([10, 12, 11, 12]), 0);
+  assert.equal(computeMa30NewHighBars([10, 12, 11, 12]), 1);
 });
 
 test("available-history high requires current MA to exceed all prior valid MA points", async () => {
