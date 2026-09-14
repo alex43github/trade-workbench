@@ -43,12 +43,21 @@ export function ma30RunIdFor(now: Date): string {
 
 export function toMa30NotificationState(scan: Ma30FullMarketScanResult): Ma30NotificationState {
   return {
-    a: scan.a.map((row) => ({ symbol: row.symbol, rank: row.rank, slope20: row.slope20 })),
+    a: scan.a.map((row) => ({
+      symbol: row.symbol,
+      rank: row.rank,
+      stage: row.stage,
+      slope20: row.slope20,
+      priceVsMa30Pct: row.priceVsMa30Pct,
+    })),
     b: scan.b.map((row) => ({
       symbol: row.symbol,
       rank: row.rank,
+      bRank: row.bRank,
+      stage: row.stage,
       slope20: row.slope20,
       ma30NewHighBars: row.ma30NewHighBars,
+      priceVsMa30Pct: row.priceVsMa30Pct,
     })),
     c: scan.c.map((row) => ({
       symbol: row.symbol,
@@ -58,8 +67,9 @@ export function toMa30NotificationState(scan: Ma30FullMarketScanResult): Ma30Not
       slope6Acceleration: row.slope6Acceleration,
       priceVsMa30Pct: row.priceVsMa30Pct,
     })),
-    shorts: scan.shorts.map((row) => ({
+    shorts: scan.shorts.map((row, index) => ({
       symbol: row.symbol,
+      rank: index + 1,
       stage: row.stage,
       slope20: row.slope20,
       slope6Acceleration: row.slope6Acceleration,
