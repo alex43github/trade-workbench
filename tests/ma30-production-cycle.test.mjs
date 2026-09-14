@@ -34,21 +34,47 @@ function scanFixture(overrides = {}) {
 }
 
 function deps(overrides = {}) {
-  const calls = { scan: 0, persist: 0, notify: [] };
+  const calls = { scan: 0, persist: 0, persisted: [], notify: [], overnightLoads: [] };
   return {
     calls,
     value: {
       hasRun: async () => false,
       loadLifecycle: async () => undefined,
+      loadOvernightEvents: async (startBjt, endBjt) => {
+        calls.overnightLoads.push([startBjt, endBjt]);
+        return [];
+      },
       scan: async () => { calls.scan += 1; return scanFixture(); },
-      persist: async () => { calls.persist += 1; },
+      persist: async (input) => { calls.persist += 1; calls.persisted.push(input); },
       notify: async (group) => { calls.notify.push(group); return { status: "SENT" }; },
       ...overrides,
     },
   };
 }
 
-test("duplicate hourly run skips scan, persistence and Bark", async () => {
+function overnightEnterRecord() {
+  return {
+    runId: "ma30:2026-09-14T03",
+    eventIndex: 0,
+    runTimeBjt: "2026-09-14 03:02:00",
+    event: {
+      type: "ENTER",
+      group: "C",
+      symbol: "SENTUSDT",
+      at: "2026-09-14 03:02:00",
+      previousRank: null,
+      currentRank: 1,
+      previousStage: null,
+      currentStage: "EARLY_ACCELERATION",
+    },
+    notificationState: {
+      a: [], b: [], shorts: [], ai: [],
+      c: [{ symbol: "SENTUSDT", rank: 1, stage: "EARLY_ACCELERATION", slope20: 0.3, slope6Acceleration: 0.05, priceVsMa30Pct: 3.7 }],
+    },
+  };
+}
+
+test("duplicate hourly run skips scan, persistence, overnight loading and Bark", async () => {
   const d = deps({ hasRun: async () => true });
   const result = await executeMa30ProductionCycle({
     now: new Date("2026-09-14T05:10:00.000Z"),
@@ -58,6 +84,7 @@ test("duplicate hourly run skips scan, persistence and Bark", async () => {
   assert.equal(result.status, "SKIPPED_DUPLICATE");
   assert.equal(d.calls.scan, 0);
   assert.equal(d.calls.persist, 0);
+  assert.equal(d.calls.overnightLoads.length, 0);
   assert.equal(d.calls.notify.length, 0);
 });
 
@@ -75,6 +102,21 @@ test("dry-run executes scan and persistence but never sends Bark", async () => {
   assert.equal(result.scan.status, "FULL");
   assert.equal(result.aiSnapshot.immutable, true);
   assert.equal(Object.isFrozen(result.aiSnapshot), true);
+  assert.deepEqual(d.calls.persisted[0].runtimeSnapshot.lifecycleEvents, result.lifecycleEvents);
+});
+
+test("quiet-hour lifecycle events are persisted even when ordinary Bark is suppressed", async () => {
+  const d = deps();
+  const result = await executeMa30ProductionCycle({
+    now: new Date("2026-09-13T19:10:00.000Z"), // 03:10 BJT
+    notifications: "LIVE",
+    deps: d.value,
+  });
+  assert.equal(result.status, "COMPLETED");
+  assert.ok(result.lifecycleEvents.length > 0);
+  assert.deepEqual(d.calls.persisted[0].runtimeSnapshot.lifecycleEvents, result.lifecycleEvents);
+  assert.equal(d.calls.notify.length, 0);
+  assert.equal(d.calls.overnightLoads.length, 0);
 });
 
 test("daytime live cycle emits lifecycle Bark only after persistence succeeds", async () => {
@@ -94,6 +136,27 @@ test("daytime live cycle emits lifecycle Bark only after persistence succeeds", 
   assert.ok(result.notificationGroups.length > 0);
 });
 
+test("first daytime cycle loads the full quiet window and emits overnight catch-up", async () => {
+  const record = overnightEnterRecord();
+  const d = deps({
+    loadOvernightEvents: async (startBjt, endBjt) => {
+      d.calls.overnightLoads.push([startBjt, endBjt]);
+      return [record];
+    },
+  });
+  const result = await executeMa30ProductionCycle({
+    now: new Date("2026-09-14T00:10:00.000Z"), // 08:10 BJT
+    notifications: "LIVE",
+    deps: d.value,
+  });
+  assert.deepEqual(d.calls.overnightLoads, [["2026-09-14 02:00:00", "2026-09-14 08:00:00"]]);
+  const catchup = result.notificationGroups.find((group) => group.key.endsWith(":OVERNIGHT-CATCHUP"));
+  assert.ok(catchup);
+  assert.equal(catchup.title, "MA30 夜间变化｜0914-08:00");
+  assert.match(catchup.body, /03:02 C组 SENT，新入榜，初加速，\+3\.7%/);
+  assert.ok(d.calls.notify.some((group) => group.key === catchup.key));
+});
+
 test("07:00 BJT live cycle emits overnight brief while ordinary alerts stay quiet", async () => {
   const d = deps();
   const result = await executeMa30ProductionCycle({
@@ -105,6 +168,7 @@ test("07:00 BJT live cycle emits overnight brief while ordinary alerts stay quie
   assert.equal(result.notificationGroups.length, 1);
   assert.equal(result.notificationGroups[0].title, "MA30 夜间汇总｜0914-07:00");
   assert.equal(d.calls.notify.length, 1);
+  assert.equal(d.calls.overnightLoads.length, 0);
 });
 
 test("run id is stable for the same Beijing hourly bucket", async () => {
