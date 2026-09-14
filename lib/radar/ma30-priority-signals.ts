@@ -11,7 +11,7 @@ export type Ma30PriorityBar = {
 
 export const MA30_PRIORITY_MA_PERIOD = 30;
 export const MA30_PRIORITY_ATR_PERIOD = 14;
-export const MA30_PRIORITY_PULLBACK_BARS = 8;
+export const MA30_PRIORITY_PULLBACK_BARS = 32;
 export const MA30_PRIORITY_PULLBACK_ATR = 0.75;
 export const MA30_PRIORITY_BREAKOUT_BARS = 3;
 export const MA30_PRIORITY_MAX_EXTENSION_ATR = 2;
