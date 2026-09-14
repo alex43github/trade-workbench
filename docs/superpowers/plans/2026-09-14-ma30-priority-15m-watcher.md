@@ -133,10 +133,10 @@
 
 ### Task 7: Verification and handoff
 
-- [x] Run all new watcher tests locally: 42/42 GREEN before the multi-hour fixture; after adding that fixture the focused cross suite is 9/9 GREEN. A final aggregate rerun is required after the documentation/fixture update before completion is claimed.
+- [x] Final aggregate local watcher suite: **43/43 GREEN** after the multi-hour pullback fixture and all runtime/deploy tests.
 - [ ] Run existing MA30-focused tests in the full repository environment.
 - [ ] Run production build/type-check in the full repository environment.
-- [ ] Inspect branch diff for trading/order imports; expected none.
-- [ ] Record feature-branch evidence and the fact that production was not modified in Issue #3.
+- [x] Inspect new-code imports/dangerous order symbols: only LocalD1, Bark, Binance public closed-bar fetcher, MA30 modules; no order/trading API calls found.
+- [x] Record branch checkpoint and the fact that production was not modified in Issue #3 comment `5667549205`.
 
-The unchecked verification items are intentionally deferred until the feature is exercised in the real repository/VPS environment; do not claim production readiness before they pass.
+The remaining unchecked verification items are intentionally deferred to the full repository/VPS acceptance stage. Do not claim production readiness or enable the timer before they pass.
