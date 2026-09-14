@@ -117,13 +117,13 @@ function selectionInsert(db: Ma30PersistenceDb, runId: string, row: Readonly<Ma3
 }
 
 /**
- * Append-only by design: plain INSERT is intentional. A repeated run_id must fail rather
- * than overwrite or mutate a historical recommendation snapshot.
+ * Build append-only statements without executing them so production can combine
+ * runtime + lifecycle + immutable AI facts into one database batch.
  */
-export async function appendMa30AiSnapshot(
+export function prepareMa30AiSnapshotStatements(
   db: Ma30PersistenceDb,
   snapshot: Ma30AiSnapshot,
-): Promise<void> {
+): Ma30PersistenceStatement[] {
   if (!snapshot.immutable) throw new Error("MA30 snapshot must be immutable");
 
   const snapshotStmt = db.prepare(`INSERT INTO ${MA30_SNAPSHOT_TABLE} (
@@ -138,14 +138,23 @@ export async function appendMa30AiSnapshot(
     serializeMa30AiSnapshot(snapshot),
   );
   const selectionStmts = snapshot.selections.map((row) => selectionInsert(db, snapshot.runId, row));
+  return [snapshotStmt, ...selectionStmts];
+}
 
+/**
+ * Append-only by design: plain INSERT is intentional. A repeated run_id must fail rather
+ * than overwrite or mutate a historical recommendation snapshot.
+ */
+export async function appendMa30AiSnapshot(
+  db: Ma30PersistenceDb,
+  snapshot: Ma30AiSnapshot,
+): Promise<void> {
+  const statements = prepareMa30AiSnapshotStatements(db, snapshot);
   if (db.batch) {
-    await db.batch([snapshotStmt, ...selectionStmts]);
+    await db.batch(statements);
     return;
   }
-  // Fallback for a minimal adapter. Production local-d1/D1 both support batch.
-  await snapshotStmt.run();
-  for (const stmt of selectionStmts) await stmt.run();
+  for (const stmt of statements) await stmt.run();
 }
 
 /** Outcomes are append-only sibling facts. They never update the frozen recommendation. */
