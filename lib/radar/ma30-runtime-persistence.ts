@@ -52,11 +52,11 @@ export type Ma30RuntimeSnapshot = {
   lifecycle: Ma30LifecycleState;
 };
 
-/**
- * Append-only runtime persistence. A duplicate run_id is intentionally a
- * database error unless callers first detect it with hasMa30RuntimeRun().
- */
-export async function appendMa30RuntimeSnapshot(db: Ma30RuntimeDb, snapshot: Ma30RuntimeSnapshot): Promise<void> {
+/** Build append-only runtime/lifecycle statements without executing them. */
+export function prepareMa30RuntimeSnapshotStatements(
+  db: Ma30RuntimeDb,
+  snapshot: Ma30RuntimeSnapshot,
+): Ma30RuntimeStatement[] {
   const run = db.prepare(`INSERT INTO ${MA30_SCAN_RUN_TABLE} (
     run_id, run_time_utc, run_time_bjt, scanner_version, status,
     coverage_json, notification_state_json
@@ -77,13 +77,20 @@ export async function appendMa30RuntimeSnapshot(db: Ma30RuntimeDb, snapshot: Ma3
     snapshot.runTimeBjt,
     JSON.stringify(snapshot.lifecycle),
   );
+  return [run, lifecycle];
+}
 
+/**
+ * Append-only runtime persistence. A duplicate run_id is intentionally a
+ * database error unless callers first detect it with hasMa30RuntimeRun().
+ */
+export async function appendMa30RuntimeSnapshot(db: Ma30RuntimeDb, snapshot: Ma30RuntimeSnapshot): Promise<void> {
+  const statements = prepareMa30RuntimeSnapshotStatements(db, snapshot);
   if (db.batch) {
-    await db.batch([run, lifecycle]);
+    await db.batch(statements);
     return;
   }
-  await run.run();
-  await lifecycle.run();
+  for (const statement of statements) await statement.run();
 }
 
 export async function hasMa30RuntimeRun(db: Ma30RuntimeDb, runId: string): Promise<boolean> {
