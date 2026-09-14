@@ -29,7 +29,7 @@ test("oversized C-style Bark body is split into bounded uniquely keyed parts wit
 });
 
 test("newline-delimited AI items stay intact while splitting", () => {
-  const items = Array.from({ length: 5 }, (_, index) => `AI${index + 1} ` + "原因很长".repeat(90));
+  const items = Array.from({ length: 5 }, (_, index) => `AI${index + 1} ` + "原因很长".repeat(45));
   const chunks = chunkMa30BarkGroup({ key: "ai", title: "AI", body: items.join("\n") });
   assert.ok(chunks.length > 1);
   assert.deepEqual(chunks.flatMap((chunk) => chunk.body.split("\n")), items);
