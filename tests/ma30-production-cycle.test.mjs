@@ -17,8 +17,8 @@ function scanFixture(overrides = {}) {
       staleLastCandle: 0,
       failed: 0,
     },
-    a: [{ rank: 1, symbol: "AAAUSDT", slope20: 1.2 }],
-    b: [{ rank: 1, symbol: "AAAUSDT", slope20: 1.2, ma30NewHighBars: 420 }],
+    a: [{ rank: 1, symbol: "AAAUSDT", stage: "STEADY_UPTREND", slope20: 1.2, priceVsMa30Pct: 1.5 }],
+    b: [{ rank: 1, bRank: 1, symbol: "AAAUSDT", stage: "EARLY_ACCELERATION", slope20: 1.2, ma30NewHighBars: 420, priceVsMa30Pct: 1.5 }],
     c: [{ rank: 1, symbol: "BBBUSDT", stage: "EARLY_ACCELERATION", slope20: 0.4, slope6Acceleration: 0.1, priceVsMa30Pct: 3 }],
     shorts: [],
     ai: [{
