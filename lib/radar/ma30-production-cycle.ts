@@ -2,6 +2,11 @@ import { createImmutableMa30AiSnapshot, type Ma30AiSnapshot } from "./ma30-ai-se
 import { evolveMa30Lifecycle, type Ma30LifecycleState } from "./ma30-lifecycle.ts";
 import type { Ma30NotificationState } from "./ma30-notifications.ts";
 import {
+  buildMa30OvernightCatchupGroup,
+  ma30QuietWindowForScanBucket,
+  type Ma30OvernightEventRecord,
+} from "./ma30-overnight-catchup.ts";
+import {
   buildMa30LifecycleBarkGroups,
   buildMa30OvernightBriefGroup,
 } from "./ma30-production-notifications.ts";
@@ -22,6 +27,7 @@ export type Ma30ProductionPersistInput = {
 export type Ma30ProductionCycleDeps = {
   hasRun: (runId: string) => Promise<boolean>;
   loadLifecycle: () => Promise<Ma30LifecycleState | undefined>;
+  loadOvernightEvents: (startBjt: string, endBjt: string) => Promise<Ma30OvernightEventRecord[]>;
   scan: (now: Date) => Promise<Ma30FullMarketScanResult>;
   persist: (input: Ma30ProductionPersistInput) => Promise<void>;
   notify: (group: RadarBarkGroup) => Promise<unknown>;
@@ -85,8 +91,9 @@ export function toMa30NotificationState(scan: Ma30FullMarketScanResult): Ma30Not
  * Ordering is intentional:
  * 1. duplicate guard
  * 2. scan + lifecycle evolution
- * 3. persist immutable facts
- * 4. only after persistence succeeds may LIVE Bark be emitted
+ * 3. load prior quiet-hour events when daytime catch-up is eligible
+ * 4. persist immutable scan/lifecycle/event facts atomically
+ * 5. only after persistence succeeds may LIVE Bark be emitted
  *
  * This keeps user-visible notifications behind durable audit evidence. The
  * concrete VPS adapter is supplied separately so this orchestration remains
@@ -116,6 +123,12 @@ export async function executeMa30ProductionCycle(options: {
   const notificationState = toMa30NotificationState(scan);
   const lifecycleResult = evolveMa30Lifecycle(previousLifecycle, notificationState, clock.runTimeBjt);
 
+  let overnightEvents: Ma30OvernightEventRecord[] = [];
+  if (clock.hour >= 8) {
+    const window = ma30QuietWindowForScanBucket(clock.scanBucket);
+    overnightEvents = await options.deps.loadOvernightEvents(window.startBjt, window.endBjt);
+  }
+
   const aiSnapshot = createImmutableMa30AiSnapshot({
     runId,
     runTimeBjt: clock.runTimeBjt,
@@ -132,6 +145,7 @@ export async function executeMa30ProductionCycle(options: {
     coverage: scan.coverage,
     notificationState,
     lifecycle: lifecycleResult.state,
+    lifecycleEvents: lifecycleResult.events,
   };
 
   // Persist before any external notification. If persistence fails, no Bark is sent.
@@ -148,7 +162,17 @@ export async function executeMa30ProductionCycle(options: {
     scanBucket: clock.scanBucket,
     bjtHour: clock.hour,
   });
-  const notificationGroups = overnight ? [...lifecycleGroups, overnight] : lifecycleGroups;
+  const catchup = buildMa30OvernightCatchupGroup({
+    records: overnightEvents,
+    scanBucket: clock.scanBucket,
+    bjtHour: clock.hour,
+  });
+
+  const notificationGroups: RadarBarkGroup[] = [
+    ...(catchup ? [catchup] : []),
+    ...lifecycleGroups,
+    ...(overnight ? [overnight] : []),
+  ];
 
   if (notifications === "LIVE") {
     for (const group of notificationGroups) await options.deps.notify(group);
@@ -162,6 +186,7 @@ export async function executeMa30ProductionCycle(options: {
     notificationState,
     lifecycle: lifecycleResult.state,
     lifecycleEvents: lifecycleResult.events,
+    overnightEvents,
     aiSnapshot,
     notificationGroups,
     notifications,
