@@ -8,7 +8,7 @@ const HOUR = 3_600_000;
 function closedBars({ now, rate = 0.0005, count = 120 }) {
   const boundary = Math.floor(now.getTime() / HOUR) * HOUR;
   return Array.from({ length: count }, (_, index) => {
-    const closeTime = boundary - (count - index) * HOUR - 1;
+    const closeTime = boundary - (count - 1 - index) * HOUR - 1;
     const close = 100 * Math.exp(rate * index);
     return { open: close, high: close, low: close, close, closeTime, volume: 1 };
   });
@@ -81,6 +81,7 @@ test("runner marks a symbol stale when its latest candle is not the latest fully
   assert.equal(result.status, "PARTIAL");
   assert.equal(result.coverage.staleLastCandle, 1);
   assert.equal(result.stale[0].symbol, "STALEUSDT");
+  assert.equal(result.coverage.slopeQualified, 0);
 });
 
 test("user-visible short watch is capped and strongly prefers candidates closer to MA30", () => {
