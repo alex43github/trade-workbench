@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Trade Workbench MA30 priority watcher after each 15m close
+
+[Timer]
+OnCalendar=*-*-* *:04,19,34,49:00
+Persistent=true
+AccuracySec=15s
+Unit=trade-workbench-ma30-priority-watcher.service
+
+[Install]
+WantedBy=timers.target
