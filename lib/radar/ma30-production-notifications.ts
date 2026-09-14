@@ -7,6 +7,12 @@ function displaySymbol(symbol: string): string {
   return symbol.replace(/USDT$/, "");
 }
 
+function displayScanBucket(scanBucket: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})$/.exec(scanBucket);
+  if (!match) return scanBucket;
+  return `${match[2]}${match[3]}-${match[4]}:00`;
+}
+
 function bySymbol<T extends { symbol: string }>(rows: readonly T[]): Map<string, T> {
   return new Map(rows.map((row) => [row.symbol, row]));
 }
@@ -78,6 +84,7 @@ function rowsForEvents<T extends { symbol: string }>(
  * - Chinese stages only
  * - current group ranking first
  * - MA30 distance always visible
+ * - scan-bucket time visible in every title
  * - no raw lifecycle transition strings or low-value acceleration decimals
  */
 export function buildMa30LifecycleBarkGroups(options: {
@@ -95,6 +102,7 @@ export function buildMa30LifecycleBarkGroups(options: {
   const shorts = bySymbol(options.current.shorts);
   const ai = bySymbol(options.current.ai);
   const groups: RadarBarkGroup[] = [];
+  const scanTime = displayScanBucket(options.scanBucket);
 
   for (const group of ["A", "B", "C", "SHORT", "AI"] as const) {
     const selected = events.filter((event) => event.group === group);
@@ -104,7 +112,7 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = rowsForEvents(selected, a).sort((left, right) => left.rank - right.rank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:A:lifecycle`,
-        title: `MA30 A组｜斜率前10（变化${rows.length}）`,
+        title: `MA30 A组｜${scanTime}`,
         body: rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，斜率${signedSlope(row.slope20)}`).join("\n"),
       });
       continue;
@@ -114,8 +122,8 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = rowsForEvents(selected, b).sort((left, right) => left.bRank - right.bRank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:B:lifecycle`,
-        title: `MA30 B组｜均线新高（变化${rows.length}）`,
-        body: rows.map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，均线新高${row.ma30NewHighBars}h`).join("\n"),
+        title: `MA30 B组｜${scanTime}`,
+        body: rows.map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`).join("\n"),
       });
       continue;
     }
@@ -124,7 +132,7 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = rowsForEvents(selected, c).sort((left, right) => left.rank - right.rank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:C:lifecycle`,
-        title: `MA30 C组｜加速候选（变化${rows.length}）`,
+        title: `MA30 C组｜${scanTime}`,
         body: rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`).join("\n"),
       });
       continue;
@@ -134,7 +142,7 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = rowsForEvents(selected, shorts).sort((left, right) => left.rank - right.rank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:SHORT:lifecycle`,
-        title: `MA30 空头｜早期加速（变化${rows.length}）`,
+        title: `MA30 空头｜${scanTime}`,
         body: rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`).join("\n"),
       });
       continue;
@@ -143,7 +151,7 @@ export function buildMa30LifecycleBarkGroups(options: {
     const rows = rowsForEvents(selected, ai).sort((left, right) => left.aiRank - right.aiRank);
     if (rows.length) groups.push({
       key: `radar:ma30-slope:${options.scanBucket}:AI:lifecycle`,
-      title: `MA30 AI精选（变化${rows.length}）`,
+      title: `MA30 AI精选｜${scanTime}`,
       body: rows.map((row) => {
         const stage = row.direction === "SHORT" ? row.shortStage : row.longStage;
         return `${row.aiRank}.${displaySymbol(row.symbol)}，${chineseDirection(row.direction)}，${chineseStage(stage)}，${signedPct(row.priceVsMa30Pct)}，${chineseConfidence(row.confidence)}`;
@@ -164,7 +172,7 @@ function renderA(rows: Ma30NotificationState["a"]): string {
 function renderB(rows: Ma30NotificationState["b"]): string {
   return rows.slice(0, 10)
     .sort((left, right) => left.bRank - right.bRank)
-    .map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，均线新高${row.ma30NewHighBars}h`)
+    .map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`)
     .join("\n") || "无";
 }
 
@@ -204,7 +212,7 @@ export function buildMa30OvernightBriefGroup(options: {
 
   return {
     key: `radar:ma30-slope:${options.scanBucket}:OVERNIGHT`,
-    title: "MA30扫描器｜07:00夜间汇总",
+    title: `MA30 夜间汇总｜${displayScanBucket(options.scanBucket)}`,
     body: [
       "A组", renderA(options.current.a),
       "", "B组", renderB(options.current.b),
