@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Trade Workbench MA30 outcome backfill hourly
+
+[Timer]
+OnCalendar=*-*-* *:08:00
+Persistent=true
+AccuracySec=15s
+Unit=trade-workbench-ma30-outcomes.service
+
+[Install]
+WantedBy=timers.target
