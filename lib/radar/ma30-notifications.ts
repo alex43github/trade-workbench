@@ -5,10 +5,10 @@ export const MA30_BARK_QUIET_START_HOUR_BJT = 2;
 export const MA30_BARK_QUIET_END_HOUR_BJT = 8;
 
 export type Ma30NotificationState = {
-  a: readonly { symbol: string; rank: number; slope20: number }[];
-  b: readonly { symbol: string; rank: number; slope20: number; ma30NewHighBars: number }[];
+  a: readonly { symbol: string; rank: number; stage: string; slope20: number; priceVsMa30Pct: number }[];
+  b: readonly { symbol: string; rank: number; bRank: number; stage: string; slope20: number; ma30NewHighBars: number; priceVsMa30Pct: number }[];
   c: readonly { symbol: string; rank: number; stage: string; slope20: number; slope6Acceleration: number; priceVsMa30Pct: number }[];
-  shorts: readonly { symbol: string; stage: string; slope20: number; slope6Acceleration: number; priceVsMa30Pct: number }[];
+  shorts: readonly { symbol: string; rank: number; stage: string; slope20: number; slope6Acceleration: number; priceVsMa30Pct: number }[];
   ai: readonly Ma30AiSelection[];
 };
 
@@ -25,6 +25,10 @@ export function isMa30BarkQuietHourBjt(hour: number): boolean {
   return hour >= MA30_BARK_QUIET_START_HOUR_BJT && hour < MA30_BARK_QUIET_END_HOUR_BJT;
 }
 
+/**
+ * Legacy fresh-only builder retained for compatibility. Production lifecycle
+ * delivery uses ma30-production-notifications.ts.
+ */
 export function buildMa30ScannerBarkGroups(options: {
   current: Ma30NotificationState;
   previous: Ma30NotificationState;
