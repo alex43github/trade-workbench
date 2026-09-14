@@ -26,6 +26,11 @@ function eventLabel(event: Ma30LifecycleEvent): string {
   return event.type;
 }
 
+function titleEventLabel(events: readonly Ma30LifecycleEvent[]): string {
+  const labels = [...new Set(events.map(eventLabel))];
+  return labels.length === 1 ? labels[0]! : "重要变化";
+}
+
 /**
  * Build daytime user-visible Bark groups from durable lifecycle events rather
  * than a one-run diff. This is what makes dropout -> re-entry NEW again and
@@ -50,12 +55,13 @@ export function buildMa30LifecycleBarkGroups(options: {
   for (const group of ["A", "B", "C", "SHORT", "AI"] as const) {
     const selected = events.filter((event) => event.group === group);
     if (!selected.length) continue;
+    const titleLabel = titleEventLabel(selected);
 
     if (group === "A") {
       const rows = selected.map((event) => ({ event, row: a.get(event.symbol) })).filter((x) => x.row);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:A:lifecycle`,
-        title: `MA30斜率 A组 · 重要变化 ${rows.length}`,
+        title: `MA30斜率 A组 · ${titleLabel} ${rows.length}`,
         body: rows.map(({ event, row }) => `${displaySymbol(event.symbol)} ${eventLabel(event)} #${row!.rank} S20 ${row!.slope20.toFixed(4)}%/h`).join("｜"),
       });
       continue;
@@ -65,7 +71,7 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = selected.map((event) => ({ event, row: b.get(event.symbol) })).filter((x) => x.row);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:B:lifecycle`,
-        title: `MA30可用窗口新高 B组 · 重要变化 ${rows.length}`,
+        title: `MA30可用窗口新高 B组 · ${titleLabel} ${rows.length}`,
         body: rows.map(({ event, row }) => `${displaySymbol(event.symbol)} ${eventLabel(event)} #${row!.rank} 可用窗口新高${row!.ma30NewHighBars}根1H`).join("｜"),
       });
       continue;
@@ -75,7 +81,7 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = selected.map((event) => ({ event, row: c.get(event.symbol) })).filter((x) => x.row);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:C:lifecycle`,
-        title: `MA30加速 C组 · 重要变化 ${rows.length}`,
+        title: `MA30加速 C组 · ${titleLabel} ${rows.length}`,
         body: rows.map(({ event, row }) => {
           const transition = event.type === "STAGE_CHANGE"
             ? ` ${event.previousStage ?? "-"}→${event.currentStage ?? row!.stage}`
@@ -90,7 +96,7 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = selected.map((event) => ({ event, row: shorts.get(event.symbol) })).filter((x) => x.row);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:SHORT:lifecycle`,
-        title: `MA30空头早期加速 · 重要变化 ${rows.length}`,
+        title: `MA30空头早期加速 · ${titleLabel} ${rows.length}`,
         body: rows.map(({ event, row }) => {
           const transition = event.type === "STAGE_CHANGE"
             ? `${event.previousStage ?? "-"}→${event.currentStage ?? row!.stage}`
@@ -104,7 +110,7 @@ export function buildMa30LifecycleBarkGroups(options: {
     const rows = selected.map((event) => ({ event, row: ai.get(event.symbol) })).filter((x) => x.row);
     if (rows.length) groups.push({
       key: `radar:ma30-slope:${options.scanBucket}:AI:lifecycle`,
-      title: `MA30 AI精选 · 重要变化 ${rows.length}`,
+      title: `MA30 AI精选 · ${titleLabel} ${rows.length}`,
       body: rows.map(({ event, row }) => `${displaySymbol(event.symbol)} AI ${eventLabel(event)} #${row!.aiRank} ${row!.direction} ${row!.confidence}｜${row!.reason}`).join("\n"),
     });
   }
