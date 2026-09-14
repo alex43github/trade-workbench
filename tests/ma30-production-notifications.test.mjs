@@ -53,7 +53,7 @@ test("re-entry is notified as a concise ranked row during daytime", () => {
     bjtHour: 8,
   });
   assert.equal(groups.length, 1);
-  assert.equal(groups[0].title, "MA30 A组｜斜率前10（变化1）");
+  assert.equal(groups[0].title, "MA30 A组｜0914-08:00");
   assert.equal(groups[0].body, "1.AAA，稳步上涨，+1.2%，斜率+1.100");
 });
 
@@ -68,12 +68,14 @@ test("C stage changes and AI changes show only current Chinese state", () => {
     bjtHour: 9,
   });
   assert.equal(groups.length, 2);
+  assert.equal(groups[0].title, "MA30 C组｜0914-09:00");
+  assert.equal(groups[1].title, "MA30 AI精选｜0914-09:00");
   assert.equal(groups[0].body, "1.CCC，持续加速，+3.0%");
   assert.equal(groups[1].body, "1.CCC，多，持续加速，+3.0%，高信心");
   assert.doesNotMatch(groups[0].body + groups[1].body, /EARLY_|PERSISTENT_|AI_CHANGE|阶段变化/);
 });
 
-test("B notification states bounded MA30 high duration without claiming all-time high", () => {
+test("B notification stays concise while bounded-high metadata remains internal", () => {
   const groups = buildMa30LifecycleBarkGroups({
     current,
     events: [event({ group: "B", symbol: "BBBUSDT", currentRank: 2 })],
@@ -81,18 +83,19 @@ test("B notification states bounded MA30 high duration without claiming all-time
     bjtHour: 10,
   });
   assert.equal(groups.length, 1);
-  assert.equal(groups[0].title, "MA30 B组｜均线新高（变化1）");
-  assert.equal(groups[0].body, "1.BBB，初加速，+0.8%，均线新高420h");
-  assert.doesNotMatch(groups[0].title + groups[0].body, /历史新高|ATH|all-time/i);
+  assert.equal(groups[0].title, "MA30 B组｜0914-10:00");
+  assert.equal(groups[0].body, "1.BBB，初加速，+0.8%");
+  assert.doesNotMatch(groups[0].title + groups[0].body, /420h|均线新高\d+h|历史新高|ATH|all-time/i);
 });
 
 test("07:00 overnight brief is allowed even though ordinary alerts are quiet", () => {
   const group = buildMa30OvernightBriefGroup({ current, scanBucket: "2026-09-14T07", bjtHour: 7 });
   assert.ok(group);
-  assert.match(group.title, /夜间汇总/);
+  assert.equal(group.title, "MA30 夜间汇总｜0914-07:00");
   assert.match(group.body, /A组/);
   assert.match(group.body, /AI精选/);
   assert.match(group.body, /持续加速/);
+  assert.doesNotMatch(group.body, /均线新高\d+h/);
 });
 
 test("overnight brief is only emitted at 07:00 BJT", () => {
