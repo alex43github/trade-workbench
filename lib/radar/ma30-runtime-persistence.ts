@@ -1,10 +1,12 @@
-import type { Ma30LifecycleState } from "./ma30-lifecycle.ts";
+import type { Ma30LifecycleEvent, Ma30LifecycleState } from "./ma30-lifecycle.ts";
 import type { Ma30NotificationState } from "./ma30-notifications.ts";
+import type { Ma30OvernightEventRecord } from "./ma30-overnight-catchup.ts";
 
 export type Ma30RuntimeStatement = {
   bind: (...args: unknown[]) => Ma30RuntimeStatement;
   run: () => Promise<unknown>;
   first?: <T = Record<string, unknown>>() => Promise<T | null>;
+  all?: <T = Record<string, unknown>>() => Promise<{ results: T[] }>;
 };
 
 export type Ma30RuntimeDb = {
@@ -14,6 +16,7 @@ export type Ma30RuntimeDb = {
 
 export const MA30_SCAN_RUN_TABLE = "ma30_scan_runs";
 export const MA30_LIFECYCLE_SNAPSHOT_TABLE = "ma30_lifecycle_snapshots";
+export const MA30_LIFECYCLE_EVENT_TABLE = "ma30_lifecycle_events";
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS ${MA30_SCAN_RUN_TABLE} (
@@ -33,8 +36,21 @@ const SCHEMA = [
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (run_id) REFERENCES ${MA30_SCAN_RUN_TABLE}(run_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS ${MA30_LIFECYCLE_EVENT_TABLE} (
+    run_id TEXT NOT NULL,
+    event_index INTEGER NOT NULL,
+    run_time_bjt TEXT NOT NULL,
+    group_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    event_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (run_id, event_index),
+    FOREIGN KEY (run_id) REFERENCES ${MA30_SCAN_RUN_TABLE}(run_id)
+  )`,
   `CREATE INDEX IF NOT EXISTS idx_ma30_scan_runs_time ON ${MA30_SCAN_RUN_TABLE}(run_time_bjt)`,
   `CREATE INDEX IF NOT EXISTS idx_ma30_lifecycle_time ON ${MA30_LIFECYCLE_SNAPSHOT_TABLE}(run_time_bjt)`,
+  `CREATE INDEX IF NOT EXISTS idx_ma30_lifecycle_events_time ON ${MA30_LIFECYCLE_EVENT_TABLE}(run_time_bjt)`,
 ] as const;
 
 export async function ensureMa30RuntimePersistenceSchema(db: Ma30RuntimeDb): Promise<void> {
@@ -50,9 +66,10 @@ export type Ma30RuntimeSnapshot = {
   coverage: Record<string, unknown>;
   notificationState: Ma30NotificationState;
   lifecycle: Ma30LifecycleState;
+  lifecycleEvents: Ma30LifecycleEvent[];
 };
 
-/** Build append-only runtime/lifecycle statements without executing them. */
+/** Build append-only runtime/lifecycle/event statements without executing them. */
 export function prepareMa30RuntimeSnapshotStatements(
   db: Ma30RuntimeDb,
   snapshot: Ma30RuntimeSnapshot,
@@ -77,7 +94,22 @@ export function prepareMa30RuntimeSnapshotStatements(
     snapshot.runTimeBjt,
     JSON.stringify(snapshot.lifecycle),
   );
-  return [run, lifecycle];
+
+  const lifecycleEvents = (snapshot.lifecycleEvents ?? []).map((event, eventIndex) =>
+    db.prepare(`INSERT INTO ${MA30_LIFECYCLE_EVENT_TABLE} (
+      run_id, event_index, run_time_bjt, group_name, symbol, event_type, event_json
+    ) VALUES (?,?,?,?,?,?,?)`).bind(
+      snapshot.runId,
+      eventIndex,
+      snapshot.runTimeBjt,
+      event.group,
+      event.symbol,
+      event.type,
+      JSON.stringify(event),
+    ),
+  );
+
+  return [run, lifecycle, ...lifecycleEvents];
 }
 
 /**
@@ -108,4 +140,37 @@ export async function loadLatestMa30LifecycleState(db: Ma30RuntimeDb): Promise<M
   const parsed: unknown = JSON.parse(row.lifecycle_json);
   if (!parsed || typeof parsed !== "object") throw new Error("Invalid MA30 lifecycle snapshot");
   return parsed as Ma30LifecycleState;
+}
+
+export async function loadMa30LifecycleEventsInWindow(
+  db: Ma30RuntimeDb,
+  startBjt: string,
+  endBjt: string,
+): Promise<Ma30OvernightEventRecord[]> {
+  const statement = db.prepare(`SELECT
+      e.run_id,
+      e.event_index,
+      e.run_time_bjt,
+      e.event_json,
+      r.notification_state_json
+    FROM ${MA30_LIFECYCLE_EVENT_TABLE} e
+    JOIN ${MA30_SCAN_RUN_TABLE} r ON r.run_id = e.run_id
+    WHERE e.run_time_bjt >= ? AND e.run_time_bjt < ?
+    ORDER BY e.run_time_bjt ASC, e.event_index ASC`).bind(startBjt, endBjt);
+  if (!statement.all) throw new Error("MA30 runtime DB adapter must support all() for lifecycle event loading");
+  const result = await statement.all<{
+    run_id: string;
+    event_index: number;
+    run_time_bjt: string;
+    event_json: string;
+    notification_state_json: string;
+  }>();
+
+  return result.results.map((row) => ({
+    runId: row.run_id,
+    eventIndex: Number(row.event_index),
+    runTimeBjt: row.run_time_bjt,
+    event: JSON.parse(row.event_json) as Ma30LifecycleEvent,
+    notificationState: JSON.parse(row.notification_state_json) as Ma30NotificationState,
+  }));
 }
