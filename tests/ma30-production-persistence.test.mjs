@@ -61,6 +61,16 @@ function bundle() {
     reason: "test",
     risk: "test-risk",
   };
+  const lifecycleEvent = {
+    type: "ENTER",
+    group: "C",
+    symbol: "AAAUSDT",
+    at: "2026-09-14 13:05:00",
+    previousRank: null,
+    currentRank: 1,
+    previousStage: null,
+    currentStage: "EARLY_ACCELERATION",
+  };
   return {
     runtimeSnapshot: {
       runId: "ma30:2026-09-14T13",
@@ -71,6 +81,7 @@ function bundle() {
       coverage: { universe: 528, slopeQualified: 528 },
       notificationState: { a: [], b: [], c: [], shorts: [], ai: [selection] },
       lifecycle: { groups: {} },
+      lifecycleEvents: [lifecycleEvent],
     },
     aiSnapshot: {
       snapshotVersion: "MA30_AI_V1",
@@ -83,26 +94,28 @@ function bundle() {
   };
 }
 
-test("production schema initializes both runtime and immutable AI tables", async () => {
+test("production schema initializes runtime, lifecycle-event and immutable AI tables", async () => {
   const db = fakeDb();
   await ensureMa30ProductionSchema(db);
   const sql = db.runs.map((row) => row.sql).join("\n");
   assert.match(sql, /CREATE TABLE IF NOT EXISTS ma30_scan_runs/);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS ma30_lifecycle_snapshots/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS ma30_lifecycle_events/);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS ma30_ai_snapshots/);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS ma30_ai_selections/);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS ma30_ai_outcomes/);
 });
 
-test("runtime + lifecycle + AI snapshot + selections are committed in one atomic batch", async () => {
+test("runtime + lifecycle + events + AI snapshot + selections are committed in one atomic batch", async () => {
   const db = fakeDb();
   await appendMa30ProductionBundle(db, bundle());
   assert.equal(db.batches.length, 1);
   const batch = db.batches[0];
-  assert.equal(batch.length, 4);
+  assert.equal(batch.length, 5);
   const sql = batch.map((row) => row.sql).join("\n");
   assert.match(sql, /INSERT INTO ma30_scan_runs/);
   assert.match(sql, /INSERT INTO ma30_lifecycle_snapshots/);
+  assert.match(sql, /INSERT INTO ma30_lifecycle_events/);
   assert.match(sql, /INSERT INTO ma30_ai_snapshots/);
   assert.match(sql, /INSERT INTO ma30_ai_selections/);
   assert.doesNotMatch(sql, /\bUPDATE\b|\bREPLACE\b|\bUPSERT\b/i);
