@@ -13,6 +13,7 @@ import {
 import {
   hasMa30RuntimeRun,
   loadLatestMa30LifecycleState,
+  loadMa30LifecycleEventsInWindow,
 } from "./ma30-runtime-persistence.ts";
 import { runMa30FullMarketScan } from "./ma30-scanner.ts";
 
@@ -44,6 +45,7 @@ export async function createMa30VpsProductionDeps(): Promise<Ma30ProductionCycle
   return {
     hasRun: (runId) => hasMa30RuntimeRun(db, runId),
     loadLifecycle: () => loadLatestMa30LifecycleState(db),
+    loadOvernightEvents: (startBjt, endBjt) => loadMa30LifecycleEventsInWindow(db, startBjt, endBjt),
     scan: (now) => runMa30FullMarketScan({ now }),
     persist: (input) => appendMa30ProductionBundle(db, input),
     notify: (group) => notifyBark({
