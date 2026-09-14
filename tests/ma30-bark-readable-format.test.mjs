@@ -48,7 +48,7 @@ function event(overrides = {}) {
   };
 }
 
-test("A/B/C Bark uses one coin per line, Chinese stage, MA distance, and group ranking", () => {
+test("A/B/C Bark uses scan-bucket time title, one coin per line, Chinese stage, MA distance, and group ranking", () => {
   const groups = buildMa30LifecycleBarkGroups({
     current,
     events: [
@@ -68,19 +68,20 @@ test("A/B/C Bark uses one coin per line, Chinese stage, MA distance, and group r
   const c = groups.find((group) => group.title.startsWith("MA30 C组"));
   assert.ok(a && b && c);
 
-  assert.equal(a.title, "MA30 A组｜斜率前10（变化2）");
+  assert.equal(a.title, "MA30 A组｜0914-14:00");
   assert.deepEqual(a.body.split("\n"), [
     "1.AAA，持续加速，+3.6%，斜率+0.312",
     "2.BBB，初加速，+1.8%，斜率+0.284",
   ]);
 
-  assert.equal(b.title, "MA30 B组｜均线新高（变化2）");
+  assert.equal(b.title, "MA30 B组｜0914-14:00");
   assert.deepEqual(b.body.split("\n"), [
-    "1.KOMA，初加速，+0.3%，均线新高970h",
-    "2.REZ，持续加速，+2.1%，均线新高684h",
+    "1.KOMA，初加速，+0.3%",
+    "2.REZ，持续加速，+2.1%",
   ]);
+  assert.doesNotMatch(b.body, /970|684|均线新高/);
 
-  assert.equal(c.title, "MA30 C组｜加速候选（变化2）");
+  assert.equal(c.title, "MA30 C组｜0914-14:00");
   assert.deepEqual(c.body.split("\n"), [
     "1.PLAY，持续加速，+3.6%",
     "2.ME，初加速，+0.3%",
@@ -92,7 +93,7 @@ test("A/B/C Bark uses one coin per line, Chinese stage, MA distance, and group r
   assert.doesNotMatch(bodies, /｜/);
 });
 
-test("short and AI Bark use concise Chinese direction, stage and confidence", () => {
+test("short and AI Bark use scan-bucket time title plus concise Chinese direction, stage and confidence", () => {
   const groups = buildMa30LifecycleBarkGroups({
     current,
     events: [
@@ -106,14 +107,17 @@ test("short and AI Bark use concise Chinese direction, stage and confidence", ()
   const short = groups.find((group) => group.title.startsWith("MA30 空头"));
   const ai = groups.find((group) => group.title.startsWith("MA30 AI精选"));
   assert.ok(short && ai);
+  assert.equal(short.title, "MA30 空头｜0914-14:00");
+  assert.equal(ai.title, "MA30 AI精选｜0914-14:00");
   assert.equal(short.body, "1.DOWN，初加速下跌，-1.2%");
   assert.equal(ai.body, "1.KOMA，多，初加速，+0.3%，高信心");
   assert.doesNotMatch(short.body + ai.body, /LONG|SHORT|HIGH|EARLY_/);
 });
 
-test("07:00 overnight brief also uses Chinese stages and one coin per line", () => {
+test("07:00 overnight brief also uses scan-bucket time title, Chinese stages and one coin per line", () => {
   const group = buildMa30OvernightBriefGroup({ current, scanBucket: "2026-09-14T07", bjtHour: 7 });
   assert.ok(group);
+  assert.equal(group.title, "MA30 夜间汇总｜0914-07:00");
   assert.match(group.body, /1\.AAA，持续加速，\+3\.6%/);
   assert.match(group.body, /1\.KOMA，初加速，\+0\.3%/);
   assert.match(group.body, /1\.PLAY，持续加速，\+3\.6%/);
