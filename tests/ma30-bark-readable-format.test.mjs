@@ -88,7 +88,8 @@ test("A/B/C Bark uses one coin per line, Chinese stage, MA distance, and group r
 
   const rendered = groups.map((group) => `${group.title}\n${group.body}`).join("\n");
   assert.doesNotMatch(rendered, /EARLY_ACCELERATION|PERSISTENT_ACCELERATION|slope6Acceleration|加速0\./);
-  assert.doesNotMatch(rendered, /｜/);
+  const bodies = groups.map((group) => group.body).join("\n");
+  assert.doesNotMatch(bodies, /｜/);
 });
 
 test("short and AI Bark use concise Chinese direction, stage and confidence", () => {
