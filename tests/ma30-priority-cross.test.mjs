@@ -122,3 +122,20 @@ test("SHORT re-ignition mirrors pullback and bearish breakout rules", () => {
   assert.equal(result.signal.direction, "SHORT");
   assert.equal(result.signal.oneHourSlope20 < 0, true);
 });
+
+test("LONG re-ignition still recognizes a several-hour-old pullback while the coin remains on the priority watchlist", () => {
+  const bars1h = trendBars(60, 90, 0.4, 3_600_000);
+  const bars15m = flatBars(60, 100, 900_000);
+  bars15m[40] = bar(99.2, 99.5, 97.7, 98.0, bars15m[40].closeTime);
+  for (let i = 41; i <= 58; i++) {
+    const close = 100.7 + (i - 41) * 0.015;
+    bars15m[i] = bar(close - 0.1, close + 0.5, close - 0.5, close, bars15m[i].closeTime);
+  }
+  const prior3High = Math.max(...bars15m.slice(56, 59).map((item) => item.high));
+  bars15m[59] = bar(prior3High - 0.2, prior3High + 0.8, prior3High - 0.3, prior3High + 0.6, bars15m[59].closeTime);
+
+  const result = evaluateMa30Reignition({ bars15m, bars1h, direction: "LONG", watchStartedAt: bars15m[35].closeTime });
+  assert.equal(result.pullbackSeen, true);
+  assert.equal(result.pullbackAt, bars15m[40].closeTime);
+  assert.ok(result.signal);
+});
