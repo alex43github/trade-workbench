@@ -103,7 +103,7 @@ test("07:00 BJT live cycle emits overnight brief while ordinary alerts stay quie
   });
   assert.equal(result.status, "COMPLETED");
   assert.equal(result.notificationGroups.length, 1);
-  assert.match(result.notificationGroups[0].title, /07:00夜间汇总/);
+  assert.equal(result.notificationGroups[0].title, "MA30 夜间汇总｜0914-07:00");
   assert.equal(d.calls.notify.length, 1);
 });
 
