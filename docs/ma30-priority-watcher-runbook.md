@@ -30,10 +30,12 @@ It fetches only `15m` and `1h` closed bars for those priority symbols; it never 
 V1 requires all of the following:
 
 - 1H MA30 Slope20 still agrees with direction.
-- A real pullback occurred after the symbol entered the watchlist: 15m close reaches the other side of MA30, or retracement is at least 0.75 ATR14 within the last 8 closed 15m bars.
+- A real pullback occurred after the symbol entered the watchlist: 15m close reaches the other side of MA30, or close-path retracement is at least 0.75 ATR14 within the last 32 closed 15m bars (up to about 8 hours).
 - New closed 15m candle is on the correct side of MA30, has the correct body direction, and closes beyond the prior 3-bar high/low.
 - Ignition close is no farther than 2.0 ATR14 from 15m MA30.
 - A second ignition requires a fresh pullback after the prior ignition.
+
+The 32-bar window is intentional: the watched coin may spend several hours adjusting before the next usable ignition, which is exactly the use case this layer is intended to catch.
 
 ## Bark format
 
