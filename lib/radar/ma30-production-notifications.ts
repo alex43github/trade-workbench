@@ -18,23 +18,67 @@ function important(event: Ma30LifecycleEvent): boolean {
     || event.type === "AI_CHANGE";
 }
 
-function eventLabel(event: Ma30LifecycleEvent): string {
-  if (event.type === "REENTER") return "重新入榜";
-  if (event.type === "ENTER") return "新入榜";
-  if (event.type === "STAGE_CHANGE") return "阶段变化";
-  if (event.type === "AI_CHANGE") return "AI变化";
-  return event.type;
+function chineseStage(stage: string | null | undefined): string {
+  switch (stage) {
+    case "EARLY_ACCELERATION": return "初加速";
+    case "PERSISTENT_ACCELERATION": return "持续加速";
+    case "STEADY_UPTREND": return "稳步上涨";
+    case "LATE_EXTENSION": return "过热延伸";
+    case "EARLY_DOWN_ACCELERATION": return "初加速下跌";
+    case "PERSISTENT_DOWN_ACCELERATION": return "持续下跌";
+    case "STEADY_DOWNTREND": return "稳步下跌";
+    case "LATE_DOWNTREND": return "下跌过深";
+    case "NOT_CANDIDATE": return "非加速";
+    default: return "阶段未知";
+  }
 }
 
-function titleEventLabel(events: readonly Ma30LifecycleEvent[]): string {
-  const labels = [...new Set(events.map(eventLabel))];
-  return labels.length === 1 ? labels[0]! : "重要变化";
+function chineseDirection(direction: string): string {
+  if (direction === "LONG") return "多";
+  if (direction === "SHORT") return "空";
+  return "方向未知";
+}
+
+function chineseConfidence(confidence: string): string {
+  if (confidence === "HIGH") return "高信心";
+  if (confidence === "MEDIUM") return "中信心";
+  if (confidence === "LOW") return "低信心";
+  return "信心未知";
+}
+
+function signedPct(value: number): string {
+  const normalized = Math.abs(value) < 0.05 ? 0 : value;
+  return `${normalized >= 0 ? "+" : ""}${normalized.toFixed(1)}%`;
+}
+
+function signedSlope(value: number): string {
+  const normalized = Math.abs(value) < 0.0005 ? 0 : value;
+  return `${normalized >= 0 ? "+" : ""}${normalized.toFixed(3)}`;
+}
+
+function rowsForEvents<T extends { symbol: string }>(
+  events: readonly Ma30LifecycleEvent[],
+  rows: Map<string, T>,
+): T[] {
+  const seen = new Set<string>();
+  const selected: T[] = [];
+  for (const event of events) {
+    if (seen.has(event.symbol)) continue;
+    const row = rows.get(event.symbol);
+    if (!row) continue;
+    seen.add(event.symbol);
+    selected.push(row);
+  }
+  return selected;
 }
 
 /**
- * Build daytime user-visible Bark groups from durable lifecycle events rather
- * than a one-run diff. This is what makes dropout -> re-entry NEW again and
- * lets phase/AI changes remain visible without treating them as new symbols.
+ * User-facing production Bark is intentionally terse:
+ * - one coin per line
+ * - Chinese stages only
+ * - current group ranking first
+ * - MA30 distance always visible
+ * - no raw lifecycle transition strings or low-value acceleration decimals
  */
 export function buildMa30LifecycleBarkGroups(options: {
   current: Ma30NotificationState;
@@ -55,67 +99,96 @@ export function buildMa30LifecycleBarkGroups(options: {
   for (const group of ["A", "B", "C", "SHORT", "AI"] as const) {
     const selected = events.filter((event) => event.group === group);
     if (!selected.length) continue;
-    const titleLabel = titleEventLabel(selected);
 
     if (group === "A") {
-      const rows = selected.map((event) => ({ event, row: a.get(event.symbol) })).filter((x) => x.row);
+      const rows = rowsForEvents(selected, a).sort((left, right) => left.rank - right.rank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:A:lifecycle`,
-        title: `MA30斜率 A组 · ${titleLabel} ${rows.length}`,
-        body: rows.map(({ event, row }) => `${displaySymbol(event.symbol)} ${eventLabel(event)} #${row!.rank} S20 ${row!.slope20.toFixed(4)}%/h`).join("｜"),
+        title: `MA30 A组｜斜率前10（变化${rows.length}）`,
+        body: rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，斜率${signedSlope(row.slope20)}`).join("\n"),
       });
       continue;
     }
 
     if (group === "B") {
-      const rows = selected.map((event) => ({ event, row: b.get(event.symbol) })).filter((x) => x.row);
+      const rows = rowsForEvents(selected, b).sort((left, right) => left.bRank - right.bRank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:B:lifecycle`,
-        title: `MA30可用窗口新高 B组 · ${titleLabel} ${rows.length}`,
-        body: rows.map(({ event, row }) => `${displaySymbol(event.symbol)} ${eventLabel(event)} #${row!.rank} 可用窗口新高${row!.ma30NewHighBars}根1H`).join("｜"),
+        title: `MA30 B组｜均线新高（变化${rows.length}）`,
+        body: rows.map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，均线新高${row.ma30NewHighBars}h`).join("\n"),
       });
       continue;
     }
 
     if (group === "C") {
-      const rows = selected.map((event) => ({ event, row: c.get(event.symbol) })).filter((x) => x.row);
+      const rows = rowsForEvents(selected, c).sort((left, right) => left.rank - right.rank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:C:lifecycle`,
-        title: `MA30加速 C组 · ${titleLabel} ${rows.length}`,
-        body: rows.map(({ event, row }) => {
-          const transition = event.type === "STAGE_CHANGE"
-            ? ` ${event.previousStage ?? "-"}→${event.currentStage ?? row!.stage}`
-            : ` ${eventLabel(event)}`;
-          return `${displaySymbol(event.symbol)}${transition} #${row!.rank} 加速${row!.slope6Acceleration.toFixed(4)} 距MA ${row!.priceVsMa30Pct.toFixed(1)}%`;
-        }).join("｜"),
+        title: `MA30 C组｜加速候选（变化${rows.length}）`,
+        body: rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`).join("\n"),
       });
       continue;
     }
 
     if (group === "SHORT") {
-      const rows = selected.map((event) => ({ event, row: shorts.get(event.symbol) })).filter((x) => x.row);
+      const rows = rowsForEvents(selected, shorts).sort((left, right) => left.rank - right.rank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:SHORT:lifecycle`,
-        title: `MA30空头早期加速 · ${titleLabel} ${rows.length}`,
-        body: rows.map(({ event, row }) => {
-          const transition = event.type === "STAGE_CHANGE"
-            ? `${event.previousStage ?? "-"}→${event.currentStage ?? row!.stage}`
-            : eventLabel(event);
-          return `${displaySymbol(event.symbol)} ${transition} S20 ${row!.slope20.toFixed(4)} 加速${row!.slope6Acceleration.toFixed(4)} 距MA ${row!.priceVsMa30Pct.toFixed(1)}%`;
-        }).join("｜"),
+        title: `MA30 空头｜早期加速（变化${rows.length}）`,
+        body: rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`).join("\n"),
       });
       continue;
     }
 
-    const rows = selected.map((event) => ({ event, row: ai.get(event.symbol) })).filter((x) => x.row);
+    const rows = rowsForEvents(selected, ai).sort((left, right) => left.aiRank - right.aiRank);
     if (rows.length) groups.push({
       key: `radar:ma30-slope:${options.scanBucket}:AI:lifecycle`,
-      title: `MA30 AI精选 · ${titleLabel} ${rows.length}`,
-      body: rows.map(({ event, row }) => `${displaySymbol(event.symbol)} AI ${eventLabel(event)} #${row!.aiRank} ${row!.direction} ${row!.confidence}｜${row!.reason}`).join("\n"),
+      title: `MA30 AI精选（变化${rows.length}）`,
+      body: rows.map((row) => {
+        const stage = row.direction === "SHORT" ? row.shortStage : row.longStage;
+        return `${row.aiRank}.${displaySymbol(row.symbol)}，${chineseDirection(row.direction)}，${chineseStage(stage)}，${signedPct(row.priceVsMa30Pct)}，${chineseConfidence(row.confidence)}`;
+      }).join("\n"),
     });
   }
 
   return groups;
+}
+
+function renderA(rows: Ma30NotificationState["a"]): string {
+  return rows.slice(0, 10)
+    .sort((left, right) => left.rank - right.rank)
+    .map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，斜率${signedSlope(row.slope20)}`)
+    .join("\n") || "无";
+}
+
+function renderB(rows: Ma30NotificationState["b"]): string {
+  return rows.slice(0, 10)
+    .sort((left, right) => left.bRank - right.bRank)
+    .map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，均线新高${row.ma30NewHighBars}h`)
+    .join("\n") || "无";
+}
+
+function renderC(rows: Ma30NotificationState["c"]): string {
+  return rows.slice(0, 8)
+    .sort((left, right) => left.rank - right.rank)
+    .map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`)
+    .join("\n") || "无";
+}
+
+function renderShort(rows: Ma30NotificationState["shorts"]): string {
+  return rows.slice(0, 5)
+    .sort((left, right) => left.rank - right.rank)
+    .map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`)
+    .join("\n") || "无";
+}
+
+function renderAi(rows: Ma30NotificationState["ai"]): string {
+  return [...rows].sort((left, right) => left.aiRank - right.aiRank)
+    .map((row) => {
+      const stage = row.direction === "SHORT" ? row.shortStage : row.longStage;
+      return `${row.aiRank}.${displaySymbol(row.symbol)}，${chineseDirection(row.direction)}，${chineseStage(stage)}，${signedPct(row.priceVsMa30Pct)}，${chineseConfidence(row.confidence)}`;
+    })
+    .join("\n") || "无";
 }
 
 /**
@@ -129,16 +202,15 @@ export function buildMa30OvernightBriefGroup(options: {
 }): RadarBarkGroup | null {
   if (options.bjtHour !== 7) return null;
 
-  const a = options.current.a.slice(0, 10).map((row) => `${displaySymbol(row.symbol)}#${row.rank}`).join("、") || "无";
-  const b = options.current.b.slice(0, 10).map((row) => `${displaySymbol(row.symbol)}(${row.ma30NewHighBars}h)`).join("、") || "无";
-  const c = options.current.c.slice(0, 8).map((row) => `${displaySymbol(row.symbol)}:${row.stage}`).join("、") || "无";
-  const shorts = options.current.shorts.slice(0, 5).map((row) => displaySymbol(row.symbol)).join("、") || "无";
-  const ai = [...options.current.ai].sort((left, right) => left.aiRank - right.aiRank)
-    .map((row) => `${row.aiRank}.${displaySymbol(row.symbol)} ${row.direction} ${row.confidence}`).join("、") || "无";
-
   return {
     key: `radar:ma30-slope:${options.scanBucket}:OVERNIGHT`,
-    title: "MA30扫描器 · 07:00夜间汇总",
-    body: `A组：${a}\nB组(可用窗口新高)：${b}\nC组：${c}\n空头优选：${shorts}\nAI精选：${ai}`,
+    title: "MA30扫描器｜07:00夜间汇总",
+    body: [
+      "A组", renderA(options.current.a),
+      "", "B组", renderB(options.current.b),
+      "", "C组", renderC(options.current.c),
+      "", "空头", renderShort(options.current.shorts),
+      "", "AI精选", renderAi(options.current.ai),
+    ].join("\n"),
   };
 }
