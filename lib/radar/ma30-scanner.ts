@@ -173,6 +173,7 @@ export async function runMa30FullMarketScan(options: {
   const a = ranking.aTop10.map((row, index) => ({
     rank: index + 1,
     symbol: row.symbol,
+    stage: longBySymbol.get(row.symbol)?.stage ?? "NOT_CANDIDATE",
     slope3: row.slope3,
     slope6: row.slope6,
     slope12: row.slope12,
@@ -189,6 +190,7 @@ export async function runMa30FullMarketScan(options: {
     bRank: index + 1,
     slopeRank: slopeRank.get(row.symbol) ?? null,
     symbol: row.symbol,
+    stage: longBySymbol.get(row.symbol)?.stage ?? "NOT_CANDIDATE",
     slope20: row.slope20,
     ma30: row.ma30,
     currentPrice: row.currentPrice,
