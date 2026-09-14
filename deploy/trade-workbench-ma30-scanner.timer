@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Trade Workbench MA30 scanner hourly after 1H close
+
+[Timer]
+OnCalendar=*-*-* *:02:00
+Persistent=true
+AccuracySec=15s
+Unit=trade-workbench-ma30-scanner.service
+
+[Install]
+WantedBy=timers.target
