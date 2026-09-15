@@ -10,9 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  focused:
+  scoped-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,3 +27,11 @@ jobs:
           tests/telegram-menu-hardening.test.mjs
           tests/protection-management.test.mjs
           tests/telegram-protection-management.test.mjs
+      - name: Telegram regression
+        run: node --experimental-strip-types --test tests/telegram-*.test.mjs
+      - name: Protection regression
+        run: node --experimental-strip-types --test tests/protection-*.test.mjs
+      - name: MA30 regression
+        run: node --experimental-strip-types --test tests/ma30-*.test.mjs
+      - name: Production build
+        run: npm run build
