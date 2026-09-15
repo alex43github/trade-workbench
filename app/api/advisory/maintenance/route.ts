@@ -32,6 +32,13 @@ function shanghaiFourHourBucket(date = new Date()) {
   return `${value("year")}-${value("month")}-${value("day")}-${String(Math.floor(Number(value("hour")) / 4) * 4).padStart(2, "0")}`;
 }
 
+function selectedMaintenanceJobs(request: Request) {
+  const raw = request.headers.get("x-workbench-maintenance-jobs");
+  if (raw === null) return null;
+  const allowed = new Set(["reversal-hourly", "reversal-four-hour", "daily"]);
+  return new Set(raw.split(",").map((job) => job.trim()).filter((job) => allowed.has(job)));
+}
+
 export async function runCompositeRanking(overrides: {
   ma30Oi?: Awaited<ReturnType<typeof loadLatestMa30OiSnapshot>>;
   reversal?: Awaited<ReturnType<typeof loadReversalDashboard>>;
@@ -64,6 +71,11 @@ export async function POST(request: Request) {
   if (!requireScheduler(request)) return Response.json({ error: "unauthorized", realOrderRouteEnabled: false }, { status: 401 });
   const token = schedulerToken();
   if (!token) return Response.json({ error: "scheduler is not configured", realOrderRouteEnabled: false }, { status: 503 });
+  const selectedJobs = selectedMaintenanceJobs(request);
+  const now = new Date();
+  const currentHour = shanghaiHour(now);
+  const dailyDue = selectedJobs?.has("daily") || currentHour === 8;
+
   await ensureAdvisorySchema();
   const db = await getD1();
   const notifications = await retryFailedNotifications(db, { barkBaseUrl: process.env.BARK_BASE_URL });
@@ -71,26 +83,42 @@ export async function POST(request: Request) {
   const crowdingRequest = new Request(new URL("/api/radar/alerts", request.url), { method: "POST", headers: { authorization: `Bearer ${token}` } });
   const crowdingResponse = await scanCrowdingAlerts(crowdingRequest);
   const crowding = await crowdingResponse.json();
-  const reversal = await runScheduledReversalScans();
-  const reversalOk = true;
-  let reversalDaily: unknown = { status: "skipped", reason: "日线破底翻仅在北京时间 08:00 扫描" };
-  const reversalDailyOk = true;
-  if (shanghaiHour() === 8) {
-    reversalDaily = await runReversalScan([...REVERSAL_INTERVALS], undefined, "daily");
+
+  let reversal = await runScheduledReversalScans(now);
+  if (selectedJobs?.has("reversal-four-hour") && reversal.fourHourly.status !== "ready") {
+    reversal = {
+      ...reversal,
+      fourHourly: await runReversalScan(["15m", "1h", "4h"], undefined, "periodic", {
+        now,
+        scanBucket: shanghaiFourHourBucket(now),
+        notificationMode: "four-hour",
+        signalWindowBars: { "15m": 16, "1h": 4, "4h": 1 },
+      }),
+    };
   }
-  let ma30Oi: unknown = { status: "skipped", reason: "MA30/OI 仅在北京时间 08:00 扫描" };
+  const reversalOk = true;
+
+  let reversalDaily: unknown = { status: "skipped", reason: "日线破底翻仅在北京时间 08:00 扫描或失败后补跑" };
+  const reversalDailyOk = true;
+  if (dailyDue) {
+    reversalDaily = await runReversalScan([...REVERSAL_INTERVALS], undefined, "daily", { now });
+  }
+
+  let ma30Oi: unknown = { status: "skipped", reason: "MA30/OI 仅在北京时间 08:00 扫描或失败后补跑" };
   const ma30OiOk = true;
-  if (shanghaiHour() === 8) {
+  if (dailyDue) {
     ma30Oi = await runMa30OiScan();
   }
+
   let atrBand: unknown = { status: "skipped", reason: "MA30 ± 1 ATR 机器自选由独立低频任务扫描" };
-  const atrBandBucket = getAtrLifecycleScanBucket();
+  const atrBandBucket = getAtrLifecycleScanBucket(now);
   const atrBandDue = request.headers.get("x-workbench-skip-atr-band") !== "1" && !await hasAtrLifecycleScanBucket(db, atrBandBucket);
   if (atrBandDue) {
-    atrBand = await runAtrLifecycleScan();
+    atrBand = await runAtrLifecycleScan(now);
   }
-  let composite: CompositeSnapshot | { status: "skipped"; reason: string } = { status: "skipped", reason: "综合榜仅在北京时间 08:00 生成" };
-  if (shanghaiHour() === 8) {
+
+  let composite: CompositeSnapshot | { status: "skipped"; reason: string } = { status: "skipped", reason: "综合榜仅在北京时间 08:00 生成或失败后补跑" };
+  if (dailyDue) {
     const radarPayload = await (async () => {
       try { return await (await getRadar()).json() as CompositeRadarInput; } catch { return null; }
     })();
@@ -117,5 +145,6 @@ export async function POST(request: Request) {
     const ma30Snapshot = await loadLatestMa30OiSnapshot(await getD1());
     composite = await runCompositeRanking({ ma30Oi: ma30Snapshot, reversal: reversalDashboard, multiTimeframe, radar: radarPayload ?? undefined });
   }
+
   return Response.json({ notifications, watchlistPositions, crowding, reversal, reversalDaily, ma30Oi, atrBand, composite, realOrderRouteEnabled: false }, { status: crowdingResponse.ok && reversalOk && reversalDailyOk && ma30OiOk ? 200 : 503 });
 }
