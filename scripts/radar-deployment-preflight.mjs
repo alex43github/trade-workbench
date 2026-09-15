@@ -5,10 +5,13 @@ import { resolve } from "node:path";
 export const RADAR_DEPLOYMENT_FILES = Object.freeze([
   "services/structure-radar/bar-cache.ts",
   "services/structure-radar/bark.ts",
+  "services/structure-radar/binance-readonly-account.ts",
   "services/structure-radar/binance-public.ts",
   "services/structure-radar/config.ts",
   "services/structure-radar/http-server.ts",
   "services/structure-radar/main.ts",
+  "services/structure-radar/orchestrator.ts",
+  "services/structure-radar/position-monitor.ts",
   "services/structure-radar/runtime.ts",
   "services/structure-radar/radar-cadence.ts",
   "services/structure-radar/squeeze-radar.ts",
@@ -16,6 +19,8 @@ export const RADAR_DEPLOYMENT_FILES = Object.freeze([
   "services/structure-radar/radar-repository.ts",
   "services/structure-radar/scanner.ts",
   "services/structure-radar/websocket-feed.ts",
+  "lib/structure-radar/platform-reclaim.ts",
+  "lib/structure-radar/trendline-breakout.ts",
   "deploy/squeeze-radar.service",
 ]);
 
