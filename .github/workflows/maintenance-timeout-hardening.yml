@@ -1,0 +1,17 @@
+name: maintenance-timeout-hardening
+
+on:
+  push:
+    branches:
+      - fix/maintenance-timeout-hardening
+
+jobs:
+  red-green:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+      - name: Focused detached-task regression
+        run: node --test tests/maintenance-detached-task.test.mjs
