@@ -14,4 +14,8 @@ jobs:
         with:
           node-version: 22.19.0
       - name: Focused maintenance regressions
-        run: node --test tests/maintenance-detached-task.test.mjs tests/atr-route-detached-dispatch.test.mjs
+        run: >-
+          node --test
+          tests/maintenance-detached-task.test.mjs
+          tests/atr-route-detached-dispatch.test.mjs
+          tests/maintenance-catchup.test.mjs
