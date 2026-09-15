@@ -6,7 +6,7 @@ import { loadRadarConfig } from "./config.ts";
 import { createRadarHttpServer, listenRadarHttpServer } from "./http-server.ts";
 import { RadarOrchestrator, runFourExpertConsultation, type ProcessSignal } from "./orchestrator.ts";
 import { RadarRepository } from "./radar-repository.ts";
-import { bootstrapMarket, isNotifiableSignalState, radarHealthStatus, trendRadarHealthStatus } from "./runtime.ts";
+import { bootstrapMarket, feedHealthStatus, feedUnhealthyBatchCount, isNotifiableSignalState, radarHealthStatus, trendRadarHealthStatus } from "./runtime.ts";
 import { RadarScanner } from "./scanner.ts";
 import { KlineWebSocketFeed } from "./websocket-feed.ts";
 import { detectPlatformReclaim } from "../../lib/structure-radar/platform-reclaim.ts";
@@ -92,6 +92,8 @@ const bootstrap = await bootstrapMarket({
 });
 
 let lastEventAt = new Date().toISOString();
+const feedStartedAt = lastEventAt;
+const feedBatches = new Map<number, { batch: number; state: "connecting" | "open" | "closed" | "error"; updatedAt: string; lastActivityAt: string | null }>();
 let lastSqueezeScanAt: string | null = null;
 let lastSqueezeCycle = { checked: 0, deepValidated: 0, dataSourceDegraded: 0 };
 let lastHourlyDigestCycle: (HourlyRadarCycleResult & { completedAt: string }) | null = null;
@@ -233,6 +235,15 @@ scheduleNextHourlyRadarCycle();
 
 const feed = new KlineWebSocketFeed({
   batches: bootstrap.batches,
+  onStatus: ({ batch, state }) => {
+    const previous = feedBatches.get(batch);
+    feedBatches.set(batch, { batch, state, updatedAt: new Date().toISOString(), lastActivityAt: previous?.lastActivityAt ?? null });
+  },
+  onActivity: ({ batch, at }) => {
+    lastEventAt = new Date(at).toISOString();
+    const previous = feedBatches.get(batch);
+    if (previous) feedBatches.set(batch, { ...previous, lastActivityAt: lastEventAt });
+  },
   onEvent: async (event) => {
     lastEventAt = new Date().toISOString();
     await scanner.handleRawEvent(event);
@@ -249,7 +260,11 @@ const api = createRadarHttpServer({
   token: config.localToken,
   repository,
   health: () => ({
-    status: lastHourlyDigestCycle?.status === "failed" || trendRadarHealthStatus({ lastSuccessfulCycleAt: lastTrendCycleAt }) !== "ok" ? "degraded" : radarHealthStatus({
+    status: lastHourlyDigestCycle?.status === "failed" || trendRadarHealthStatus({ lastSuccessfulCycleAt: lastTrendCycleAt }) !== "ok" || feedHealthStatus({
+      startedAt: feedStartedAt,
+      lastActivityAt: lastEventAt,
+      batches: [...feedBatches.values()],
+    }) !== "ok" ? "degraded" : radarHealthStatus({
       bootstrapFailures: bootstrap.failures.length,
       lastSuccessfulScanAt: lastSqueezeScanAt,
       lastCycle: lastSqueezeCycle,
@@ -258,6 +273,11 @@ const api = createRadarHttpServer({
     bootstrapFailures: bootstrap.failures.length,
     notifications: barkConfig.publicStatus,
     lastEventAt,
+    feed: {
+      lastActivityAt: lastEventAt,
+      unhealthyBatches: feedUnhealthyBatchCount({ startedAt: feedStartedAt, batches: [...feedBatches.values()] }),
+      batches: [...feedBatches.values()].map(({ batch, state, updatedAt, lastActivityAt }) => ({ batch, state, updatedAt, lastActivityAt })),
+    },
     squeeze: {
       detectorVersion: "SQUEEZE_RADAR_V0.1_RESEARCH",
       lastSuccessfulScanAt: lastSqueezeScanAt,

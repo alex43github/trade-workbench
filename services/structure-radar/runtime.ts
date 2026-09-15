@@ -2,6 +2,9 @@ import type { ClosedBar, SignalState, Timeframe } from "../../lib/structure-rada
 import { BarCache } from "./bar-cache.ts";
 import { buildKlineStreamBatches } from "./binance-public.ts";
 import { HOURLY_RADAR_CADENCE_MS } from "./radar-cadence.ts";
+import { FEED_STALE_AFTER_MS } from "./websocket-feed.ts";
+
+export { FEED_STALE_AFTER_MS } from "./websocket-feed.ts";
 
 const NOTIFIABLE_STATES = new Set<SignalState>([
   "CANDIDATE",
@@ -13,6 +16,7 @@ const NOTIFIABLE_STATES = new Set<SignalState>([
 
 export const SQUEEZE_SCAN_CADENCE_MS = HOURLY_RADAR_CADENCE_MS;
 export const SQUEEZE_SCAN_STALE_AFTER_MS = SQUEEZE_SCAN_CADENCE_MS * 2;
+export const FEED_RECOVERY_GRACE_MS = FEED_STALE_AFTER_MS * 2;
 
 export type NotifiableSignalState = "CANDIDATE" | "CONFIRMED" | "ADD_CANDIDATE" | "TAKE_PROFIT_WATCH" | "INVALIDATED";
 
@@ -37,6 +41,49 @@ export function trendRadarHealthStatus(input: { lastSuccessfulCycleAt: string | 
   const cycleAt = Date.parse(input.lastSuccessfulCycleAt);
   if (!Number.isFinite(cycleAt) || (input.now ?? Date.now()) - cycleAt > SQUEEZE_SCAN_STALE_AFTER_MS) return "degraded";
   return "ok";
+}
+
+type FeedBatchHealth = {
+  batch: number;
+  state: "connecting" | "open" | "closed" | "error";
+  updatedAt: string;
+  lastActivityAt: string | null;
+};
+
+function staleAt(timestamp: string | null, now: number, threshold: number) {
+  const value = timestamp ? Date.parse(timestamp) : Number.NaN;
+  return !Number.isFinite(value) || now - value > threshold;
+}
+
+export function feedUnhealthyBatchCount(input: {
+  startedAt: string;
+  batches: readonly FeedBatchHealth[];
+  now?: number;
+  staleAfterMs?: number;
+  graceMs?: number;
+}) {
+  const now = input.now ?? Date.now();
+  const staleAfterMs = input.staleAfterMs ?? FEED_STALE_AFTER_MS;
+  const graceMs = input.graceMs ?? FEED_RECOVERY_GRACE_MS;
+  const starting = !staleAt(input.startedAt, now, graceMs);
+  return input.batches.filter((batch) => {
+    if (batch.state === "open") return staleAt(batch.lastActivityAt ?? batch.updatedAt, now, staleAfterMs);
+    return !starting && staleAt(batch.updatedAt, now, graceMs);
+  }).length;
+}
+
+export function feedHealthStatus(input: {
+  startedAt: string;
+  lastActivityAt: string | null;
+  batches: readonly FeedBatchHealth[];
+  now?: number;
+  staleAfterMs?: number;
+  graceMs?: number;
+}) {
+  const now = input.now ?? Date.now();
+  const staleAfterMs = input.staleAfterMs ?? FEED_STALE_AFTER_MS;
+  if (staleAt(input.lastActivityAt, now, staleAfterMs)) return "degraded";
+  return feedUnhealthyBatchCount({ ...input, now, staleAfterMs }) > 0 ? "degraded" : "ok";
 }
 
 export async function bootstrapMarket(options: {
