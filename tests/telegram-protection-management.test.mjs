@@ -60,6 +60,10 @@ function labels(reply) {
   return reply.replyMarkup.inline_keyboard?.flat().map((button) => button.text) ?? [];
 }
 
+function callbacks(reply) {
+  return reply.replyMarkup.inline_keyboard?.flat().map((button) => button.callback_data) ?? [];
+}
+
 const handler = () => import("../lib/telegram/handler-v2.ts");
 
 test("protection manager lists current coverage and rule then opens actionable detail", async () => {
@@ -165,4 +169,31 @@ test("untouched protection ratio edit calculates current-position coverage and c
   assert.equal(editInput, undefined);
   await handleAuthorizedTelegramUpdate(update(16, "CALLBACK", "tg:act:pm_edit_confirm_01"), dependencies);
   assert.equal(editInput.targetQuantity, 1);
+});
+
+test("fixed-price edit back button returns to the actually selected strategy, not list item zero", async () => {
+  const { handleAuthorizedTelegramUpdate } = await handler();
+  const first = stopStrategy({ id: "ios-ps-first", symbol: "BTCUSDT" });
+  const second = stopStrategy({
+    id: "ios-ps-second",
+    symbol: "ETHUSDT",
+    strategyType: "LEVEL_SL",
+    config: { timeframe: "1h", fixedPrice: 90 },
+    entryPrice: 100,
+  });
+  const dependencies = memoryConversationDependencies({
+    listManagedStopStrategies: async () => [first, second],
+    readProtectionPositionQuantity: async () => 4,
+  });
+
+  await handleAuthorizedTelegramUpdate(update(17, "MESSAGE", "🛡️ 止损保护管理"), dependencies);
+  const secondDetail = await handleAuthorizedTelegramUpdate(update(18, "CALLBACK", "tg:act:pm_item_1_01"), dependencies);
+  assert.match(secondDetail.text, /ETH/);
+
+  const edit = await handleAuthorizedTelegramUpdate(update(19, "CALLBACK", "tg:act:pm_edit_condition_01"), dependencies);
+  assert.ok(callbacks(edit).includes("tg:act:pm_back_detail_01"));
+
+  const back = await handleAuthorizedTelegramUpdate(update(20, "CALLBACK", "tg:act:pm_back_detail_01"), dependencies);
+  assert.match(back.text, /ETH/);
+  assert.doesNotMatch(back.text, /BTC/);
 });
