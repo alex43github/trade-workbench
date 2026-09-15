@@ -1,17 +1,10 @@
 #!/usr/bin/env node
 
-import { dueJobs, parts } from "./maintenance-schedule.mjs";
+import { selectMaintenanceWork } from "./maintenance-schedule.mjs";
 
 const baseUrl = process.env.WORKBENCH_BASE_URL?.replace(/\/$/, "");
 const token = process.env.MAINTENANCE_JOB_TOKEN;
 const stateFile = process.env.WORKBENCH_STATE_FILE || "/var/lib/trade-workbench/maintenance-state.json";
-
-function key(date, job) {
-  const current = parts(date);
-  const day = `${current.year}-${String(current.month).padStart(2, "0")}-${String(current.day).padStart(2, "0")}`;
-  if (job === "daily") return `daily:${day}`;
-  return `${job}:${day}:${String(current.hour).padStart(2, "0")}`;
-}
 
 function countCandidates(result) {
   if (!result || typeof result !== "object") return 0;
@@ -84,25 +77,34 @@ async function main() {
       latestRun: state.latestRun ?? null,
     }) + "\n", { mode: 0o600 });
   };
-  const due = dueJobs(now).filter((job) => !state.completed[key(now, job)]);
-  if (!due.length) return;
+  const work = selectMaintenanceWork(now, state.completed);
+  if (!work.length) return;
+  const jobs = [...new Set(work.map((item) => item.job))];
   const startedAt = new Date().toISOString();
   state.lastRunStatus = "running";
   state.lastAttemptAt = startedAt;
   state.latestRun = { startedAt, finishedAt: null, durationMs: null, status: "running", scannerCounts: { crowding: 0, reversalHourly: 0, reversal4h: 0, reversalDaily: 0, ma30Oi: 0 }, bark: { sent: 0, failed: 0, skipped: 0 }, error: null };
   await save();
   try {
-    // The full-market MA30/ATR scan can legitimately take several minutes. Dispatch
-    // it independently so it cannot make the unrelated maintenance request time out.
-    if (due.includes("atr-band")) {
+    // ATR is started by its dedicated endpoint. The endpoint acknowledges quickly
+    // and keeps the full-market scan detached from this scheduler request chain.
+    if (jobs.includes("atr-band")) {
       const atrResponse = await fetch(`${baseUrl}/api/radar/atr-band`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
       if (!atrResponse.ok && atrResponse.status !== 409) throw new Error(`ATR machine-watchlist endpoint HTTP ${atrResponse.status}`);
     }
-    const response = await fetch(`${baseUrl}/api/advisory/maintenance`, { method: "POST", headers: { authorization: `Bearer ${token}`, "x-workbench-skip-atr-band": "1" } });
+    const maintenanceJobs = jobs.filter((job) => job !== "atr-band");
+    const response = await fetch(`${baseUrl}/api/advisory/maintenance`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-workbench-skip-atr-band": "1",
+        "x-workbench-maintenance-jobs": maintenanceJobs.join(","),
+      },
+    });
     const payload = await response.json().catch(() => null);
     if (!response.ok) throw new Error(`maintenance endpoint HTTP ${response.status}`);
     const completedAt = new Date().toISOString();
-    for (const job of due) state.completed[key(now, job)] = completedAt;
+    for (const item of work) state.completed[item.key] = completedAt;
     state.lastRunAt = completedAt;
     state.lastRunStatus = "completed";
     state.latestRun = { startedAt, finishedAt: completedAt, durationMs: Date.parse(completedAt) - Date.parse(startedAt), status: "completed", ...summarizeMaintenance(payload), error: null };
