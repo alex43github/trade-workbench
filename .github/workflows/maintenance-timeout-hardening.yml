@@ -13,10 +13,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.19.0
-      - name: Focused maintenance regressions
+      - name: Focused maintenance and Telegram regressions
         run: >-
-          node --test
+          node --experimental-strip-types --test
           tests/maintenance-detached-task.test.mjs
           tests/atr-route-detached-dispatch.test.mjs
           tests/maintenance-catchup.test.mjs
           tests/maintenance-catchup-wiring.test.mjs
+          tests/telegram-webhook-diagnostics.test.mjs
