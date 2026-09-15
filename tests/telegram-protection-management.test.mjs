@@ -60,8 +60,10 @@ function labels(reply) {
   return reply.replyMarkup.inline_keyboard?.flat().map((button) => button.text) ?? [];
 }
 
+const handler = () => import("../lib/telegram/handler-v2.ts");
+
 test("protection manager lists current coverage and rule then opens actionable detail", async () => {
-  const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
+  const { handleAuthorizedTelegramUpdate } = await handler();
   const strategy = stopStrategy();
   const dependencies = memoryConversationDependencies({
     listManagedStopStrategies: async () => [strategy],
@@ -85,7 +87,7 @@ test("protection manager lists current coverage and rule then opens actionable d
 });
 
 test("triggered protection cannot be edited and stop requires a second confirmation", async () => {
-  const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
+  const { handleAuthorizedTelegramUpdate } = await handler();
   let stopped = 0;
   const strategy = stopStrategy({ status: "PARTIALLY_PROTECTED", invalidCandleCount: 1, remainingQuantity: 1, revision: 7 });
   const dependencies = memoryConversationDependencies({
@@ -116,7 +118,7 @@ test("triggered protection cannot be edited and stop requires a second confirmat
 });
 
 test("untouched MA stop condition edit shows old to new before confirmation", async () => {
-  const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
+  const { handleAuthorizedTelegramUpdate } = await handler();
   let editInput;
   const strategy = stopStrategy();
   const dependencies = memoryConversationDependencies({
@@ -142,7 +144,7 @@ test("untouched MA stop condition edit shows old to new before confirmation", as
 });
 
 test("untouched protection ratio edit calculates current-position coverage and confirms before mutation", async () => {
-  const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
+  const { handleAuthorizedTelegramUpdate } = await handler();
   let editInput;
   const strategy = stopStrategy();
   const dependencies = memoryConversationDependencies({
