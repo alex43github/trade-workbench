@@ -1,0 +1,41 @@
+name: S6.1 Forward Observer
+
+on:
+  push:
+    branches:
+      - feature/s6-1-forward-observer
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - run: npm ci
+      - name: Targeted S6.1 tests
+        run: node --test tests/execution-forward-observer.test.mjs
+      - name: Full repository tests
+        run: npm test
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Final build
+        run: npm run build
+      - name: Diff check
+        run: git diff --check
+      - name: Static safety audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d services/execution-forward
+          if grep -R -nE 'binance-gateway|placeOrder|submitOrder|createOrder|services/structure-radar/main' services/execution-forward; then
+            echo 'Forbidden trading/runtime dependency found' >&2
+            exit 1
+          fi
+          grep -R -n 'NO_TRADING_ACTIONS = 1' services/execution-forward
