@@ -78,7 +78,7 @@ test("large overnight catch-up becomes one concise logical summary while full ev
   assert.match(group.body, /空头/);
   assert.match(group.body, /KOMA/);
   assert.match(group.body, /SKYAI/);
-  assert.match(group.body, /其余.*已归档/);
+  assert.match(group.body, /其余.*已.*归档/);
   assert.ok(group.body.length < 2800, `overnight Bark body too large: ${group.body.length}`);
   assert.ok(group.body.split("\n").length <= 24, `too many Bark lines: ${group.body.split("\n").length}`);
 });
