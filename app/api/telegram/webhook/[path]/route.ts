@@ -1,6 +1,6 @@
 import { parseTelegramUpdate } from "../../../../../lib/telegram/contracts.ts";
 import { createTelegramClient } from "../../../../../lib/telegram/client.ts";
-import { handleAuthorizedTelegramUpdate } from "../../../../../lib/telegram/handler.ts";
+import { handleAuthorizedTelegramUpdate } from "../../../../../lib/telegram/handler-v2.ts";
 import { claimTelegramUpdate, releaseTelegramUpdate } from "../../../../../lib/telegram/store.ts";
 
 function safeEqual(expected: string | undefined, actual: string | null) {
