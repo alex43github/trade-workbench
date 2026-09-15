@@ -30,6 +30,9 @@ export type Ma30OvernightCatchupGroup = {
 };
 
 const IMPORTANT = new Set(["ENTER", "REENTER", "STAGE_CHANGE", "AI_CHANGE"]);
+const EXACT_TIMELINE_LIMIT = 24;
+const HIGHLIGHT_LIMIT = 16;
+const HIGHLIGHT_WITH_EXITS_LIMIT = 18;
 
 function displaySymbol(symbol: string): string {
   return symbol.replace(/USDT$/, "");
@@ -127,6 +130,67 @@ function renderRecord(record: Ma30OvernightEventRecord): string {
   return parts.length ? `${base}，${parts.join("，")}` : base;
 }
 
+function highlightPriority(record: Ma30OvernightEventRecord): number {
+  const { group, type } = record.event;
+  const importantEntry = type === "ENTER" || type === "REENTER";
+  if (group === "AI" && (importantEntry || type === "AI_CHANGE")) return 0;
+  if ((group === "A" || group === "B") && importantEntry) return 1;
+  if (group === "SHORT" && importantEntry) return 2;
+  if (group === "C" && importantEntry) return 3;
+  if ((group === "A" || group === "B" || group === "AI" || group === "SHORT") && type === "STAGE_CHANGE") return 4;
+  if (group === "C" && type === "STAGE_CHANGE") return 5;
+  return 6;
+}
+
+function recordIdentity(record: Ma30OvernightEventRecord): string {
+  return `${record.runId}:${record.eventIndex}`;
+}
+
+function pairIdentity(record: Ma30OvernightEventRecord): string {
+  return `${record.event.group}:${record.event.symbol}`;
+}
+
+function renderConciseSummary(selected: Ma30OvernightEventRecord[]): string {
+  const counts = { A: 0, B: 0, C: 0, SHORT: 0, AI: 0 };
+  for (const record of selected) counts[record.event.group] += 1;
+
+  const ranked = selected
+    .filter((record) => record.event.type !== "EXIT")
+    .toSorted((left, right) =>
+      highlightPriority(left) - highlightPriority(right)
+      || left.runTimeBjt.localeCompare(right.runTimeBjt)
+      || left.eventIndex - right.eventIndex,
+    );
+
+  const highlights: Ma30OvernightEventRecord[] = [];
+  const seenPairs = new Set<string>();
+  for (const record of ranked) {
+    const pair = pairIdentity(record);
+    if (seenPairs.has(pair)) continue;
+    seenPairs.add(pair);
+    highlights.push(record);
+    if (highlights.length >= HIGHLIGHT_LIMIT) break;
+  }
+
+  // If a highlighted symbol later exited overnight, keep that transient lifecycle
+  // visible when space permits. The complete timeline always remains in SQLite.
+  const highlightedPairs = new Set(highlights.map(pairIdentity));
+  for (const record of selected) {
+    if (highlights.length >= HIGHLIGHT_WITH_EXITS_LIMIT) break;
+    if (record.event.type !== "EXIT" || !highlightedPairs.has(pairIdentity(record))) continue;
+    highlights.push(record);
+  }
+
+  const unique = new Set(highlights.map(recordIdentity));
+  const omitted = Math.max(0, selected.length - unique.size);
+  return [
+    `夜间共 ${selected.length} 条变化｜A组${counts.A} B组${counts.B} C组${counts.C} 空头${counts.SHORT} AI${counts.AI}`,
+    "重点变化：",
+    ...highlights.toSorted((a, b) => a.runTimeBjt.localeCompare(b.runTimeBjt) || a.eventIndex - b.eventIndex).map(renderRecord),
+    omitted ? `其余 ${omitted} 条变化已完整归档，可用于后续复盘。` : "完整夜间变化已归档。",
+  ].join("\n");
+}
+
 export function ma30QuietWindowForScanBucket(scanBucket: string) {
   const match = scanBucket.match(/^(\d{4})-(\d{2})-(\d{2})T\d{2}$/);
   if (!match) throw new Error(`invalid MA30 scan bucket: ${scanBucket}`);
@@ -169,6 +233,8 @@ export function buildMa30OvernightCatchupGroup(options: {
   return {
     key: `radar:ma30-slope:${window.dateKey}:OVERNIGHT-CATCHUP`,
     title: `MA30 夜间变化｜${window.dateKey.slice(5, 7)}${window.dateKey.slice(8, 10)}-08:00`,
-    body: selected.map(renderRecord).join("\n"),
+    body: selected.length <= EXACT_TIMELINE_LIMIT
+      ? selected.map(renderRecord).join("\n")
+      : renderConciseSummary(selected),
   };
 }
