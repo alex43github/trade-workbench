@@ -13,5 +13,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.19.0
-      - name: Focused detached-task regression
-        run: node --test tests/maintenance-detached-task.test.mjs
+      - name: Focused maintenance regressions
+        run: node --test tests/maintenance-detached-task.test.mjs tests/atr-route-detached-dispatch.test.mjs
