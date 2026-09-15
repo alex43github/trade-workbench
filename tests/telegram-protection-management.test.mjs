@@ -64,7 +64,7 @@ function callbacks(reply) {
   return reply.replyMarkup.inline_keyboard?.flat().map((button) => button.callback_data) ?? [];
 }
 
-const handler = () => import("../lib/telegram/handler-v2.ts");
+const handler = () => import("../lib/telegram/handler-production.ts");
 
 test("protection manager lists current coverage and rule then opens actionable detail", async () => {
   const { handleAuthorizedTelegramUpdate } = await handler();
