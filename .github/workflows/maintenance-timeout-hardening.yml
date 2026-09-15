@@ -6,14 +6,17 @@ on:
       - fix/maintenance-timeout-hardening
 
 jobs:
-  red-green:
+  regression-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22.19.0
-      - name: Focused maintenance and Telegram regressions
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Maintenance hotfix regressions
         run: >-
           node --experimental-strip-types --test
           tests/maintenance-detached-task.test.mjs
@@ -21,3 +24,20 @@ jobs:
           tests/maintenance-catchup.test.mjs
           tests/maintenance-catchup-wiring.test.mjs
           tests/telegram-webhook-diagnostics.test.mjs
+          tests/maintenance-scheduler.test.mjs
+          tests/maintenance-runtime.test.mjs
+          tests/advisory-maintenance.test.mjs
+      - name: Telegram and protection regressions
+        run: >-
+          node --experimental-strip-types --test
+          tests/telegram-handler.test.mjs
+          tests/telegram-menu-hardening.test.mjs
+          tests/telegram-protection-management.test.mjs
+          tests/protection-management.test.mjs
+      - name: MA30 regressions
+        run: >-
+          node --experimental-strip-types --test
+          tests/ma30-priority-*.test.mjs
+          tests/ma30-overnight-summary.test.mjs
+      - name: Production build
+        run: npm run build
