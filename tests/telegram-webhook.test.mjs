@@ -62,6 +62,7 @@ test("Telegram webhook sends one private home reply only for a newly claimed upd
     ["⚡ 默认下单", "⚙️ 完整策略"],
     ["📊 实盘持仓", "📋 实盘挂单"],
     ["🛡️ 手动持仓保护", "🗂️ 策略管理"],
+    ["🛡️ 止损保护管理"],
     ["❌ 取消/主菜单"],
   ]);
   assert.equal(sent[0].body.reply_markup.is_persistent, true);
