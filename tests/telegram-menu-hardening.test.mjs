@@ -27,15 +27,17 @@ function update(updateId, kind, value, userId = "9901") {
   return { updateId, kind, userId, chatId: userId, ...(kind === "CALLBACK" ? { callbackData: value } : { text: value }) };
 }
 
+const handler = () => import("../lib/telegram/handler-v2.ts");
+
 test("Telegram main menu exposes stop-loss protection management", async () => {
-  const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
+  const { handleAuthorizedTelegramUpdate } = await handler();
   const reply = await handleAuthorizedTelegramUpdate(update(1, "MESSAGE", "/start"), memoryConversationDependencies());
   const labels = reply.replyMarkup.keyboard.flat().map((button) => button.text);
   assert.ok(labels.includes("🛡️ 止损保护管理"));
 });
 
 test("opening a read-only main-menu screen invalidates an older wizard callback", async () => {
-  const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
+  const { handleAuthorizedTelegramUpdate } = await handler();
   const dependencies = memoryConversationDependencies({
     listLiveStrategies: async () => [],
     listProtectionStrategies: async () => [],
@@ -53,7 +55,7 @@ test("opening a read-only main-menu screen invalidates an older wizard callback"
 });
 
 test("positions and open-orders menu switches abandon any active wizard", async () => {
-  const { handleAuthorizedTelegramUpdate } = await import("../lib/telegram/handler.ts");
+  const { handleAuthorizedTelegramUpdate } = await handler();
   const dependencies = memoryConversationDependencies({
     getLiveAccountSnapshot: async () => ({ connected: true, reason: null, positions: [], orders: [] }),
   });
