@@ -27,7 +27,7 @@ function update(updateId, kind, value, userId = "9901") {
   return { updateId, kind, userId, chatId: userId, ...(kind === "CALLBACK" ? { callbackData: value } : { text: value }) };
 }
 
-const handler = () => import("../lib/telegram/handler-v2.ts");
+const handler = () => import("../lib/telegram/handler-production.ts");
 
 test("Telegram main menu exposes stop-loss protection management", async () => {
   const { handleAuthorizedTelegramUpdate } = await handler();
