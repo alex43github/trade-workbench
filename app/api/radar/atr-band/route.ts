@@ -1,4 +1,3 @@
-import { getRequestExecutionContext } from "vinext/shims/request-context";
 import { ensureAtrBandLifecycleSchema, ensureWatchlistSchema } from "@/db/ensure";
 import { getD1 } from "@/db";
 import { createAtrLifecycleFetchers } from "@/lib/radar/binance-public";
@@ -6,6 +5,7 @@ import { buildAtrLifecycleScan, getAtrLifecycleScanBucket, hasAtrLifecycleScanBu
 import { notifyAtrLifecycleTransitions } from "@/lib/radar/bark-notifications";
 import { requireOperatorMutation, requireScheduler } from "@/lib/security/operator-guard";
 import { syncHourlyStrongWatchlist } from "@/lib/watchlist";
+import { detachTask } from "@/services/workbench/background-task.mjs";
 
 let running = false;
 
@@ -40,8 +40,13 @@ export async function POST(request: Request) {
     await ensureAtrBandLifecycleSchema();
     const current = await loadAtrLifecycleDashboard(db);
     const task = runAtrLifecycleScan(new Date(), { force: true }).finally(() => { running = false; });
-    const context = getRequestExecutionContext();
-    if (context) context.waitUntil(task); else void task;
+    // This VPS process is long-lived. Do not attach the full-market scan to the
+    // request context: vinext waitUntil currently holds the HTTP response open
+    // until the scan completes, which caused the maintenance caller to time out.
+    detachTask(task, (error) => {
+      const reason = error instanceof Error ? error.message : "unknown error";
+      console.error("ATR background scan failed", { reason: reason.slice(0, 240) });
+    });
     return Response.json({ ...current, status: "pending", warning: "生命周期扫描任务已开始，正在读取 Binance Futures 已收盘 1H K 线" }, { status: 202, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     running = false;
