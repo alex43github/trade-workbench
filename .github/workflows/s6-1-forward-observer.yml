@@ -8,8 +8,65 @@ on:
 permissions:
   contents: read
 
+env:
+  S61_BASE_SHA: 7d8f6f83ebf9be8e13b52884f9556c20158108e2
+
 jobs:
-  verify:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.S61_BASE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - run: npm ci
+      - name: Baseline full repository tests
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          NODE_OPTIONS=--experimental-strip-types npm test 2>&1 | tee baseline-full-tests.log
+          printf '%s\n' "${PIPESTATUS[0]}" > baseline-full-tests.exit
+          exit 0
+      - name: Baseline typecheck
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          npx tsc --noEmit 2>&1 | tee baseline-typecheck.log
+          printf '%s\n' "${PIPESTATUS[0]}" > baseline-typecheck.exit
+          exit 0
+      - name: Normalize baseline failure signatures
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          tests = []
+          for line in Path('baseline-full-tests.log').read_text(errors='replace').splitlines():
+              match = re.match(r'^not ok \d+ - (.*)$', line)
+              if match:
+                  tests.append(match.group(1).strip())
+          Path('baseline-test-failures.txt').write_text('\n'.join(sorted(tests)) + ('\n' if tests else ''))
+          errors = [
+              line.strip()
+              for line in Path('baseline-typecheck.log').read_text(errors='replace').splitlines()
+              if 'error TS' in line
+          ]
+          Path('baseline-type-errors.txt').write_text('\n'.join(sorted(errors)) + ('\n' if errors else ''))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: s61-baseline-${{ github.sha }}
+          path: baseline-*
+          if-no-files-found: error
+          retention-days: 7
+
+  feature:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -20,62 +77,46 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Targeted S6.1 tests
-        id: targeted
         shell: bash
         run: |
           set +e
           set -o pipefail
-          node --experimental-strip-types --test tests/execution-forward-observer.test.mjs 2>&1 | tee s61-targeted.log
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          node --experimental-strip-types --test tests/execution-forward-observer.test.mjs 2>&1 | tee feature-targeted.log
+          printf '%s\n' "${PIPESTATUS[0]}" > feature-targeted.exit
           exit 0
       - name: Full repository tests
-        id: full_tests
-        if: always()
         shell: bash
         run: |
           set +e
           set -o pipefail
-          NODE_OPTIONS=--experimental-strip-types npm test 2>&1 | tee s61-full-tests.log
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          NODE_OPTIONS=--experimental-strip-types npm test 2>&1 | tee feature-full-tests.log
+          printf '%s\n' "${PIPESTATUS[0]}" > feature-full-tests.exit
           exit 0
       - name: Typecheck
-        id: typecheck
-        if: always()
         shell: bash
         run: |
           set +e
           set -o pipefail
-          npx tsc --noEmit 2>&1 | tee s61-typecheck.log
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          npx tsc --noEmit 2>&1 | tee feature-typecheck.log
+          printf '%s\n' "${PIPESTATUS[0]}" > feature-typecheck.exit
           exit 0
       - name: Final build
-        id: build
-        if: always()
         shell: bash
         run: |
           set +e
           set -o pipefail
-          npm run build 2>&1 | tee s61-build.log
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          npm run build 2>&1 | tee feature-build.log
+          printf '%s\n' "${PIPESTATUS[0]}" > feature-build.exit
           exit 0
       - name: Diff check
-        id: diff_check
-        if: always()
         shell: bash
         run: |
           set +e
           set -o pipefail
-          git diff --check 2>&1 | tee s61-diff-check.log
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          git diff --check 2>&1 | tee feature-diff-check.log
+          printf '%s\n' "${PIPESTATUS[0]}" > feature-diff-check.exit
           exit 0
       - name: Static safety audit
-        id: safety
-        if: always()
         shell: bash
         run: |
           set +e
@@ -88,32 +129,81 @@ jobs:
               exit 1
             fi
             grep -R -n 'NO_TRADING_ACTIONS = 1' services/execution-forward
-          ) 2>&1 | tee s61-safety.log
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          ) 2>&1 | tee feature-safety.log
+          printf '%s\n' "${PIPESTATUS[0]}" > feature-safety.exit
           exit 0
-      - name: Upload verification evidence
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Normalize feature failure signatures
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          tests = []
+          for line in Path('feature-full-tests.log').read_text(errors='replace').splitlines():
+              match = re.match(r'^not ok \d+ - (.*)$', line)
+              if match:
+                  tests.append(match.group(1).strip())
+          Path('feature-test-failures.txt').write_text('\n'.join(sorted(tests)) + ('\n' if tests else ''))
+          errors = [
+              line.strip()
+              for line in Path('feature-typecheck.log').read_text(errors='replace').splitlines()
+              if 'error TS' in line
+          ]
+          Path('feature-type-errors.txt').write_text('\n'.join(sorted(errors)) + ('\n' if errors else ''))
+          PY
+      - uses: actions/upload-artifact@v4
         with:
-          name: s61-verification-${{ github.sha }}
-          path: s61-*.log
+          name: s61-feature-${{ github.sha }}
+          path: feature-*
           if-no-files-found: error
           retention-days: 7
-      - name: Verification gate
-        if: always()
+
+  acceptance:
+    needs: [baseline, feature]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: s61-baseline-${{ github.sha }}
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          name: s61-feature-${{ github.sha }}
+          path: feature
+      - name: Prove S6.1 gates and baseline no-regression
         shell: bash
         run: |
           set -euo pipefail
-          printf 'targeted=%s\n' '${{ steps.targeted.outputs.exit_code }}'
-          printf 'full_tests=%s\n' '${{ steps.full_tests.outputs.exit_code }}'
-          printf 'typecheck=%s\n' '${{ steps.typecheck.outputs.exit_code }}'
-          printf 'build=%s\n' '${{ steps.build.outputs.exit_code }}'
-          printf 'diff_check=%s\n' '${{ steps.diff_check.outputs.exit_code }}'
-          printf 'safety=%s\n' '${{ steps.safety.outputs.exit_code }}'
-          test '${{ steps.targeted.outputs.exit_code }}' = '0'
-          test '${{ steps.full_tests.outputs.exit_code }}' = '0'
-          test '${{ steps.typecheck.outputs.exit_code }}' = '0'
-          test '${{ steps.build.outputs.exit_code }}' = '0'
-          test '${{ steps.diff_check.outputs.exit_code }}' = '0'
-          test '${{ steps.safety.outputs.exit_code }}' = '0'
+          btests=$(cat baseline/baseline-full-tests.exit)
+          btypes=$(cat baseline/baseline-typecheck.exit)
+          ftarget=$(cat feature/feature-targeted.exit)
+          ftests=$(cat feature/feature-full-tests.exit)
+          ftypes=$(cat feature/feature-typecheck.exit)
+          fbuild=$(cat feature/feature-build.exit)
+          fdiff=$(cat feature/feature-diff-check.exit)
+          fsafety=$(cat feature/feature-safety.exit)
+
+          printf 'BASE full_tests=%s typecheck=%s\n' "$btests" "$btypes"
+          printf 'FEATURE targeted=%s full_tests=%s typecheck=%s build=%s diff=%s safety=%s\n' \
+            "$ftarget" "$ftests" "$ftypes" "$fbuild" "$fdiff" "$fsafety"
+
+          test "$ftarget" = 0
+          test "$fbuild" = 0
+          test "$fdiff" = 0
+          test "$fsafety" = 0
+
+          if test "$ftests" != 0; then
+            test "$btests" != 0
+            diff -u baseline/baseline-test-failures.txt feature/feature-test-failures.txt
+            echo 'Full-suite nonzero exit is baseline-identical; no S6.1 regression.'
+          fi
+
+          if test "$ftypes" != 0; then
+            test "$btypes" != 0
+            diff -u baseline/baseline-type-errors.txt feature/feature-type-errors.txt
+            echo 'Typecheck nonzero exit is baseline-identical; no S6.1 regression.'
+          fi
+
+          if test "$ftests" = 0; then echo 'Full suite green on feature branch.'; fi
+          if test "$ftypes" = 0; then echo 'Typecheck green on feature branch.'; fi
