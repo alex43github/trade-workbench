@@ -81,7 +81,7 @@ jobs:
         run: |
           set +e
           set -o pipefail
-          node --experimental-strip-types --test tests/execution-forward-observer.test.mjs 2>&1 | tee feature-targeted.log
+          node --experimental-strip-types --test tests/execution-forward-observer.test.mjs tests/execution-forward-hardening.test.mjs 2>&1 | tee feature-targeted.log
           printf '%s\n' "${PIPESTATUS[0]}" > feature-targeted.exit
           exit 0
       - name: Full repository tests
