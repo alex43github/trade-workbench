@@ -13,6 +13,7 @@ import {
 import { ForwardSqliteStore } from "../lib/radar/execution-forward-persistence.ts";
 import { buildRecheck15mRecord } from "../lib/radar/execution-forward-watcher.ts";
 import { buildOutcomeRecord } from "../lib/radar/execution-forward-outcomes.ts";
+import { ExecutionForwardObserver } from "../lib/radar/execution-forward-observer.ts";
 import { runExecutionForwardCycle } from "../lib/radar/execution-forward-cycle.ts";
 
 const MINUTE = 60_000;
@@ -130,6 +131,8 @@ test("EDP snapshot conforms to frozen schema and is invariant to future candles"
   assert.equal(baseline.edp_price, 102);
   assert.deepEqual(baseline.queue_membership, ["EVENT_WATCH"]);
   assert.equal(baseline.stage5_historical_model_status, "RAW_FEATURE_ONLY");
+  assert.equal(Object.hasOwn(baseline, "p_opp"), false);
+  assert.equal(Object.hasOwn(baseline, "p_sev"), false);
 });
 
 test("missing causal feature remains null/DataGap and is never zero-filled", () => {
@@ -160,6 +163,19 @@ test("+15m recheck uses first completed eligible bar, conforms to schema, and ne
   assert.deepEqual(snapshot, before);
 });
 
+test("incomplete recheck metrics are forced to DATA_GAP rather than actionable", () => {
+  const snapshot = buildEdpSnapshot(baseInput());
+  const mature = buildRecheck15mRecord(
+    snapshot,
+    [closedBar(EDP_TIME + 15 * MINUTE, 103)],
+    EDP_TIME + 15 * MINUTE,
+    recheckMetrics({ logQvcont15: undefined }),
+  );
+  assert.equal(mature?.log_qvcont15, null);
+  assert.ok(mature?.data_gap.includes("log_qvcont15"));
+  assert.equal(mature?.stage6_review_state, "DATA_GAP");
+});
+
 test("SQLite persistence is append-only, dedupes reruns, and outcomes do not mutate snapshots", async () => {
   const directory = await mkdtemp(join(tmpdir(), "stage6-forward-"));
   const dbPath = join(directory, "forward.sqlite");
@@ -188,6 +204,48 @@ test("SQLite persistence is append-only, dedupes reruns, and outcomes do not mut
   }
 });
 
+test("observer freezes one EDP, dedupes reruns, and waits for a completed +15m bar", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "stage6-observer-"));
+  try {
+    const store = new ForwardSqliteStore(join(directory, "observer.sqlite"));
+    const observer = new ExecutionForwardObserver(store);
+    const first = observer.freezeEdp(baseInput());
+    const rerun = observer.freezeEdp(baseInput());
+    assert.equal(first.inserted, true);
+    assert.equal(rerun.inserted, false);
+    assert.equal(store.listEvents(first.snapshot.event_id).length, 1);
+
+    const early = observer.freezeRecheck({
+      eventId: first.snapshot.event_id,
+      now: EDP_TIME + 15 * MINUTE,
+      bars: [closedBar(EDP_TIME + 15 * MINUTE, 103, { closed: false })],
+      metrics: recheckMetrics(),
+    });
+    assert.equal(early.inserted, false);
+    assert.equal(early.reason, "WAITING_FOR_CLOSED_15M");
+
+    const mature = observer.freezeRecheck({
+      eventId: first.snapshot.event_id,
+      now: EDP_TIME + 20 * MINUTE,
+      bars: [closedBar(EDP_TIME + 20 * MINUTE, 104)],
+      metrics: recheckMetrics(),
+    });
+    assert.equal(mature.inserted, true);
+    assert.equal(store.listEvents(first.snapshot.event_id).length, 2);
+    const duplicate = observer.freezeRecheck({
+      eventId: first.snapshot.event_id,
+      now: EDP_TIME + 20 * MINUTE,
+      bars: [closedBar(EDP_TIME + 20 * MINUTE, 104)],
+      metrics: recheckMetrics(),
+    });
+    assert.equal(duplicate.inserted, false);
+    assert.equal(duplicate.reason, "DUPLICATE");
+    store.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("Stage6 persistence source contains no destructive mutation SQL", async () => {
   const source = await readFile(new URL("../lib/radar/execution-forward-persistence.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /\bUPDATE\b|\bDELETE\b|\bREPLACE\b/i);
@@ -199,6 +257,7 @@ test("Stage6 modules contain no order-routing imports or mutation endpoint strin
     "../lib/radar/execution-forward-persistence.ts",
     "../lib/radar/execution-forward-watcher.ts",
     "../lib/radar/execution-forward-outcomes.ts",
+    "../lib/radar/execution-forward-observer.ts",
     "../lib/radar/execution-forward-cycle.ts",
   ];
   for (const path of paths) {
