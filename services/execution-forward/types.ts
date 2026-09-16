@@ -32,6 +32,7 @@ export interface RecheckSnapshot {
     | "POST_EVENT_REPRICE_RISK_COMPRESSION"
     | "RECHECK_CLASSIFIER_UNAVAILABLE"
     | "RECHECK_DATA_INCOMPLETE";
+  state: "ACTIONABLE_REVIEW_CANDIDATE" | "RECHECK_FAILED";
   scorerStatus: "UNAVAILABLE_ARTIFACT";
   tradingPermission: false;
   createdAt: string;

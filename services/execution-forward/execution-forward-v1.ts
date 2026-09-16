@@ -117,6 +117,10 @@ export function createRecheckSnapshot(input: Record<string, unknown>): RecheckSn
     rawFeatures: cloneJsonObject(input.rawFeatures ?? {}, "rawFeatures"),
     dataCompleteness: cloneJsonObject(input.dataCompleteness ?? {}, "dataCompleteness"),
     classification,
+    state:
+      classification === "POST_EVENT_REPRICE_RISK_COMPRESSION"
+        ? "ACTIONABLE_REVIEW_CANDIDATE"
+        : "RECHECK_FAILED",
     scorerStatus: SCORER_STATUS,
     tradingPermission: false,
     createdAt: createdAtOrNow(input.createdAt),
