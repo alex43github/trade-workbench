@@ -36,7 +36,7 @@ export interface ForwardRecheck15mRecord {
   reclaim_or_acceptance_context: string | null;
   invalidation_reference: number | null;
   stage6_review_state: Stage6ReviewState;
-  data_gap: string[];
+  data_gap: readonly string[];
 }
 
 function finiteOrNull(value: unknown) {
