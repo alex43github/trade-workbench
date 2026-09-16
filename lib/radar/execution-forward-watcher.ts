@@ -71,6 +71,8 @@ export function buildRecheck15mRecord(
   if (adverse15 === null) gaps.add("adverse15");
   if (logQvcont15 === null) gaps.add("log_qvcont15");
   if (metrics.accept15 === undefined || metrics.accept15 === null) gaps.add("accept15");
+  const dataGap = [...gaps].sort();
+  const reviewState: Stage6ReviewState = dataGap.length > 0 ? "DATA_GAP" : metrics.stage6ReviewState;
 
   return Object.freeze({
     schema_version: "FORWARD_EXECUTION_SNAPSHOT_V1",
@@ -91,7 +93,7 @@ export function buildRecheck15mRecord(
     structure_state: metrics.structureState,
     reclaim_or_acceptance_context: metrics.reclaimOrAcceptanceContext ?? null,
     invalidation_reference: finiteOrNull(metrics.invalidationReference),
-    stage6_review_state: metrics.stage6ReviewState,
-    data_gap: Object.freeze([...gaps].sort()),
+    stage6_review_state: reviewState,
+    data_gap: Object.freeze(dataGap),
   });
 }
