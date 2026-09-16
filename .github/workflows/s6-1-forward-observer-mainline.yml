@@ -1,0 +1,78 @@
+name: S6.1 Forward Observer Mainline
+
+on:
+  push:
+    branches:
+      - feature/s6-1-forward-observer-mainline
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/execution-forward/**'
+      - 'tests/execution-forward-*.test.mjs'
+      - '.github/workflows/s6-1-forward-observer-mainline.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6f4e9b8980ceddd947c44fac0715228104f4e4f3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - run: npm ci
+      - name: Baseline full repository tests
+        run: npm test
+      - name: Baseline typecheck
+        run: npx tsc --noEmit
+
+  feature:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - run: npm ci
+      - name: Targeted S6.1 tests
+        run: node --test tests/execution-forward-observer.test.mjs tests/execution-forward-hardening.test.mjs
+      - name: Full repository tests
+        run: npm test
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Final build
+        run: npm run build
+      - name: Diff check
+        run: git diff --check
+      - name: Static safety audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d services/execution-forward
+          if grep -R -nE 'binance-gateway|placeOrder|submitOrder|createOrder|services/structure-radar/main' services/execution-forward; then
+            echo 'Forbidden trading/runtime dependency found' >&2
+            exit 1
+          fi
+          grep -R -n 'NO_TRADING_ACTIONS = 1' services/execution-forward
+
+  acceptance:
+    needs: [baseline, feature]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prove S6.1 gates and baseline no-regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test '${{ needs.baseline.result }}' = 'success'
+          test '${{ needs.feature.result }}' = 'success'
+          echo 'S6.1 mainline acceptance passed.'
