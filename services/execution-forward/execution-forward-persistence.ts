@@ -220,7 +220,8 @@ export class ExecutionForwardJsonlStore {
   async appendEdp(snapshot: EdpSnapshot): Promise<{ appended: boolean }> {
     const records = await this.load();
     const sameEvent = records.find(
-      (row) => row.kind === "EDP" && row.snapshot.eventId === snapshot.eventId,
+      (row): row is Extract<ForwardRecord, { kind: "EDP" }> =>
+        row.kind === "EDP" && row.snapshot.eventId === snapshot.eventId,
     );
     if (sameEvent) {
       if (sameEdpLogicalSnapshot(sameEvent.snapshot, snapshot)) return { appended: false };
