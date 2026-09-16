@@ -21,58 +21,77 @@ jobs:
       - run: npm ci
       - name: Targeted S6.1 tests
         id: targeted
-        continue-on-error: true
         shell: bash
         run: |
+          set +e
           set -o pipefail
           node --experimental-strip-types --test tests/execution-forward-observer.test.mjs 2>&1 | tee s61-targeted.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
       - name: Full repository tests
         id: full_tests
         if: always()
-        continue-on-error: true
         shell: bash
         run: |
+          set +e
           set -o pipefail
           NODE_OPTIONS=--experimental-strip-types npm test 2>&1 | tee s61-full-tests.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
       - name: Typecheck
         id: typecheck
         if: always()
-        continue-on-error: true
         shell: bash
         run: |
+          set +e
           set -o pipefail
           npx tsc --noEmit 2>&1 | tee s61-typecheck.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
       - name: Final build
         id: build
         if: always()
-        continue-on-error: true
         shell: bash
         run: |
+          set +e
           set -o pipefail
           npm run build 2>&1 | tee s61-build.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
       - name: Diff check
         id: diff_check
         if: always()
-        continue-on-error: true
         shell: bash
         run: |
+          set +e
           set -o pipefail
           git diff --check 2>&1 | tee s61-diff-check.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
       - name: Static safety audit
         id: safety
         if: always()
-        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
-          {
+          set +e
+          set -o pipefail
+          (
+            set -euo pipefail
             test -d services/execution-forward
             if grep -R -nE 'binance-gateway|placeOrder|submitOrder|createOrder|services/structure-radar/main' services/execution-forward; then
               echo 'Forbidden trading/runtime dependency found' >&2
               exit 1
             fi
             grep -R -n 'NO_TRADING_ACTIONS = 1' services/execution-forward
-          } 2>&1 | tee s61-safety.log
+          ) 2>&1 | tee s61-safety.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -86,15 +105,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf 'targeted=%s\n' '${{ steps.targeted.outcome }}'
-          printf 'full_tests=%s\n' '${{ steps.full_tests.outcome }}'
-          printf 'typecheck=%s\n' '${{ steps.typecheck.outcome }}'
-          printf 'build=%s\n' '${{ steps.build.outcome }}'
-          printf 'diff_check=%s\n' '${{ steps.diff_check.outcome }}'
-          printf 'safety=%s\n' '${{ steps.safety.outcome }}'
-          test '${{ steps.targeted.outcome }}' = success
-          test '${{ steps.full_tests.outcome }}' = success
-          test '${{ steps.typecheck.outcome }}' = success
-          test '${{ steps.build.outcome }}' = success
-          test '${{ steps.diff_check.outcome }}' = success
-          test '${{ steps.safety.outcome }}' = success
+          printf 'targeted=%s\n' '${{ steps.targeted.outputs.exit_code }}'
+          printf 'full_tests=%s\n' '${{ steps.full_tests.outputs.exit_code }}'
+          printf 'typecheck=%s\n' '${{ steps.typecheck.outputs.exit_code }}'
+          printf 'build=%s\n' '${{ steps.build.outputs.exit_code }}'
+          printf 'diff_check=%s\n' '${{ steps.diff_check.outputs.exit_code }}'
+          printf 'safety=%s\n' '${{ steps.safety.outputs.exit_code }}'
+          test '${{ steps.targeted.outputs.exit_code }}' = '0'
+          test '${{ steps.full_tests.outputs.exit_code }}' = '0'
+          test '${{ steps.typecheck.outputs.exit_code }}' = '0'
+          test '${{ steps.build.outputs.exit_code }}' = '0'
+          test '${{ steps.diff_check.outputs.exit_code }}' = '0'
+          test '${{ steps.safety.outputs.exit_code }}' = '0'
