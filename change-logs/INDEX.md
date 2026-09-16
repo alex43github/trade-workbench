@@ -4,6 +4,7 @@
 
 | REQ ID | 需求 | 状态 | 最后更新时间 | 日志 |
 |---|---|---|---|---|
+| REQ-20260916-1001-s6-1-forward-observer | S6.1：research-only Forward Validation observer，append-only 因果快照与未来结果 | VERIFIED_LOCAL | 2026-09-16 10:25 | [打开日志](REQ-20260916-1001-s6-1-forward-observer.md) |
 | REQ-20260913-1223-trend-radar | TREND-RADAR-01：小时强趋势雷达、Sticky Watchlist 与 Bark 通知 | BLOCKED | 2026-09-13 12:23 | [打开日志](REQ-20260913-1223-trend-radar.md) |
 | REQ-20260913-1216-squeeze-radar | SQZ-RADAR-01：研究版轧空/轧多雷达与 Bark 路由 | BLOCKED | 2026-09-13 12:18 | [打开日志](REQ-20260913-1216-squeeze-radar.md) |
 | REQ-20260908-1258-telegram-watchlist-scan | 修复 Telegram 响应并实现分区自选币、低频 1h/4h 扫描 | BLOCKED | 2026-09-08 12:58 | [打开日志](REQ-20260908-1258-telegram-watchlist-scan.md) |
