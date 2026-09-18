@@ -126,3 +126,28 @@ test("stablecoin USDT perpetuals are excluded before ranking and API fetch", asy
   assert.equal(result.c.some((row) => row.symbol === "USDCUSDT"), false);
   assert.equal(result.ai.some((row) => row.symbol === "USDCUSDT"), false);
 });
+
+
+test("D-class keeps LONG top20 and SHORT top10 by raw 1H MA30 slope", async () => {
+  const now = new Date("2026-09-14T04:19:00.000Z");
+  const longs = Array.from({ length: 25 }, (_, i) => `L${String(i).padStart(2, "0")}USDT`);
+  const shorts = Array.from({ length: 15 }, (_, i) => `Q${String(i).padStart(2, "0")}USDT`);
+  const symbols = [...longs, ...shorts];
+  const result = await runMa30FullMarketScan({
+    now,
+    fetchers: {
+      listSymbols: async () => symbols,
+      fetchClosedBars: async (symbol) => {
+        const li = longs.indexOf(symbol);
+        const si = shorts.indexOf(symbol);
+        return closedBars({ now, rate: li >= 0 ? 0.0002 + li * 0.00003 : -(0.0002 + si * 0.00003) });
+      },
+    },
+  });
+  assert.equal(result.dLong.length, 20);
+  assert.equal(result.dShort.length, 10);
+  assert.ok(result.dLong.every((row) => row.slope20 > 0 && row.direction === "LONG"));
+  assert.ok(result.dShort.every((row) => row.slope20 < 0 && row.direction === "SHORT"));
+  assert.ok(result.dLong[0].slope20 >= result.dLong.at(-1).slope20);
+  assert.ok(result.dShort[0].slope20 <= result.dShort.at(-1).slope20);
+});
