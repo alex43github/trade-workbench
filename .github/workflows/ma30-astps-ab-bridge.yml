@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/stablecoin-exclusion-ab-model-bridge
+      - feat/cd-focus-pool-strongtrend-discovery
   workflow_dispatch:
 
 jobs:
@@ -28,6 +29,8 @@ jobs:
           tests/ma30-astps-bridge.test.mjs
           tests/ma30-production-cycle.test.mjs
           tests/ma30-production-notifications.test.mjs
+          tests/atr-band-lifecycle-snapshot.test.mjs
+          tests/watchlist-persistence.test.mjs
       - name: Production build
         run: npm run build
       - name: Diff check
