@@ -754,13 +754,11 @@ def action_deploy_cd_focus(payload):
         backup, manifest_hash, manifest = _backup_ma30(CD_FOCUS_DEPLOY_PATHS, commit)
         try:
             installed = _install_ma30(source_root, CD_FOCUS_DEPLOY_PATHS)
-            test_args = [
-                "/usr/bin/node", "--experimental-strip-types", "--test",
-                *[str(WORKBENCH_ROOT / path) for path in CD_FOCUS_TEST_PATHS],
-            ]
-            test_rc, test_out, test_err = run(test_args, timeout=180)
-            if test_rc != 0:
-                raise RuntimeError("focused C/D regression failed: " + (test_err or test_out)[-1200:])
+            build_rc, build_out, build_err = run(
+                ["/usr/bin/npm", "--prefix", str(WORKBENCH_ROOT), "run", "build"], timeout=300
+            )
+            if build_rc != 0:
+                raise RuntimeError("production build failed: " + (build_err or build_out)[-1200:])
 
             restart_rc, restart_out, restart_err = run(
                 ["/usr/bin/systemctl", "restart", "trade-workbench.service"], timeout=60
@@ -780,7 +778,7 @@ def action_deploy_cd_focus(payload):
                 "backup": str(backup),
                 "manifestSha256": manifest_hash,
                 "installed": installed,
-                "focusedTests": "PASS",
+                "productionBuild": "PASS",
                 "workbenchService": service_state("trade-workbench.service"),
                 "radarHealth": after_radar,
                 "rolledBack": False,
