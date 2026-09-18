@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import {
@@ -24,6 +25,16 @@ function cRow(symbol, {
 } = {}) {
   return { symbol, direction, count, slope20, extensionAtr };
 }
+
+test("Bark dry-run does not statically load the TypeScript delivery chain", () => {
+  const source = fs.readFileSync(new URL("../scripts/focus-pool-v22-cd-bark.ts", import.meta.url), "utf8");
+  const dryRunGate = source.indexOf('if (process.env.DRY_RUN === "1")');
+  assert.notEqual(dryRunGate, -1);
+  const preGate = source.slice(0, dryRunGate);
+  assert.doesNotMatch(preGate, /from ["'][^"']*local-d1\.ts["']/);
+  assert.doesNotMatch(preGate, /from ["'][^"']*notifications\/bark\.ts["']/);
+  assert.doesNotMatch(preGate, /\bas\s+(unknown|D1Database)\b/);
+});
 
 test("C admission rejects streak 2 and accepts streak 3", () => {
   assert.deepEqual(

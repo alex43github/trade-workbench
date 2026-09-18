@@ -1,15 +1,83 @@
+// @ts-nocheck
 import fs from "node:fs";
 
-import {
-  getLocalD1,
-} from "../lib/local-d1.ts";
-import {
-  notifyBark,
-} from "../lib/notifications/bark.ts";
-import {
-  buildCBarkBody,
-  buildDBarkBody,
-} from "../lib/radar/focus-pool-v22-bark.ts";
+/**
+ * @param {unknown} value
+ * @param {number} [digits=6]
+ * @returns {string}
+ */
+function numberText(value, digits = 6) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(digits) : "-";
+}
+
+/**
+ * @param {string} title
+ * @param {Array<Record<string, any>>} rows
+ * @returns {string[]}
+ */
+function cBlock(title, rows) {
+  return [
+    title,
+    ...(rows.length
+      ? rows.map((row, index) => [
+          "Rank " + (index + 1),
+          "Symbol " + String(row.symbol),
+          "Slope20 " + numberText(row.slope20),
+          "Streak " + String(row.cCount ?? row.count ?? row.streak ?? 0),
+          "ExtensionATR " + numberText(row.extensionAtr, 3),
+        ].join(" | "))
+      : ["无"]),
+  ];
+}
+
+/**
+ * @param {string} title
+ * @param {Array<Record<string, any>>} rows
+ * @returns {string[]}
+ */
+function dBlock(title, rows) {
+  return [
+    title,
+    ...(rows.length
+      ? rows.map((row, index) => [
+          "Rank " + (index + 1),
+          "Symbol " + String(row.symbol),
+          "Direction " + String(row.direction),
+          "Slope20 " + numberText(row.slope20 ?? row.metric?.slope20),
+        ].join(" | "))
+      : ["无"]),
+  ];
+}
+
+/**
+ * @param {Array<Record<string, any>>} c5
+ * @param {Array<Record<string, any>>} c3
+ * @param {Array<Record<string, any>>} c1
+ * @returns {string}
+ */
+function buildCBarkBody(c5, c3, c1) {
+  return [
+    ...cBlock("C5 Top10", c5.slice(0, 10)),
+    "",
+    ...cBlock("C3 Top10", c3.slice(0, 10)),
+    "",
+    ...cBlock("C1 Top10", c1.slice(0, 10)),
+  ].join("\n");
+}
+
+/**
+ * @param {Array<Record<string, any>>} dLong
+ * @param {Array<Record<string, any>>} dShort
+ * @returns {string}
+ */
+function buildDBarkBody(dLong, dShort) {
+  return [
+    ...dBlock("D-LONG Top10", dLong.slice(0, 10)),
+    "",
+    ...dBlock("D-SHORT Top10", dShort.slice(0, 10)),
+  ].join("\n");
+}
 
 const FILE =
   "/var/lib/trade-workbench/structure-radar/hourly-focus-pool-v22.json";
@@ -56,12 +124,16 @@ if (process.env.DRY_RUN === "1") {
   process.exit(0);
 }
 
+const { getLocalD1 } = await import("../lib/local-d1.ts");
+const { notifyBark } = await import("../lib/notifications/bark.ts");
+
 const db =
   getLocalD1();
 
 const cDelivery =
   await notifyBark({
-    db: db as unknown as D1Database,
+    // @ts-expect-error LocalD1 is the runtime-compatible D1 adapter.
+    db,
     key: "radar:focus-v22-c:" + bucket,
     title: cTitle,
     body: cBody,
@@ -69,7 +141,8 @@ const cDelivery =
 
 const dDelivery =
   await notifyBark({
-    db: db as unknown as D1Database,
+    // @ts-expect-error LocalD1 is the runtime-compatible D1 adapter.
+    db,
     key: "radar:focus-v22-d:" + bucket,
     title: dTitle,
     body: dBody,
