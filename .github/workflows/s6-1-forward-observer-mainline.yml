@@ -1,0 +1,196 @@
+name: S6.1 Forward Observer Mainline
+
+on:
+  push:
+    branches:
+      - feature/s6-1-forward-observer-mainline
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/execution-forward/**'
+      - 'tests/execution-forward-*.test.mjs'
+      - '.github/workflows/s6-1-forward-observer-mainline.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6f4e9b8980ceddd947c44fac0715228104f4e4f3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+          cache: npm
+      - run: npm ci
+      - name: Baseline full repository tests
+        shell: bash
+        run: |
+          set +e
+          npm test 2>&1 | tee baseline-test.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'not ok [0-9]+ - ' baseline-test.log \
+            | sed -E 's/^.*not ok [0-9]+ - //' \
+            | sed -E 's/\r$//' \
+            | sort -u > baseline-failures.txt || true
+          printf '%s\n' "$status" > baseline-test-exit.txt
+          echo "Baseline npm test exit=$status; unique failures=$(wc -l < baseline-failures.txt)"
+      - name: Upload baseline failure manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-test-failures
+          path: |
+            baseline-failures.txt
+            baseline-test-exit.txt
+          if-no-files-found: error
+      - name: Baseline typecheck
+        shell: bash
+        run: |
+          set +e
+          npx tsc --noEmit 2>&1 | tee baseline-typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'error TS[0-9]+:' baseline-typecheck.log | sort -u > baseline-typecheck-errors.txt || true
+          printf '%s\n' "$status" > baseline-typecheck-exit.txt
+          echo "Baseline typecheck exit=$status; unique errors=$(wc -l < baseline-typecheck-errors.txt)"
+      - name: Upload baseline typecheck manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-typecheck-errors
+          path: |
+            baseline-typecheck-errors.txt
+            baseline-typecheck-exit.txt
+          if-no-files-found: error
+
+  feature:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+          cache: npm
+      - run: npm ci
+      - name: Targeted S6.1 tests
+        run: node --test tests/execution-forward-observer.test.mjs tests/execution-forward-hardening.test.mjs
+      - name: Full repository tests
+        shell: bash
+        run: |
+          set +e
+          npm test 2>&1 | tee feature-test.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'not ok [0-9]+ - ' feature-test.log \
+            | sed -E 's/^.*not ok [0-9]+ - //' \
+            | sed -E 's/\r$//' \
+            | sort -u > feature-failures.txt || true
+          printf '%s\n' "$status" > feature-test-exit.txt
+          echo "Feature npm test exit=$status; unique failures=$(wc -l < feature-failures.txt)"
+      - name: Upload feature failure manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-test-failures
+          path: |
+            feature-failures.txt
+            feature-test-exit.txt
+          if-no-files-found: error
+      - name: Typecheck
+        shell: bash
+        run: |
+          set +e
+          npx tsc --noEmit 2>&1 | tee feature-typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'error TS[0-9]+:' feature-typecheck.log | sort -u > feature-typecheck-errors.txt || true
+          printf '%s\n' "$status" > feature-typecheck-exit.txt
+          echo "Feature typecheck exit=$status; unique errors=$(wc -l < feature-typecheck-errors.txt)"
+      - name: Upload feature typecheck manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-typecheck-errors
+          path: |
+            feature-typecheck-errors.txt
+            feature-typecheck-exit.txt
+          if-no-files-found: error
+      - name: Final build
+        run: npm run build
+      - name: Diff check
+        run: git diff --check
+      - name: Static safety audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d services/execution-forward
+          if grep -R -nE 'binance-gateway|placeOrder|submitOrder|createOrder|services/structure-radar/main' services/execution-forward; then
+            echo 'Forbidden trading/runtime dependency found' >&2
+            exit 1
+          fi
+          grep -R -n 'NO_TRADING_ACTIONS = 1' services/execution-forward
+
+  acceptance:
+    needs: [baseline, feature]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require baseline and feature gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test '${{ needs.baseline.result }}' = 'success'
+          test '${{ needs.feature.result }}' = 'success'
+      - name: Download baseline failure manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-test-failures
+          path: baseline
+      - name: Download feature failure manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: feature-test-failures
+          path: feature
+      - name: Download baseline typecheck manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-typecheck-errors
+          path: baseline-typecheck
+      - name: Download feature typecheck manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: feature-typecheck-errors
+          path: feature-typecheck
+      - name: Prove no new full-suite failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          sort -u baseline/baseline-failures.txt > baseline.sorted
+          sort -u feature/feature-failures.txt > feature.sorted
+          comm -13 baseline.sorted feature.sorted > new-failures.txt
+          if test -s new-failures.txt; then
+            echo 'S6.1 introduced new failing full-suite subtests:' >&2
+            cat new-failures.txt >&2
+            exit 1
+          fi
+          echo "Baseline known failures: $(wc -l < baseline.sorted)"
+          echo "Feature known failures:  $(wc -l < feature.sorted)"
+      - name: Prove no new typecheck errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          sort -u baseline-typecheck/baseline-typecheck-errors.txt > baseline-typecheck.sorted
+          sort -u feature-typecheck/feature-typecheck-errors.txt > feature-typecheck.sorted
+          comm -13 baseline-typecheck.sorted feature-typecheck.sorted > new-typecheck-errors.txt
+          if test -s new-typecheck-errors.txt; then
+            echo 'S6.1 introduced new TypeScript errors:' >&2
+            cat new-typecheck-errors.txt >&2
+            exit 1
+          fi
+          echo "Baseline known type errors: $(wc -l < baseline-typecheck.sorted)"
+          echo "Feature known type errors:  $(wc -l < feature-typecheck.sorted)"
+          echo 'S6.1 targeted tests, build, safety audit, no-new-test-failure and no-new-type-error checks passed.'
