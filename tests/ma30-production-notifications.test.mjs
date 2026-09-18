@@ -113,6 +113,7 @@ test("A/B Bark identifies production-model validation evidence", () => {
         runtimeVersion: "ASTPS_V3_LR_RUNTIME_V1",
         modelVersion: "ASTPS V3-LR / Monster Squeeze V1.1-LR",
         source: "STRUCTURE_RADAR_CONSENSUS",
+        status: "VALIDATED_LONG",
         alertPolicy: "FULL_PLAN",
         grade: "4/4",
         support: 4,
@@ -134,4 +135,38 @@ test("A/B Bark identifies production-model validation evidence", () => {
   assert.equal(groups.length, 1);
   assert.equal(groups[0].title, "MA30 A组·进化模型｜0914-10:00");
   assert.match(groups[0].body, /模型4\/4·完整计划·已确认/);
+});
+
+
+test("A/B Bark labels incomplete consensus as pending deep validation", () => {
+  const pending = {
+    ...current,
+    a: [{
+      ...current.a[0],
+      modelValidation: {
+        runtimeVersion: "ASTPS_V3_LR_RUNTIME_V1",
+        modelVersion: "ASTPS V3-LR / Monster Squeeze V1.1-LR",
+        source: "STRUCTURE_RADAR_CONSENSUS",
+        status: "PENDING_DEEP_VALIDATION",
+        alertPolicy: "MECHANICAL_ONLY",
+        grade: "INCOMPLETE",
+        support: 0,
+        oppose: 0,
+        signalState: "CONFIRMED",
+        signalTimeframe: "1h",
+        signalSetup: "TRENDLINE_BREAKOUT",
+        lastProcessedBarTime: 2,
+        detectedAt: 1,
+      },
+    }],
+  };
+  const groups = buildMa30LifecycleBarkGroups({
+    current: pending,
+    events: [event()],
+    scanBucket: "2026-09-14T10",
+    bjtHour: 10,
+  });
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].title, "MA30 A组·进化模型｜0914-10:00");
+  assert.match(groups[0].body, /模型待深验·结构确认/);
 });
