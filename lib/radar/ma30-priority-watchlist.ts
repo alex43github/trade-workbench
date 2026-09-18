@@ -3,7 +3,7 @@ import { isStablecoinUsdtPerpetual } from "./ma30-universe.ts";
 export const MA30_PRIORITY_TTL_MS = 8 * 60 * 60 * 1000;
 
 export type Ma30PriorityDirection = "LONG" | "SHORT";
-export type Ma30PrioritySource = "AI" | "C" | "SHORT" | "A" | "B";
+export type Ma30PrioritySource = "AI" | "C" | "SHORT" | "D_LONG" | "D_SHORT" | "A" | "B";
 
 export type Ma30PriorityCandidate = {
   symbol: string;
@@ -28,10 +28,12 @@ export type Ma30PriorityScanLike = {
   c: readonly ScanRow[];
   shorts: readonly ScanRow[];
   ai: readonly AiRow[];
+  dLong?: readonly ScanRow[];
+  dShort?: readonly ScanRow[];
 };
 
 const ELIGIBLE_AB_LONG_STAGES = new Set(["STEADY_UPTREND", "EARLY_ACCELERATION", "PERSISTENT_ACCELERATION"]);
-const SOURCE_ORDER: readonly Ma30PrioritySource[] = ["AI", "C", "SHORT", "A", "B"];
+const SOURCE_ORDER: readonly Ma30PrioritySource[] = ["AI", "C", "SHORT", "D_LONG", "D_SHORT", "A", "B"];
 
 function key(symbol: string, direction: Ma30PriorityDirection) {
   return `${symbol}:${direction}`;
@@ -92,6 +94,24 @@ export function buildMa30PriorityCandidates(scan: Ma30PriorityScanLike, nowMs: n
     row.stage = item.stage ?? row.stage;
   }
 
+
+  // D-class Focus Pool: keep the wider slope leaderboards under active watch.
+  // Bark displays only top10 LONG/SHORT, while the watcher keeps LONG top20
+  // and SHORT top10 as requested.
+  for (const item of (scan.dLong ?? []).slice(0, 20)) {
+    const row = ensureCandidate(map, item.symbol, "LONG", nowMs);
+    if (!row) continue;
+    addSource(row, "D_LONG");
+    row.stage = item.stage ?? row.stage;
+  }
+
+  for (const item of (scan.dShort ?? []).slice(0, 10)) {
+    const row = ensureCandidate(map, item.symbol, "SHORT", nowMs);
+    if (!row) continue;
+    addSource(row, "D_SHORT");
+    row.stage = item.stage ?? row.stage;
+  }
+
   for (const item of scan.a) {
     if (!ELIGIBLE_AB_LONG_STAGES.has(item.stage ?? "")) continue;
     const row = ensureCandidate(map, item.symbol, "LONG", nowMs);
@@ -127,8 +147,9 @@ export function buildMa30PriorityCandidates(scan: Ma30PriorityScanLike, nowMs: n
     if (row.sources.includes("AI")) return 0;
     if (row.sources.includes("C")) return 1;
     if (row.sources.includes("SHORT")) return 2;
-    if (row.sources.includes("A")) return 3;
-    return 4;
+    if (row.sources.includes("D_LONG") || row.sources.includes("D_SHORT")) return 3;
+    if (row.sources.includes("A")) return 4;
+    return 5;
   };
 
   return selected.sort((left, right) =>
