@@ -134,7 +134,7 @@ test("A/B Bark identifies production-model validation evidence", () => {
   });
   assert.equal(groups.length, 1);
   assert.equal(groups[0].title, "MA30 A组·进化模型｜0914-10:00");
-  assert.match(groups[0].body, /模型4\/4·完整计划·已确认/);
+  assert.match(groups[0].body, /模型4\/4·完整计划·结构确认/);
 });
 
 
