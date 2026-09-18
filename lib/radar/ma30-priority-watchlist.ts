@@ -1,3 +1,5 @@
+import { isStablecoinUsdtPerpetual } from "./ma30-scanner.ts";
+
 export const MA30_PRIORITY_TTL_MS = 8 * 60 * 60 * 1000;
 
 export type Ma30PriorityDirection = "LONG" | "SHORT";
@@ -41,7 +43,8 @@ function ensureCandidate(
   direction: Ma30PriorityDirection,
   nowMs: number,
 ) {
-  const normalized = symbol.trim();
+  const normalized = symbol.trim().toUpperCase();
+  if (isStablecoinUsdtPerpetual(normalized)) return null;
   const candidateKey = key(normalized, direction);
   let row = map.get(candidateKey);
   if (!row) {
@@ -68,6 +71,7 @@ export function buildMa30PriorityCandidates(scan: Ma30PriorityScanLike, nowMs: n
 
   for (const item of scan.ai) {
     const row = ensureCandidate(map, item.symbol, item.direction, nowMs);
+    if (!row) continue;
     addSource(row, "AI");
     row.ranks.ai = item.aiRank ?? null;
     row.stage = item.direction === "LONG" ? (item.longStage ?? row.stage) : (item.shortStage ?? row.stage);
@@ -75,6 +79,7 @@ export function buildMa30PriorityCandidates(scan: Ma30PriorityScanLike, nowMs: n
 
   for (const item of scan.c) {
     const row = ensureCandidate(map, item.symbol, "LONG", nowMs);
+    if (!row) continue;
     addSource(row, "C");
     row.ranks.c = item.rank ?? null;
     row.stage = item.stage ?? row.stage;
@@ -82,6 +87,7 @@ export function buildMa30PriorityCandidates(scan: Ma30PriorityScanLike, nowMs: n
 
   for (const item of scan.shorts) {
     const row = ensureCandidate(map, item.symbol, "SHORT", nowMs);
+    if (!row) continue;
     addSource(row, "SHORT");
     row.stage = item.stage ?? row.stage;
   }
@@ -89,6 +95,7 @@ export function buildMa30PriorityCandidates(scan: Ma30PriorityScanLike, nowMs: n
   for (const item of scan.a) {
     if (!ELIGIBLE_AB_LONG_STAGES.has(item.stage ?? "")) continue;
     const row = ensureCandidate(map, item.symbol, "LONG", nowMs);
+    if (!row) continue;
     addSource(row, "A");
     row.ranks.a = item.rank ?? null;
     row.stage = item.stage ?? row.stage;
@@ -97,6 +104,7 @@ export function buildMa30PriorityCandidates(scan: Ma30PriorityScanLike, nowMs: n
   for (const item of scan.b) {
     if (!ELIGIBLE_AB_LONG_STAGES.has(item.stage ?? "")) continue;
     const row = ensureCandidate(map, item.symbol, "LONG", nowMs);
+    if (!row) continue;
     addSource(row, "B");
     row.ranks.b = item.bRank ?? item.rank ?? null;
     row.stage = item.stage ?? row.stage;
