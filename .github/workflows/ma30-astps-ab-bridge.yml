@@ -1,0 +1,32 @@
+name: MA30 stablecoin + ASTPS A/B bridge
+
+on:
+  push:
+    branches:
+      - fix/stablecoin-exclusion-ab-model-bridge
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.0"
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Focused MA30 regressions
+        run: >-
+          node --experimental-strip-types --test
+          tests/ma30-scanner.test.mjs
+          tests/ma30-priority-watchlist.test.mjs
+          tests/ma30-astps-bridge.test.mjs
+          tests/ma30-production-cycle.test.mjs
+          tests/ma30-production-notifications.test.mjs
+      - name: Production build
+        run: npm run build
+      - name: Diff check
+        run: git diff --check HEAD^ HEAD
