@@ -14,6 +14,13 @@ if (result.status === "SKIPPED_DUPLICATE") {
 
 console.log(`NOTIFICATION_MODE=${result.notifications}`);
 console.log(`SCAN_STATUS=${result.scan.status}`);
+console.log(`EXCLUDED_STABLECOINS=${result.scan.coverage.excludedStablecoins ?? 0}`);
+console.log(`ASTPS_STATUS=${result.astpsValidation.status}`);
+console.log(`ASTPS_MODEL=${result.astpsValidation.modelVersion}`);
+console.log(`ASTPS_CANDIDATES=${result.astpsValidation.candidateSymbols}`);
+console.log(`ASTPS_VALIDATED=${result.astpsValidation.validatedSymbols}`);
+console.log(`ASTPS_A=${result.astpsValidation.selectedA}`);
+console.log(`ASTPS_B=${result.astpsValidation.selectedB}`);
 console.log(`UNIVERSE=${result.scan.coverage.universe}`);
 console.log(`FETCH_OK=${result.scan.coverage.fetchedSuccessfully}`);
 console.log(`SLOPE_OK=${result.scan.coverage.slopeQualified}`);
