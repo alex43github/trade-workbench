@@ -124,7 +124,7 @@ export function buildCLevelSelections(
   const focusRows: CFocusRow[] = [];
 
   for (const level of LEVELS) {
-    const base = rowsAtLevel(cdata, level);
+    const base = rowsAtLevel(cdata, level).filter((row) => metrics.has(row.symbol));
 
     const bark = [...base]
       .sort((a, b) =>
