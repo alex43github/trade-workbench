@@ -171,6 +171,34 @@ export async function runMa30FullMarketScan(options: {
 
   const ranking = rankMa30Universe(rows);
   const slopeRank = new Map(ranking.ranked.map((row, index) => [row.symbol, index + 1]));
+
+  // D-class is the raw 1H MA30 slope leaderboard. Keep a wider LONG pool
+  // (20) for Focus Pool monitoring while the Bark renderer shows only top 10.
+  const dLong = ranking.ranked
+    .filter((row) => row.slope20 > 0)
+    .slice(0, 20)
+    .map((row, index) => ({
+      rank: index + 1,
+      symbol: row.symbol,
+      direction: "LONG" as const,
+      stage: longBySymbol.get(row.symbol)?.stage ?? "STEADY_UPTREND",
+      slope20: row.slope20,
+      priceVsMa30Pct: ((row.currentPrice / row.ma30) - 1) * 100,
+    }));
+
+  const dShort = ranking.ranked
+    .filter((row) => row.slope20 < 0)
+    .slice()
+    .sort((left, right) => left.slope20 - right.slope20 || left.symbol.localeCompare(right.symbol))
+    .slice(0, 10)
+    .map((row, index) => ({
+      rank: index + 1,
+      symbol: row.symbol,
+      direction: "SHORT" as const,
+      stage: shortBySymbol.get(row.symbol)?.stage ?? "STEADY_DOWNTREND",
+      slope20: row.slope20,
+      priceVsMa30Pct: ((row.currentPrice / row.ma30) - 1) * 100,
+    }));
   const aRank = new Map(ranking.aTop10.map((row, index) => [row.symbol, index + 1]));
 
   const a = ranking.aTop10.map((row, index) => ({
@@ -311,6 +339,8 @@ export async function runMa30FullMarketScan(options: {
       failed: failures.length,
     },
     retriedSymbols,
+    dLong,
+    dShort,
     a,
     slopeTop20: ranking.slopeTop20.map((row, index) => ({
       rank: index + 1,
