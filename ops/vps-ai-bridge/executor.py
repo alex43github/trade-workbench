@@ -12,7 +12,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V4"
+VERSION = "VPS_BRIDGE_EXECUTOR_V5"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -380,6 +380,84 @@ def _last_ma30_journal():
                 evidence[key] = value
     return evidence
 
+
+def action_ma30_isolated_validation(_payload):
+    validation_root = Path("/var/lib/trade-workbench/ma30-validation")
+    validation_root.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    db_path = validation_root / f"{stamp}.sqlite"
+    unit = f"trade-workbench-ma30-validation-{stamp.lower()}"
+    args = [
+        "/usr/bin/systemd-run",
+        "--unit", unit,
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--property=Type=oneshot",
+        "--property=User=trade-workbench",
+        "--property=Group=trade-workbench",
+        "--property=WorkingDirectory=/opt/trade-workbench",
+        "--property=EnvironmentFile=/etc/trade-workbench/workbench.env",
+        "--property=NoNewPrivileges=true",
+        "--property=PrivateTmp=true",
+        "--property=ProtectHome=true",
+        "--property=ProtectSystem=strict",
+        "--property=ReadWritePaths=/var/lib/trade-workbench/ma30-validation",
+        f"--setenv=STREETLIGHT_LOCAL_D1={db_path}",
+        "/usr/bin/node",
+        "--experimental-strip-types",
+        "--use-env-proxy",
+        "/opt/trade-workbench/scripts/ma30-production-live-safe.ts",
+    ]
+    rc, out, err = run(args, timeout=900)
+    evidence = {}
+    prefixes = (
+        "RESULT_STATUS=", "RUN_ID=", "RUN_TIME_BJT=", "NOTIFICATION_MODE=",
+        "SCAN_STATUS=", "EXCLUDED_STABLECOINS=", "ASTPS_STATUS=", "ASTPS_MODEL=",
+        "ASTPS_CANDIDATES=", "ASTPS_VALIDATED=", "ASTPS_A=", "ASTPS_B=",
+        "UNIVERSE=", "FETCH_OK=", "SLOPE_OK=", "FAILED=", "STALE=",
+        "A=", "B=", "C=", "SHORT=", "AI=", "LIFECYCLE_EVENTS=",
+        "LOGICAL_BARK_GROUPS=", "PERSISTED=", "NO_TRADING_ACTIONS=",
+    )
+    for line in (out + "\n" + err).splitlines():
+        stripped = line.strip()
+        for prefix in prefixes:
+            if stripped.startswith(prefix):
+                key, value = stripped.split("=", 1)
+                evidence[key] = value
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            path = Path(str(db_path) + suffix)
+            if path.exists():
+                path.unlink()
+        except Exception:
+            pass
+    checks = {
+        "completed": evidence.get("RESULT_STATUS") == "COMPLETED",
+        "dryRun": evidence.get("NOTIFICATION_MODE") == "DRY_RUN",
+        "fullScan": evidence.get("SCAN_STATUS") == "FULL",
+        "stablecoinsExcluded": int(evidence.get("EXCLUDED_STABLECOINS", "0") or 0) > 0,
+        "astpsReady": evidence.get("ASTPS_STATUS") == "READY",
+        "noTradingActions": evidence.get("NO_TRADING_ACTIONS") == "1",
+        "noFetchFailures": evidence.get("FAILED") == "0",
+        "noStaleCandles": evidence.get("STALE") == "0",
+    }
+    ok = rc == 0 and all(checks.values())
+    return {
+        "ok": ok,
+        "summary": {
+            "phase": "ISOLATED_DRY_RUN",
+            "unit": unit,
+            "exitCode": rc,
+            "checks": checks,
+            "evidence": evidence,
+            "validationDbRemoved": not db_path.exists(),
+            "modifiedProductionState": False,
+            "sentBark": False,
+            "stderrTail": "\n".join(err.splitlines()[-8:]) if err else "",
+        },
+    }
+
 def action_deploy_ma30_astps(payload):
     if payload.get("approved") is not True:
         raise ValueError("approved=true required")
@@ -452,6 +530,7 @@ def action_deploy_ma30_astps(payload):
 ACTIONS = {
     "health": action_health,
     "ma30_status": action_ma30_status,
+    "ma30_isolated_validation": action_ma30_isolated_validation,
     "deploy_ma30_astps": action_deploy_ma30_astps,
     "radar_signals_summary": action_radar_signals_summary,
     "runtime_layout": action_runtime_layout,
