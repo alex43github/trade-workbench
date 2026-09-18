@@ -9,7 +9,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V1"
+VERSION = "VPS_BRIDGE_EXECUTOR_V2"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -158,8 +158,51 @@ def action_radar_signals_summary(_payload):
                 "modified": False,
             },
         }
+    except json.JSONDecodeError as exc:
+        return {
+            "ok": False,
+            "summary": {
+                "error": "JSONDecodeError",
+                "bodyBytes": len(raw.encode()) if "raw" in locals() else None,
+                "bodyPrefix": (raw[:120].replace("\\n", " ") if "raw" in locals() else None),
+                "modified": False,
+            },
+        }
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "summary": {"error": "HTTPError", "status": exc.code, "modified": False}}
     except Exception as exc:
         return {"ok": False, "summary": {"error": type(exc).__name__, "modified": False}}
+
+def action_runtime_layout(_payload):
+    def unit_meta(name):
+        rc, out, _ = run([
+            "/usr/bin/systemctl", "show", name,
+            "--property=FragmentPath,WorkingDirectory,ExecStart,LoadState,ActiveState",
+            "--no-pager",
+        ])
+        values = {}
+        if rc == 0:
+            for line in out.splitlines():
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    values[k] = v
+        return values
+    root = Path("/opt/trade-workbench")
+    names = []
+    try:
+        names = sorted(item.name for item in root.iterdir())[:80]
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "summary": {
+            "optTradeWorkbenchExists": root.exists(),
+            "topLevelEntries": names,
+            "units": {name: unit_meta(name) for name in ALLOWED_SERVICES},
+            "gitDirectoryExists": (root / ".git").exists(),
+            "modified": False,
+        },
+    }
 
 def action_repo_status(_payload):
     rc, head, _ = run(["/usr/bin/git", "-C", "/opt/trade-workbench", "rev-parse", "HEAD"])
@@ -178,6 +221,7 @@ def action_repo_status(_payload):
 ACTIONS = {
     "health": action_health,
     "radar_signals_summary": action_radar_signals_summary,
+    "runtime_layout": action_runtime_layout,
     "repo_status": action_repo_status,
     "update_executor": action_update_executor,
 }
