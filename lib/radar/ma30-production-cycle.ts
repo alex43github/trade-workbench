@@ -15,6 +15,7 @@ import {
   type Ma30OvernightEventRecord,
 } from "./ma30-overnight-catchup.ts";
 import {
+  buildMa30DTopBarkGroup,
   buildMa30LifecycleBarkGroups,
   buildMa30OvernightBriefGroup,
 } from "./ma30-production-notifications.ts";
@@ -58,6 +59,22 @@ export function ma30RunIdFor(now: Date): string {
 
 export function toMa30NotificationState(scan: Ma30FullMarketScanResult): Ma30NotificationState {
   return {
+    dLong: scan.dLong.map((row) => ({
+      symbol: row.symbol,
+      rank: row.rank,
+      direction: row.direction,
+      stage: row.stage,
+      slope20: row.slope20,
+      priceVsMa30Pct: row.priceVsMa30Pct,
+    })),
+    dShort: scan.dShort.map((row) => ({
+      symbol: row.symbol,
+      rank: row.rank,
+      direction: row.direction,
+      stage: row.stage,
+      slope20: row.slope20,
+      priceVsMa30Pct: row.priceVsMa30Pct,
+    })),
     a: scan.a.map((row) => ({
       symbol: row.symbol,
       rank: row.rank,
@@ -235,6 +252,11 @@ export async function executeMa30ProductionCycle(options: {
     scanBucket: clock.scanBucket,
     bjtHour: clock.hour,
   });
+  const dTop = buildMa30DTopBarkGroup({
+    current: notificationState,
+    scanBucket: clock.scanBucket,
+    bjtHour: clock.hour,
+  });
   const overnight = buildMa30OvernightBriefGroup({
     current: notificationState,
     scanBucket: clock.scanBucket,
@@ -249,6 +271,7 @@ export async function executeMa30ProductionCycle(options: {
   const notificationGroups: RadarBarkGroup[] = [
     ...(catchup ? [catchup] : []),
     ...lifecycleGroups,
+    ...(dTop ? [dTop] : []),
     ...(overnight ? [overnight] : []),
   ];
 
