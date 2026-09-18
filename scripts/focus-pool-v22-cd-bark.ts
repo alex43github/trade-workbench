@@ -38,8 +38,8 @@ const bucket =
 
 
 function previewRows(
-  key: "C5" | "C3" | "C1" | "DLong" | "DShort",
-  limit: number,
+  key,
+  limit,
 ) {
   const rows =
     data?.barkPreview?.[key];
