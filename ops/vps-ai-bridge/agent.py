@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import time
+from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -50,8 +51,9 @@ def save_state(state):
     os.chmod(tmp, 0o600)
     tmp.replace(STATE_PATH)
 
-def recent_comments():
-    path = f"/repos/{REPO}/issues/{ISSUE}/comments?per_page=100&sort=created&direction=desc"
+def recent_comments(since: str):
+    query = urllib.parse.urlencode({"per_page": 100, "since": since})
+    path = f"/repos/{REPO}/issues/{ISSUE}/comments?{query}"
     rows = api("GET", path)
     return rows if isinstance(rows, list) else []
 
@@ -100,11 +102,14 @@ def format_result(task_id, action, result):
 
 def bootstrap():
     state = load_state()
-    if "last_comment_id" in state:
+    if "cursor_at" in state:
         return state
-    comments = recent_comments()
-    latest = max((int(c.get("id", 0)) for c in comments), default=0)
-    state = {"last_comment_id": latest}
+    # Migration from V1: never replay the historical issue backlog. Start from
+    # this process bootstrap instant; ChatGPT will post a fresh task afterward.
+    state = {
+        "cursor_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "last_comment_id": int(state.get("last_comment_id", 0)),
+    }
     save_state(state)
     return state
 
@@ -112,7 +117,7 @@ def main():
     state = bootstrap()
     while True:
         try:
-            comments = recent_comments()
+            comments = recent_comments(state["cursor_at"])
             pending = sorted(
                 (c for c in comments if int(c.get("id", 0)) > int(state.get("last_comment_id", 0))),
                 key=lambda c: int(c.get("id", 0)),
@@ -138,6 +143,9 @@ def main():
                         )
                 finally:
                     state["last_comment_id"] = cid
+                    created_at = comment.get("created_at")
+                    if isinstance(created_at, str) and created_at:
+                        state["cursor_at"] = created_at
                     save_state(state)
         except Exception:
             pass
