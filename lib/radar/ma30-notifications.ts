@@ -1,12 +1,13 @@
 import type { Ma30AiSelection } from "./ma30-ai-selection.ts";
 import type { RadarBarkGroup } from "./bark-notifications.ts";
+import type { Ma30ModelValidationEvidence } from "./ma30-model-types.ts";
 
 export const MA30_BARK_QUIET_START_HOUR_BJT = 2;
 export const MA30_BARK_QUIET_END_HOUR_BJT = 8;
 
 export type Ma30NotificationState = {
-  a: readonly { symbol: string; rank: number; stage: string; slope20: number; priceVsMa30Pct: number }[];
-  b: readonly { symbol: string; rank: number; bRank: number; stage: string; slope20: number; ma30NewHighBars: number; priceVsMa30Pct: number }[];
+  a: readonly { symbol: string; rank: number; stage: string; slope20: number; priceVsMa30Pct: number; sourceRank?: number; modelValidation?: Ma30ModelValidationEvidence }[];
+  b: readonly { symbol: string; rank: number; bRank: number; stage: string; slope20: number; ma30NewHighBars: number; priceVsMa30Pct: number; sourceRank?: number; sourceBRank?: number; modelValidation?: Ma30ModelValidationEvidence }[];
   c: readonly { symbol: string; rank: number; stage: string; slope20: number; slope6Acceleration: number; priceVsMa30Pct: number }[];
   shorts: readonly { symbol: string; rank: number; stage: string; slope20: number; slope6Acceleration: number; priceVsMa30Pct: number }[];
   ai: readonly Ma30AiSelection[];
