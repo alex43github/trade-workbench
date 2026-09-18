@@ -13,7 +13,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V8"
+VERSION = "VPS_BRIDGE_EXECUTOR_V9"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -367,7 +367,7 @@ def _last_ma30_journal():
     prefixes = (
         "RESULT_STATUS=", "RUN_ID=", "RUN_TIME_BJT=", "SCAN_STATUS=",
         "EXCLUDED_STABLECOINS=", "ASTPS_STATUS=", "ASTPS_MODEL=",
-        "ASTPS_CANDIDATES=", "ASTPS_VALIDATED=", "ASTPS_A=", "ASTPS_B=",
+        "ASTPS_CANDIDATES=", "ASTPS_VALIDATED=", "ASTPS_PENDING=", "ASTPS_A=", "ASTPS_B=",
         "UNIVERSE=", "FETCH_OK=", "SLOPE_OK=", "FAILED=", "STALE=",
         "A=", "B=", "C=", "SHORT=", "AI=", "NO_TRADING_ACTIONS=",
         "DUPLICATE=",
@@ -515,7 +515,7 @@ def action_ma30_isolated_validation(_payload):
     prefixes = (
         "RESULT_STATUS=", "RUN_ID=", "RUN_TIME_BJT=", "NOTIFICATION_MODE=",
         "SCAN_STATUS=", "EXCLUDED_STABLECOINS=", "ASTPS_STATUS=", "ASTPS_MODEL=",
-        "ASTPS_CANDIDATES=", "ASTPS_VALIDATED=", "ASTPS_A=", "ASTPS_B=",
+        "ASTPS_CANDIDATES=", "ASTPS_VALIDATED=", "ASTPS_PENDING=", "ASTPS_A=", "ASTPS_B=",
         "UNIVERSE=", "FETCH_OK=", "SLOPE_OK=", "FAILED=", "STALE=",
         "A=", "B=", "C=", "SHORT=", "AI=", "LIFECYCLE_EVENTS=",
         "LOGICAL_BARK_GROUPS=", "PERSISTED=", "NO_TRADING_ACTIONS=",
@@ -533,12 +533,19 @@ def action_ma30_isolated_validation(_payload):
                 path.unlink()
         except Exception:
             pass
+    candidate_count = int(evidence.get("ASTPS_CANDIDATES", "0") or 0)
+    validated_count = int(evidence.get("ASTPS_VALIDATED", "0") or 0)
+    pending_count = int(evidence.get("ASTPS_PENDING", "0") or 0)
+    selected_a = int(evidence.get("ASTPS_A", "0") or 0)
+    selected_b = int(evidence.get("ASTPS_B", "0") or 0)
     checks = {
         "completed": evidence.get("RESULT_STATUS") == "COMPLETED",
         "dryRun": evidence.get("NOTIFICATION_MODE") == "DRY_RUN",
         "fullScan": evidence.get("SCAN_STATUS") == "FULL",
         "stablecoinsExcluded": int(evidence.get("EXCLUDED_STABLECOINS", "0") or 0) > 0,
         "astpsReady": evidence.get("ASTPS_STATUS") == "READY",
+        "candidateAccounting": candidate_count == 0 or (validated_count + pending_count) > 0,
+        "abNotClearedByIncompleteConsensus": candidate_count == 0 or (selected_a + selected_b) > 0,
         "noTradingActions": evidence.get("NO_TRADING_ACTIONS") == "1",
         "noFetchFailures": evidence.get("FAILED") == "0",
         "noStaleCandles": evidence.get("STALE") == "0",
