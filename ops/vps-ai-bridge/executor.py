@@ -12,7 +12,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V6"
+VERSION = "VPS_BRIDGE_EXECUTOR_V7"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -384,6 +384,9 @@ def _last_ma30_journal():
 def action_ma30_isolated_validation(_payload):
     validation_root = Path("/var/lib/trade-workbench/ma30-validation")
     validation_root.mkdir(parents=True, exist_ok=True)
+    parent_stat = Path("/var/lib/trade-workbench").stat()
+    os.chown(validation_root, parent_stat.st_uid, parent_stat.st_gid)
+    os.chmod(validation_root, 0o700)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     db_path = validation_root / f"{stamp}.sqlite"
     unit = f"trade-workbench-ma30-validation-{stamp.lower()}"
@@ -453,7 +456,7 @@ def action_ma30_isolated_validation(_payload):
             "validationDbRemoved": not db_path.exists(),
             "modifiedProductionState": False,
             "sentBark": False,
-            "stderrTail": "\n".join(err.splitlines()[-8:]) if err else "",
+            "stderrTail": "\n".join(err.splitlines()[-30:]) if err else "",
         },
     }
 
