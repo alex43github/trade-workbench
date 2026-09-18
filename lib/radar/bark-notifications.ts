@@ -1,6 +1,7 @@
 import { notifyBark } from "../notifications/bark.ts";
 import { diffNewCandidates, ma30OiCandidateKey, reversalCandidateKey } from "./alert-diff.ts";
 import type { AtrBandLifecycle } from "./atr-band-lifecycle.ts";
+import type { AtrTierCandidate } from "./atr-band-lifecycle-snapshot.ts";
 import type { Ma30OiSnapshotCandidate } from "./ma30-oi-snapshot.ts";
 import type { ReversalScanCandidate } from "./reversal-snapshot.ts";
 
@@ -114,6 +115,27 @@ export function buildMa30OiBarkGroups(options: {
   });
 }
 
+export function buildAtrTierTopBarkGroup(options: {
+  c5: readonly AtrTierCandidate[];
+  c3: readonly AtrTierCandidate[];
+  c1: readonly AtrTierCandidate[];
+  scanBucket: string;
+}): RadarBarkGroup {
+  const render = (rows: readonly AtrTierCandidate[]) =>
+    rows.slice(0, 10).map((row) =>
+      `${row.rank}.${displaySymbol(row.symbol)}，持续${row.consecutiveBars}根，斜率${row.slope20 >= 0 ? "+" : ""}${row.slope20.toFixed(3)}，距MA30 ${row.priceVsMa30Pct >= 0 ? "+" : ""}${row.priceVsMa30Pct.toFixed(1)}%`
+    ).join("\n") || "无";
+  return {
+    key: `radar:atr-tier:${options.scanBucket}:C531`,
+    title: `C类 ATR持续 Top10｜${options.scanBucket}`,
+    body: [
+      "C5 前10", render(options.c5),
+      "", "C3 前10", render(options.c3),
+      "", "C1 前10", render(options.c1),
+    ].join("\n"),
+  };
+}
+
 export function buildAtrLifecycleTransitionBarkGroups(options: {
   previous: LifecycleWithDuration[];
   current: LifecycleWithDuration[];
@@ -190,4 +212,16 @@ export async function notifyAtrLifecycleTransitions(options: {
   fetcher?: typeof fetch;
 }) {
   return notifyGroups(options.db, buildAtrLifecycleTransitionBarkGroups(options), options.fetcher);
+}
+
+
+export async function notifyAtrTierTop(options: {
+  db: D1Database;
+  c5: readonly AtrTierCandidate[];
+  c3: readonly AtrTierCandidate[];
+  c1: readonly AtrTierCandidate[];
+  scanBucket: string;
+  fetcher?: typeof fetch;
+}) {
+  return notifyGroups(options.db, [buildAtrTierTopBarkGroup(options)], options.fetcher);
 }
