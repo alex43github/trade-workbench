@@ -12,6 +12,7 @@ from pathlib import Path
 VERSION = "VPS_BRIDGE_EXECUTOR_V1"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
+RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
 INSTALL_DIR = Path("/opt/trade-workbench-ai-bridge")
 BACKUP_DIR = Path("/var/backups/trade-workbench-ai-bridge")
 RAW_BASE = "https://raw.githubusercontent.com/alex43github/trade-workbench"
@@ -105,8 +106,79 @@ def action_update_executor(payload):
         },
     }
 
+
+def action_radar_signals_summary(_payload):
+    try:
+        req = urllib.request.Request(RADAR_SIGNALS_URL, headers={"User-Agent": "trade-workbench-ai-bridge/2"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            raw = resp.read(2_000_000).decode()
+        data = json.loads(raw)
+        rows = data.get("signals", []) if isinstance(data, dict) else []
+        if not isinstance(rows, list):
+            rows = []
+        states = {}
+        setups = {}
+        timeframes = {}
+        enriched = 0
+        consultation = 0
+        consensus = 0
+        sample_keys = set()
+        consensus_keys = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            state = str(row.get("state"))
+            setup = str(row.get("setup"))
+            timeframe = str(row.get("timeframe"))
+            states[state] = states.get(state, 0) + 1
+            setups[setup] = setups.get(setup, 0) + 1
+            timeframes[timeframe] = timeframes.get(timeframe, 0) + 1
+            if "position" in row or "consultation" in row:
+                enriched += 1
+            cons = row.get("consultation")
+            if isinstance(cons, dict):
+                consultation += 1
+                sample_keys.update(str(k) for k in row.keys())
+                con = cons.get("consensus")
+                if isinstance(con, dict):
+                    consensus += 1
+                    consensus_keys.update(str(k) for k in con.keys())
+        return {
+            "ok": True,
+            "summary": {
+                "signals": len(rows),
+                "states": states,
+                "setups": setups,
+                "timeframes": timeframes,
+                "enrichedSignals": enriched,
+                "withConsultation": consultation,
+                "withConsensus": consensus,
+                "sampleSignalKeys": sorted(sample_keys),
+                "consensusKeys": sorted(consensus_keys),
+                "modified": False,
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "summary": {"error": type(exc).__name__, "modified": False}}
+
+def action_repo_status(_payload):
+    rc, head, _ = run(["/usr/bin/git", "-C", "/opt/trade-workbench", "rev-parse", "HEAD"])
+    rc2, branch, _ = run(["/usr/bin/git", "-C", "/opt/trade-workbench", "branch", "--show-current"])
+    rc3, status, _ = run(["/usr/bin/git", "-C", "/opt/trade-workbench", "status", "--porcelain"])
+    return {
+        "ok": rc == 0,
+        "summary": {
+            "head": head if rc == 0 else None,
+            "branch": branch if rc2 == 0 else None,
+            "dirtyEntries": len([line for line in status.splitlines() if line.strip()]) if rc3 == 0 else None,
+            "modified": False,
+        },
+    }
+
 ACTIONS = {
     "health": action_health,
+    "radar_signals_summary": action_radar_signals_summary,
+    "repo_status": action_repo_status,
     "update_executor": action_update_executor,
 }
 
