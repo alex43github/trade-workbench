@@ -187,3 +187,54 @@ test("run id is stable for the same Beijing hourly bucket", async () => {
   assert.equal(a.runId, b.runId);
   assert.match(a.runId, /^ma30:2026-09-14T13$/);
 });
+
+
+test("production A/B uses ASTPS validation while C/AI discovery remains available", async () => {
+  const d = deps({
+    loadAstpsSignals: async () => [{
+      symbol: "AAAUSDT",
+      state: "CONFIRMED",
+      timeframe: "1h",
+      setup: "TRENDLINE_BREAKOUT",
+      detectedAt: 100,
+      lastProcessedBarTime: 200,
+      consultation: {
+        consensus: {
+          alertPolicy: "FULL_PLAN",
+          grade: "4/4",
+          support: 4,
+          oppose: 0,
+          executionPlan: { direction: "LONG" },
+        },
+      },
+    }],
+  });
+  const result = await executeMa30ProductionCycle({
+    now: new Date("2026-09-14T00:10:00.000Z"),
+    notifications: "DRY_RUN",
+    deps: d.value,
+  });
+  assert.equal(result.astpsValidation.status, "READY");
+  assert.equal(result.notificationState.a.length, 1);
+  assert.equal(result.notificationState.b.length, 1);
+  assert.equal(result.notificationState.a[0].modelValidation.grade, "4/4");
+  assert.equal(result.notificationState.c.length, 1);
+  assert.equal(result.notificationState.ai.length, 1);
+  assert.equal(d.calls.persisted[0].runtimeSnapshot.coverage.astpsStatus, "READY");
+});
+
+test("production A/B fails closed when ASTPS validation is unavailable", async () => {
+  const d = deps({
+    loadAstpsSignals: async () => { throw new Error("radar unavailable"); },
+  });
+  const result = await executeMa30ProductionCycle({
+    now: new Date("2026-09-14T00:10:00.000Z"),
+    notifications: "DRY_RUN",
+    deps: d.value,
+  });
+  assert.equal(result.astpsValidation.status, "UNAVAILABLE");
+  assert.deepEqual(result.notificationState.a, []);
+  assert.deepEqual(result.notificationState.b, []);
+  assert.equal(result.notificationState.c.length, 1);
+  assert.equal(result.notificationState.ai.length, 1);
+});
