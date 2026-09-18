@@ -111,8 +111,7 @@ def action_radar_signals_summary(_payload):
     try:
         req = urllib.request.Request(RADAR_SIGNALS_URL, headers={"User-Agent": "trade-workbench-ai-bridge/2"})
         with urllib.request.urlopen(req, timeout=8) as resp:
-            raw = resp.read(2_000_000).decode()
-        data = json.loads(raw)
+            data = json.load(resp)
         rows = data.get("signals", []) if isinstance(data, dict) else []
         if not isinstance(rows, list):
             rows = []
@@ -188,6 +187,11 @@ def action_runtime_layout(_payload):
                     values[k] = v
         return values
     root = Path("/opt/trade-workbench")
+    deployed_commit = None
+    try:
+        deployed_commit = (root / ".deployed-commit").read_text().strip()[:80]
+    except Exception:
+        pass
     names = []
     try:
         names = sorted(item.name for item in root.iterdir())[:80]
@@ -200,6 +204,7 @@ def action_runtime_layout(_payload):
             "topLevelEntries": names,
             "units": {name: unit_meta(name) for name in ALLOWED_SERVICES},
             "gitDirectoryExists": (root / ".git").exists(),
+            "deployedCommit": deployed_commit,
             "modified": False,
         },
     }
