@@ -97,8 +97,8 @@
 - [x] **Step 1: Run focused tests**: `node --test tests/task-center.test.mjs tests/task-center-ui.test.mjs`.
 - [x] **Step 2: Run project validation**: `npm run build`, `npx tsc --noEmit`, and the repository `npm test` command as required by the task; record exact results.
 - [x] **Step 3: Inspect `git diff --check`, `git diff --stat`, and `git status --short`**; confirm the commit includes only Task Center files and that the four pre-existing modified files plus pre-existing untracked files remain uncommitted.
-- [ ] **Step 4: Commit only Task Center files** with message `feat: add local task center MVP`.
-- [ ] **Step 5: Push `feature/task-center-mvp` to `origin` only if network/git permissions allow; do not post the RESULT comment because the standing constraint assigns that to Bridge Runner. Report the commit SHA, push status, startup command, localhost URL, tests, risks, and untouched live systems.
+- [x] **Step 4: Commit only Task Center files** with message `feat: add local task center MVP`.
+- [x] **Step 5: Push `feature/task-center-mvp` to `origin` only if network/git permissions allow; do not post the RESULT comment because the standing constraint assigns that to Bridge Runner. Report the commit SHA, push status, startup command, localhost URL, tests, risks, and untouched live systems.
 
 ## Self-review checklist
 
