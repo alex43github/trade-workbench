@@ -13,7 +13,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V12"
+VERSION = "VPS_BRIDGE_EXECUTOR_V13"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -588,7 +588,7 @@ def action_deploy_focus_v23(payload):
 
             bark_rc, bark_out, bark_err = run([
                 "/usr/bin/env", "DRY_RUN=1",
-                "/usr/bin/node", "--experimental-strip-types",
+                "/usr/bin/node",
                 str(WORKBENCH_ROOT / "scripts/focus-pool-v22-cd-bark.ts"),
             ], timeout=60)
             if bark_rc != 0:
@@ -633,6 +633,97 @@ def action_deploy_focus_v23(payload):
             except Exception:
                 pass
             raise
+
+
+def action_focus_ab_producer_layout(_payload):
+    needles = (
+        "hourly-priority-pool.json",
+        "STRONG_TREND",
+        "SQUEEZE",
+    )
+    roots = (
+        WORKBENCH_ROOT / "scripts",
+        WORKBENCH_ROOT / "services" / "structure-radar",
+        WORKBENCH_ROOT / "lib" / "radar",
+    )
+    matches = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix not in (".ts", ".mjs", ".js"):
+                continue
+            try:
+                text_value = path.read_text(errors="replace")
+            except Exception:
+                continue
+            found = [needle for needle in needles if needle in text_value]
+            if not found:
+                continue
+            lines = text_value.splitlines()
+            snippets = []
+            for index, line in enumerate(lines):
+                if any(needle in line for needle in needles):
+                    start = max(0, index - 3)
+                    end = min(len(lines), index + 5)
+                    snippets.append({
+                        "line": index + 1,
+                        "text": "\n".join(lines[start:end])[:1800],
+                    })
+                    if len(snippets) >= 8:
+                        break
+            matches.append({
+                "path": str(path.relative_to(WORKBENCH_ROOT)),
+                "needles": found,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "snippets": snippets,
+            })
+
+    units = {}
+    rc, out, _ = run([
+        "/usr/bin/systemctl", "list-unit-files",
+        "--type=service", "--type=timer", "--no-pager", "--no-legend",
+    ], timeout=20)
+    if rc == 0:
+        for line in out.splitlines():
+            name = line.split()[0] if line.split() else ""
+            if not name.startswith("trade-workbench"):
+                continue
+            rc2, meta, _ = run([
+                "/usr/bin/systemctl", "show", name,
+                "--property=FragmentPath,ExecStart,ActiveState,SubState",
+                "--no-pager",
+            ], timeout=10)
+            if rc2 != 0:
+                continue
+            if "priority" in meta.lower() or "strong" in meta.lower() or "squeeze" in meta.lower():
+                units[name] = meta
+
+    raw_path = Path("/var/lib/trade-workbench/structure-radar/hourly-priority-pool.json")
+    raw_meta = {}
+    if raw_path.is_file():
+        stat = raw_path.stat()
+        try:
+            raw = json.loads(raw_path.read_text())
+        except Exception:
+            raw = {}
+        raw_meta = {
+            "mtime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stat.st_mtime)),
+            "size": stat.st_size,
+            "sha256": hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+            "schemaVersion": raw.get("schemaVersion") if isinstance(raw, dict) else None,
+            "generatedAt": raw.get("generatedAt") if isinstance(raw, dict) else None,
+            "mode": raw.get("mode") if isinstance(raw, dict) else None,
+            "itemCount": len(raw.get("items", [])) if isinstance(raw, dict) and isinstance(raw.get("items"), list) else None,
+            "topKeys": sorted(raw.keys()) if isinstance(raw, dict) else [],
+        }
+
+    return {"ok": True, "summary": {
+        "rawPool": raw_meta,
+        "sourceMatches": matches,
+        "relatedUnits": units,
+        "modified": False,
+    }}
 
 def action_ma30_status(_payload):
     units = (
@@ -1081,6 +1172,7 @@ ACTIONS = {
     "focus_v22_layout": action_focus_v22_layout,
     "focus_v22_read_source": action_focus_v22_read_source,
     "focus_v23_symbol_diagnostic": action_focus_v23_symbol_diagnostic,
+    "focus_ab_producer_layout": action_focus_ab_producer_layout,
     "deploy_focus_v23": action_deploy_focus_v23,
     "ma30_status": action_ma30_status,
     "ma30_isolated_validation": action_ma30_isolated_validation,
