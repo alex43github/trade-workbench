@@ -12,7 +12,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V5"
+VERSION = "VPS_BRIDGE_EXECUTOR_V6"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -397,7 +397,6 @@ def action_ma30_isolated_validation(_payload):
         "--property=User=trade-workbench",
         "--property=Group=trade-workbench",
         "--property=WorkingDirectory=/opt/trade-workbench",
-        "--property=EnvironmentFile=/etc/trade-workbench/workbench.env",
         "--property=NoNewPrivileges=true",
         "--property=PrivateTmp=true",
         "--property=ProtectHome=true",
