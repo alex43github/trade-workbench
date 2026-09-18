@@ -93,3 +93,14 @@ test("priority watcher rejects stablecoin symbols from every source", () => {
   }), NOW);
   assert.deepEqual(rows, []);
 });
+
+
+test("D Focus Pool admits long20 and short10 without needing A/B/C qualification", () => {
+  const dLong = Array.from({ length: 20 }, (_, i) => ({ symbol: `DL${i}USDT`, rank: i + 1, stage: "STEADY_UPTREND" }));
+  const dShort = Array.from({ length: 10 }, (_, i) => ({ symbol: `DS${i}USDT`, rank: i + 1, stage: "STEADY_DOWNTREND" }));
+  const rows = buildMa30PriorityCandidates(scan({ dLong, dShort }), NOW);
+  assert.equal(rows.filter((row) => row.sources.includes("D_LONG")).length, 20);
+  assert.equal(rows.filter((row) => row.sources.includes("D_SHORT")).length, 10);
+  assert.equal(rows.find((row) => row.symbol === "DL0USDT").direction, "LONG");
+  assert.equal(rows.find((row) => row.symbol === "DS0USDT").direction, "SHORT");
+});
