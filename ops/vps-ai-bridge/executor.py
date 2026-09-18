@@ -46,6 +46,27 @@ MA30_TEST_PATHS = (
     "tests/ma30-production-notifications.test.mjs",
 )
 
+CD_FOCUS_DEPLOY_PATHS = (
+    "lib/radar/ma30-scanner.ts",
+    "lib/radar/ma30-notifications.ts",
+    "lib/radar/ma30-production-cycle.ts",
+    "lib/radar/ma30-production-notifications.ts",
+    "lib/radar/ma30-priority-watchlist.ts",
+    "lib/radar/atr-band-lifecycle-snapshot.ts",
+    "lib/radar/bark-notifications.ts",
+    "lib/watchlist.ts",
+    "app/api/radar/atr-band/route.ts",
+    "scripts/ma30-production-live-safe.ts",
+)
+CD_FOCUS_TEST_PATHS = (
+    "tests/ma30-scanner.test.mjs",
+    "tests/ma30-priority-watchlist.test.mjs",
+    "tests/ma30-production-cycle.test.mjs",
+    "tests/ma30-production-notifications.test.mjs",
+    "tests/atr-band-lifecycle-snapshot.test.mjs",
+    "tests/watchlist-persistence.test.mjs",
+)
+
 def run(args, timeout=20):
     proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout, check=False)
     return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
@@ -710,6 +731,66 @@ def action_deploy_ma30_astps(payload):
                 pass
             raise
 
+
+def action_deploy_cd_focus(payload):
+    if payload.get("approved") is not True:
+        raise ValueError("approved=true required")
+    commit = str(payload.get("commit", "")).strip().lower()
+    if not COMMIT_RE.fullmatch(commit):
+        raise ValueError("exact 40-hex commit required")
+
+    before_radar = health_json(RADAR_HEALTH_URL)
+    if before_radar.get("status") != "ok" or before_radar.get("realOrderRouteEnabled") is not False:
+        raise RuntimeError("preflight radar safety gate failed")
+
+    with tempfile.TemporaryDirectory(prefix="cd-focus-", dir="/tmp") as tmp:
+        tmp_path = Path(tmp)
+        source_bytes = download(f"https://codeload.github.com/alex43github/trade-workbench/tar.gz/{commit}")
+        source_root = _safe_extract_tar_gz(source_bytes, tmp_path)
+        for relative in (*CD_FOCUS_DEPLOY_PATHS, *CD_FOCUS_TEST_PATHS):
+            if not (source_root / relative).is_file():
+                raise ValueError(f"candidate missing required file: {relative}")
+
+        backup, manifest_hash, manifest = _backup_ma30(CD_FOCUS_DEPLOY_PATHS, commit)
+        try:
+            installed = _install_ma30(source_root, CD_FOCUS_DEPLOY_PATHS)
+            test_args = [
+                "/usr/bin/node", "--experimental-strip-types", "--test",
+                *[str(WORKBENCH_ROOT / path) for path in CD_FOCUS_TEST_PATHS],
+            ]
+            test_rc, test_out, test_err = run(test_args, timeout=180)
+            if test_rc != 0:
+                raise RuntimeError("focused C/D regression failed: " + (test_err or test_out)[-1200:])
+
+            restart_rc, restart_out, restart_err = run(
+                ["/usr/bin/systemctl", "restart", "trade-workbench.service"], timeout=60
+            )
+            if restart_rc != 0:
+                raise RuntimeError("trade-workbench restart failed: " + (restart_err or restart_out)[-700:])
+            time.sleep(2)
+            if service_state("trade-workbench.service") != "active":
+                raise RuntimeError("trade-workbench service not active after restart")
+
+            after_radar = health_json(RADAR_HEALTH_URL)
+            if after_radar.get("status") != "ok" or after_radar.get("realOrderRouteEnabled") is not False:
+                raise RuntimeError("postflight radar safety gate failed")
+            return {"ok": True, "summary": {
+                "phase": "CD_FOCUS_DEPLOYED",
+                "commit": commit,
+                "backup": str(backup),
+                "manifestSha256": manifest_hash,
+                "installed": installed,
+                "focusedTests": "PASS",
+                "workbenchService": service_state("trade-workbench.service"),
+                "radarHealth": after_radar,
+                "rolledBack": False,
+                "modified": True,
+            }}
+        except Exception:
+            _restore_ma30(backup, manifest)
+            run(["/usr/bin/systemctl", "restart", "trade-workbench.service"], timeout=60)
+            raise
+
 ACTIONS = {
     "health": action_health,
     "focus_v22_layout": action_focus_v22_layout,
@@ -718,6 +799,7 @@ ACTIONS = {
     "ma30_isolated_validation": action_ma30_isolated_validation,
     "ma30_astps_diagnostic": action_ma30_astps_diagnostic,
     "deploy_ma30_astps": action_deploy_ma30_astps,
+    "deploy_cd_focus": action_deploy_cd_focus,
     "radar_signals_summary": action_radar_signals_summary,
     "runtime_layout": action_runtime_layout,
     "repo_status": action_repo_status,
