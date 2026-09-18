@@ -13,7 +13,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V13"
+VERSION = "VPS_BRIDGE_EXECUTOR_V14"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -586,11 +586,21 @@ def action_deploy_focus_v23(payload):
             if not all(checks.values()):
                 raise RuntimeError("focus v23 output contract failed: " + json.dumps(checks, sort_keys=True))
 
+            bark_unit = f"trade-workbench-focus-v23-bark-validation-{int(time.time())}"
             bark_rc, bark_out, bark_err = run([
-                "/usr/bin/env", "DRY_RUN=1",
+                "/usr/bin/systemd-run",
+                "--unit", bark_unit,
+                "--wait",
+                "--pipe",
+                "--collect",
+                "--property=Type=oneshot",
+                "--property=User=trade-workbench",
+                "--property=Group=trade-workbench",
+                "--property=WorkingDirectory=/opt/trade-workbench",
+                "--setenv=DRY_RUN=1",
                 "/usr/bin/node",
                 str(WORKBENCH_ROOT / "scripts/focus-pool-v22-cd-bark.ts"),
-            ], timeout=60)
+            ], timeout=120)
             if bark_rc != 0:
                 raise RuntimeError("Bark dry-run failed: " + (bark_err or bark_out)[-1200:])
             required_labels = (
@@ -722,6 +732,38 @@ def action_focus_ab_producer_layout(_payload):
         "rawPool": raw_meta,
         "sourceMatches": matches,
         "relatedUnits": units,
+        "modified": False,
+    }}
+
+
+def action_structure_priority_source(_payload):
+    path = WORKBENCH_ROOT / "services/structure-radar/main.ts"
+    if not path.is_file():
+        return {"ok": False, "summary": {"error": "SOURCE_MISSING", "modified": False}}
+    lines = path.read_text(errors="replace").splitlines()
+    needles = (
+        "hourly-priority-pool.json",
+        "hourlyStrongTrend",
+        "strongTrend",
+        "squeeze",
+        "priorityPool",
+    )
+    indexes = []
+    for index, line in enumerate(lines):
+        if any(needle.lower() in line.lower() for needle in needles):
+            indexes.append(index)
+    if indexes:
+        start = max(0, min(indexes) - 90)
+        end = min(len(lines), max(indexes) + 120)
+    else:
+        start, end = 0, min(len(lines), 800)
+    content = "\n".join(f"{i + 1}: {lines[i]}" for i in range(start, end))
+    return {"ok": True, "summary": {
+        "path": str(path.relative_to(WORKBENCH_ROOT)),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "lineCount": len(lines),
+        "range": [start + 1, end],
+        "content": content[:48000],
         "modified": False,
     }}
 
@@ -1173,6 +1215,7 @@ ACTIONS = {
     "focus_v22_read_source": action_focus_v22_read_source,
     "focus_v23_symbol_diagnostic": action_focus_v23_symbol_diagnostic,
     "focus_ab_producer_layout": action_focus_ab_producer_layout,
+    "structure_priority_source": action_structure_priority_source,
     "deploy_focus_v23": action_deploy_focus_v23,
     "ma30_status": action_ma30_status,
     "ma30_isolated_validation": action_ma30_isolated_validation,
