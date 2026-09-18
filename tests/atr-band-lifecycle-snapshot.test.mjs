@@ -207,3 +207,26 @@ test("scans each normalized full-market symbol and persists the scan bucket", as
   assert.equal(dashboard.scanBucket, scan.scanBucket);
   assert.equal(dashboard.strong.filter((lifecycle) => ["BTCUSDT", "ETHUSDT"].includes(lifecycle.symbol)).length, 2);
 });
+
+
+function linearBars(step, count = 80) {
+  return makeBars(Array.from({ length: count }, (_, i) => 100 + step * i));
+}
+
+test("splits current ATR persistence into mutually exclusive C5 C3 C1 and builds slope Focus Pool", async () => {
+  const c5Bars = linearBars(1.0);
+  const c3Bars = linearBars(0.6);
+  const c1Bars = linearBars(0.3);
+  const barsBySymbol = { C5USDT: c5Bars, C3USDT: c3Bars, C1USDT: c1Bars };
+  const scan = await api().buildAtrLifecycleScan({
+    listSymbols: async () => Object.keys(barsBySymbol),
+    fetchClosedBars: async (symbol) => barsBySymbol[symbol],
+    fetchClosedHourlyOi: async (symbol) => barsBySymbol[symbol].map((bar) => ({ timestamp: bar.closeTime, openInterest: 100 })),
+  }, new Date("2026-09-01T07:10:00.000Z"), { multiplier: 1 });
+
+  assert.deepEqual(scan.c5.map((row) => row.symbol), ["C5USDT"]);
+  assert.deepEqual(scan.c3.map((row) => row.symbol), ["C3USDT"]);
+  assert.deepEqual(scan.c1.map((row) => row.symbol), ["C1USDT"]);
+  assert.equal(new Set(scan.cFocus.map((row) => row.symbol)).size, 3);
+  assert.ok(scan.cFocus.every((row) => row.focusRank === 1));
+});
