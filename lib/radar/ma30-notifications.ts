@@ -6,6 +6,8 @@ export const MA30_BARK_QUIET_START_HOUR_BJT = 2;
 export const MA30_BARK_QUIET_END_HOUR_BJT = 8;
 
 export type Ma30NotificationState = {
+  dLong: readonly { symbol: string; rank: number; direction: "LONG"; stage: string; slope20: number; priceVsMa30Pct: number }[];
+  dShort: readonly { symbol: string; rank: number; direction: "SHORT"; stage: string; slope20: number; priceVsMa30Pct: number }[];
   a: readonly { symbol: string; rank: number; stage: string; slope20: number; priceVsMa30Pct: number; sourceRank?: number; modelValidation?: Ma30ModelValidationEvidence }[];
   b: readonly { symbol: string; rank: number; bRank: number; stage: string; slope20: number; ma30NewHighBars: number; priceVsMa30Pct: number; sourceRank?: number; sourceBRank?: number; modelValidation?: Ma30ModelValidationEvidence }[];
   c: readonly { symbol: string; rank: number; stage: string; slope20: number; slope6Acceleration: number; priceVsMa30Pct: number }[];
