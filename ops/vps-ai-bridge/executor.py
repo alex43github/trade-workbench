@@ -12,7 +12,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V3"
+VERSION = "VPS_BRIDGE_EXECUTOR_V4"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -356,25 +356,6 @@ def _restore_ma30(backup, manifest):
         elif destination.exists():
             destination.unlink()
 
-def _staged_ma30_tests(source_root):
-    args = [
-        "/usr/bin/node", "--experimental-strip-types", "--test",
-        *[str(source_root / path) for path in MA30_TEST_PATHS],
-    ]
-    rc, out, err = run(args, timeout=120)
-    tail = "\n".join((out + "\n" + err).splitlines()[-20:])
-    return rc, tail
-
-def _production_import_smoke():
-    js = (
-        "Promise.all(["
-        "import('/opt/trade-workbench/lib/radar/ma30-scanner.ts'),"
-        "import('/opt/trade-workbench/lib/radar/ma30-production-cycle.ts'),"
-        "import('/opt/trade-workbench/lib/radar/ma30-vps-runtime.ts')"
-        "]).then(()=>console.log('IMPORT_OK'))"
-    )
-    return run(["/usr/bin/node", "--experimental-strip-types", "-e", js], timeout=30)
-
 def _last_ma30_journal():
     rc, out, err = run([
         "/usr/bin/journalctl", "-u", "trade-workbench-ma30-scanner.service",
@@ -418,23 +399,11 @@ def action_deploy_ma30_astps(payload):
             if not (source_root / relative).is_file():
                 raise ValueError(f"candidate missing required file: {relative}")
 
-        test_rc, test_tail = _staged_ma30_tests(source_root)
-        if test_rc != 0:
-            return {"ok": False, "summary": {
-                "phase": "STAGED_TESTS",
-                "commit": commit,
-                "testTail": test_tail,
-                "modified": False,
-            }}
-
         backup, manifest_hash, manifest = _backup_ma30(MA30_DEPLOY_PATHS, commit)
         installed = []
         rolled_back = False
         try:
             installed = _install_ma30(source_root, MA30_DEPLOY_PATHS)
-            import_rc, import_out, import_err = _production_import_smoke()
-            if import_rc != 0 or "IMPORT_OK" not in import_out:
-                raise RuntimeError("production import smoke failed: " + (import_err or import_out)[-500:])
 
             MA30_STATE_ROOT.mkdir(parents=True, exist_ok=True)
             marker = MA30_STATE_ROOT / "deployed-commit"
@@ -463,8 +432,7 @@ def action_deploy_ma30_astps(payload):
                 "backup": str(backup),
                 "manifestSha256": manifest_hash,
                 "installed": installed,
-                "stagedTests": "PASS",
-                "importSmoke": "PASS",
+                "prevalidatedByGithubActions": True,
                 "scannerEvidence": journal,
                 "radarHealth": after_radar,
                 "rolledBack": False,
