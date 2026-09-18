@@ -1,0 +1,28 @@
+[Unit]
+Description=Trade Workbench GitHub-to-VPS AI Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/trade-workbench-ai-bridge.env
+ExecStart=/usr/bin/python3 /opt/trade-workbench-ai-bridge/agent.py
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/trade-workbench-ai-bridge /opt/trade-workbench /var/lib/trade-workbench-ai-bridge /var/lib/trade-workbench /var/backups/trade-workbench-ai-bridge /var/backups/trade-workbench
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
