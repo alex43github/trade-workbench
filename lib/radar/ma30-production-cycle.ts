@@ -59,7 +59,7 @@ export function ma30RunIdFor(now: Date): string {
 
 export function toMa30NotificationState(scan: Ma30FullMarketScanResult): Ma30NotificationState {
   return {
-    dLong: scan.dLong.map((row) => ({
+    dLong: (scan.dLong ?? []).map((row) => ({
       symbol: row.symbol,
       rank: row.rank,
       direction: row.direction,
@@ -67,7 +67,7 @@ export function toMa30NotificationState(scan: Ma30FullMarketScanResult): Ma30Not
       slope20: row.slope20,
       priceVsMa30Pct: row.priceVsMa30Pct,
     })),
-    dShort: scan.dShort.map((row) => ({
+    dShort: (scan.dShort ?? []).map((row) => ({
       symbol: row.symbol,
       rank: row.rank,
       direction: row.direction,
