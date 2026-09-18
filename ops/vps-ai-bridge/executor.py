@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sqlite3
 import sys
 import tarfile
 import tempfile
@@ -12,7 +13,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V7"
+VERSION = "VPS_BRIDGE_EXECUTOR_V8"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -381,6 +382,104 @@ def _last_ma30_journal():
     return evidence
 
 
+
+def action_ma30_astps_diagnostic(_payload):
+    db_path = "/var/lib/trade-workbench/sqlite/d1.sqlite"
+    uri = f"file:{db_path}?mode=ro"
+    connection = sqlite3.connect(uri, uri=True)
+    try:
+        row = connection.execute(
+            "SELECT run_id, run_time_bjt, notification_state_json FROM ma30_scan_runs "
+            "ORDER BY run_time_bjt DESC, created_at DESC LIMIT 1"
+        ).fetchone()
+    finally:
+        connection.close()
+    if not row:
+        return {"ok": False, "summary": {"error": "NO_MA30_RUN", "modified": False}}
+
+    state = json.loads(row[2])
+    a_rows = state.get("a", []) if isinstance(state, dict) else []
+    b_rows = state.get("b", []) if isinstance(state, dict) else []
+    symbols = sorted({
+        str(item.get("symbol", "")).upper()
+        for item in [*a_rows, *b_rows]
+        if isinstance(item, dict) and item.get("symbol")
+    })
+
+    req = urllib.request.Request(RADAR_SIGNALS_URL, headers={"User-Agent": "trade-workbench-ai-bridge/8"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.load(resp)
+    signals = data.get("signals", []) if isinstance(data, dict) else []
+    if not isinstance(signals, list):
+        signals = []
+
+    accepted = []
+    diagnostics = []
+    for symbol in symbols:
+        rows = [item for item in signals if isinstance(item, dict) and str(item.get("symbol", "")).upper() == symbol]
+        active = [item for item in rows if item.get("state") in ("CANDIDATE", "CONFIRMED")]
+        policies = {}
+        directions = {}
+        valid = []
+        latest = None
+        for item in active:
+            consultation = item.get("consultation")
+            consensus = consultation.get("consensus") if isinstance(consultation, dict) else None
+            if not isinstance(consensus, dict):
+                continue
+            policy = str(consensus.get("alertPolicy", "NONE"))
+            policies[policy] = policies.get(policy, 0) + 1
+            plan = consensus.get("executionPlan")
+            direction = str(plan.get("direction", "NONE")) if isinstance(plan, dict) else "NONE"
+            directions[direction] = directions.get(direction, 0) + 1
+            if policy in ("FULL_PLAN", "AGGRESSIVE_CANDIDATE") and direction == "LONG":
+                valid.append(item)
+            if latest is None or int(item.get("lastProcessedBarTime") or 0) > int(latest.get("lastProcessedBarTime") or 0):
+                latest = item
+        if valid:
+            accepted.append(symbol)
+
+        latest_summary = None
+        if isinstance(latest, dict):
+            consultation = latest.get("consultation")
+            consensus = consultation.get("consensus") if isinstance(consultation, dict) else None
+            plan = consensus.get("executionPlan") if isinstance(consensus, dict) else None
+            latest_summary = {
+                "state": latest.get("state"),
+                "timeframe": latest.get("timeframe"),
+                "setup": latest.get("setup"),
+                "alertPolicy": consensus.get("alertPolicy") if isinstance(consensus, dict) else None,
+                "grade": consensus.get("grade") if isinstance(consensus, dict) else None,
+                "support": consensus.get("support") if isinstance(consensus, dict) else None,
+                "oppose": consensus.get("oppose") if isinstance(consensus, dict) else None,
+                "direction": plan.get("direction") if isinstance(plan, dict) else None,
+                "lastProcessedBarTime": latest.get("lastProcessedBarTime"),
+            }
+
+        diagnostics.append({
+            "symbol": symbol,
+            "radarSignals": len(rows),
+            "activeSignals": len(active),
+            "activePolicies": policies,
+            "activeDirections": directions,
+            "acceptedLongSignals": len(valid),
+            "latestActive": latest_summary,
+        })
+
+    return {
+        "ok": True,
+        "summary": {
+            "ma30RunId": row[0],
+            "ma30RunTimeBjt": row[1],
+            "candidateSymbols": symbols,
+            "candidateCount": len(symbols),
+            "acceptedSymbols": accepted,
+            "acceptedCount": len(accepted),
+            "diagnostics": diagnostics,
+            "modified": False,
+        },
+    }
+
 def action_ma30_isolated_validation(_payload):
     validation_root = Path("/var/lib/trade-workbench/ma30-validation")
     validation_root.mkdir(parents=True, exist_ok=True)
@@ -533,6 +632,7 @@ ACTIONS = {
     "health": action_health,
     "ma30_status": action_ma30_status,
     "ma30_isolated_validation": action_ma30_isolated_validation,
+    "ma30_astps_diagnostic": action_ma30_astps_diagnostic,
     "deploy_ma30_astps": action_deploy_ma30_astps,
     "radar_signals_summary": action_radar_signals_summary,
     "runtime_layout": action_runtime_layout,
