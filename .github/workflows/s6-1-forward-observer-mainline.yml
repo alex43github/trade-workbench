@@ -25,7 +25,7 @@ jobs:
           ref: 6f4e9b8980ceddd947c44fac0715228104f4e4f3
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version: '22.19.0'
           cache: npm
       - run: npm ci
       - name: Baseline full repository tests
@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version: '22.19.0'
           cache: npm
       - run: npm ci
       - name: Targeted S6.1 tests
