@@ -114,9 +114,16 @@ export async function syncAtrBandCandidatesToWatchlist(db: D1Database, candidate
   return syncWatchlistSource(db, "ATR_STRONG_1H", candidates.map((candidate) => ({ symbol: candidate.symbol })));
 }
 
-export async function syncHourlyStrongWatchlist(db: D1Database, scan: { status?: string; strong?: Array<{ symbol: string }> }) {
+export async function syncHourlyStrongWatchlist(db: D1Database, scan: {
+  status?: string;
+  strong?: Array<{ symbol: string }>;
+  cFocus?: Array<{ symbol: string }>;
+}) {
   if (scan.status && scan.status !== "ready") return listWatchlist(db);
-  return syncAtrBandCandidatesToWatchlist(db, scan.strong ?? []);
+  // New C-class Focus Pool is deliberately bounded: C5/C3/C1 each contribute
+  // only their top10 1H MA30-slope names. Fall back to legacy strong[] for
+  // older scan payloads during rolling deployment.
+  return syncAtrBandCandidatesToWatchlist(db, scan.cFocus ?? scan.strong ?? []);
 }
 
 export async function syncPositionWatchlist(db: D1Database, positions: Array<{ symbol: string; quantity: number }>) {
