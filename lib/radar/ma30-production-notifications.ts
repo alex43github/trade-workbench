@@ -53,15 +53,16 @@ function chineseConfidence(confidence: string): string {
 }
 
 
-function modelBadge(row: { modelValidation?: { grade: string; alertPolicy: string; signalState: string } }): string | null {
+function modelBadge(row: { modelValidation?: { status: string; grade: string; alertPolicy: string; signalState: string } }): string | null {
   const value = row.modelValidation;
   if (!value) return null;
+  const state = value.signalState === "CONFIRMED" ? "结构确认" : "结构候选";
+  if (value.status === "PENDING_DEEP_VALIDATION") return `模型待深验·${state}`;
   const policy = value.alertPolicy === "FULL_PLAN" ? "完整计划" : "积极候选";
-  const state = value.signalState === "CONFIRMED" ? "已确认" : "候选";
   return `模型${value.grade}·${policy}·${state}`;
 }
 
-function withModelPrefix(row: { modelValidation?: { grade: string; alertPolicy: string; signalState: string } }, tail: string): string {
+function withModelPrefix(row: { modelValidation?: { status: string; grade: string; alertPolicy: string; signalState: string } }, tail: string): string {
   const badge = modelBadge(row);
   return badge ? `${badge}，${tail}` : tail;
 }
