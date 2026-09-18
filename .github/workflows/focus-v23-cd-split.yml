@@ -1,0 +1,29 @@
+name: Focus V2.3 C/D split
+
+on:
+  push:
+    branches:
+      - feature/focus-v23-cd-split
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.0
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Focus selection regressions
+        run: node --experimental-strip-types --test tests/focus-cd-selection.test.mjs
+      - name: TypeScript syntax check
+        run: |
+          node --experimental-strip-types --check scripts/focus-pool-v22-hourly.ts
+          node --experimental-strip-types --check scripts/focus-pool-v22-cd-bark.ts
+          node --experimental-strip-types --check scripts/atr-persistence-v1-hourly.ts
+          node --experimental-strip-types --check scripts/structure-radar-priority-watcher.ts
+      - name: Production build
+        run: npm run build
