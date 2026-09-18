@@ -37,28 +37,34 @@ const bucket =
   );
 
 
-const cRows =
-  Array.isArray(
-    data?.barkPreview?.C,
-  )
-    ? data.barkPreview.C
-        .slice(
-          0,
-          10,
-        )
+function rows(value: unknown) {
+  return Array.isArray(value)
+    ? value.slice(0, 10)
     : [];
+}
 
 
-const dRows =
-  Array.isArray(
-    data?.barkPreview?.D,
-  )
-    ? data.barkPreview.D
-        .slice(
-          0,
-          10,
-        )
-    : [];
+const cByLevel = {
+  C5: rows(
+    data?.barkPreview?.CByLevel?.C5,
+  ),
+  C3: rows(
+    data?.barkPreview?.CByLevel?.C3,
+  ),
+  C1: rows(
+    data?.barkPreview?.CByLevel?.C1,
+  ),
+};
+
+
+const dByDirection = {
+  LONG: rows(
+    data?.barkPreview?.DByDirection?.LONG,
+  ),
+  SHORT: rows(
+    data?.barkPreview?.DByDirection?.SHORT,
+  ),
+};
 
 
 function n(
@@ -76,47 +82,113 @@ function n(
 }
 
 
-const body = [
-  "【C｜ATR持续 Top10】",
+function signed(
+  value: unknown,
+  digits = 3,
+) {
+  const x =
+    Number(
+      value,
+    );
 
-  ...(
-    cRows.length
-      ? cRows.map(
-          (
-            row: any,
-            index: number,
-          ) =>
-            `${index + 1}. `
-            + `${row.symbol} `
-            + `${row.direction} `
-            + `C${row.cLevel} `
-            + `连续${row.cCount}`,
-        )
-      : [
-          "本小时无C候选",
-        ]
+  if (!Number.isFinite(x)) {
+    return "-";
+  }
+
+  return `${x >= 0 ? "+" : ""}${x.toFixed(digits)}`;
+}
+
+
+function cSection(
+  label: "C5" | "C3" | "C1",
+  sectionRows: any[],
+) {
+  return [
+    `【${label}｜ATR持续 Top10】`,
+    ...(
+      sectionRows.length
+        ? sectionRows.map(
+            (
+              row: any,
+              index: number,
+            ) =>
+              `${index + 1}. `
+              + `${row.symbol} `
+              + `${row.direction} `
+              + `连续${row.cCount} `
+              + `Slope ${signed(row.slopePct)}%`,
+          )
+        : [
+            `本小时无${label}候选`,
+          ]
+    ),
+  ];
+}
+
+
+function dSection(
+  direction: "LONG" | "SHORT",
+  sectionRows: any[],
+) {
+  const zh =
+    direction === "LONG"
+      ? "多头"
+      : "空头";
+
+  return [
+    `【D｜1H MA30斜率 ${zh} Top10】`,
+    ...(
+      sectionRows.length
+        ? sectionRows.map(
+            (
+              row: any,
+              index: number,
+            ) =>
+              `${index + 1}. `
+              + `${row.symbol} `
+              + `Slope ${signed(row.slopePct)}% `
+              + `R² ${n(row.r2)}`,
+          )
+        : [
+            `本小时无D ${direction}候选`,
+          ]
+    ),
+  ];
+}
+
+
+const body = [
+  ...cSection(
+    "C5",
+    cByLevel.C5,
   ),
 
   "",
 
-  "【D｜1H MA30斜率 Top10】",
+  ...cSection(
+    "C3",
+    cByLevel.C3,
+  ),
 
-  ...(
-    dRows.length
-      ? dRows.map(
-          (
-            row: any,
-            index: number,
-          ) =>
-            `${index + 1}. `
-            + `${row.symbol} `
-            + `${row.direction} `
-            + `Slope ${n(row.slopePct)}% `
-            + `R² ${n(row.r2)}`,
-        )
-      : [
-          "本小时无D候选",
-        ]
+  "",
+
+  ...cSection(
+    "C1",
+    cByLevel.C1,
+  ),
+
+  "",
+
+  ...dSection(
+    "LONG",
+    dByDirection.LONG,
+  ),
+
+  "",
+
+  ...dSection(
+    "SHORT",
+    dByDirection.SHORT,
   ),
 
   "",
@@ -126,6 +198,20 @@ const body = [
       ? data.items.length
       : 0
   }个`,
+
+  `C Focus：C5 ${
+    data?.counts?.C5Focus ?? 0
+  }｜C3 ${
+    data?.counts?.C3Focus ?? 0
+  }｜C1 ${
+    data?.counts?.C1Focus ?? 0
+  }`,
+
+  `D Focus：多 ${
+    data?.counts?.DLongFocus ?? 0
+  }｜空 ${
+    data?.counts?.DShortFocus ?? 0
+  }`,
 
   `扫描：${generatedAt}`,
 ].join("\n");
