@@ -10,6 +10,16 @@ export const MA30_SCANNER_VERSION = "MA30_SCANNER_V1";
 export const MA30_DEFAULT_HISTORY_LIMIT = 1_000;
 export const MA30_DEFAULT_SHORT_WATCH_LIMIT = 5;
 
+const STABLECOIN_BASE_ASSETS = new Set([
+  "USDC", "FDUSD", "TUSD", "USDP", "DAI", "BUSD", "USDE", "USDS", "PYUSD", "USD1",
+]);
+
+export function isStablecoinUsdtPerpetual(symbol: string): boolean {
+  const normalized = symbol.trim().toUpperCase();
+  if (!normalized.endsWith("USDT")) return false;
+  return STABLECOIN_BASE_ASSETS.has(normalized.slice(0, -4));
+}
+
 export type Ma30ScannerBar = {
   close: number;
   closeTime: number;
@@ -96,7 +106,8 @@ export async function runMa30FullMarketScan(options: {
 } = {}) {
   const now = options.now ?? new Date();
   const fetchers = options.fetchers ?? defaultFetchers();
-  const symbols = uniqueSymbols(await fetchers.listSymbols());
+  const listedSymbols = uniqueSymbols(await fetchers.listSymbols());
+  const symbols = listedSymbols.filter((symbol) => !isStablecoinUsdtPerpetual(symbol));
   const expectedLastCloseTime = expectedLastClosedHourlyCandle(now);
 
   const barsBySymbol = new Map<string, Ma30ScannerBar[]>();
@@ -300,6 +311,7 @@ export async function runMa30FullMarketScan(options: {
     expectedLastClosed1hUtc: new Date(expectedLastCloseTime).toISOString(),
     coverage: {
       universe: symbols.length,
+      excludedStablecoins: listedSymbols.length - symbols.length,
       fetchedSuccessfully: barsBySymbol.size,
       slopeQualified: rows.length,
       insufficientHistory: insufficient.length,
