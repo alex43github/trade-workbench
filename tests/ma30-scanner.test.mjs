@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runMa30FullMarketScan, selectMa30ShortWatch } from "../lib/radar/ma30-scanner.ts";
+import { isStablecoinUsdtPerpetual, runMa30FullMarketScan, selectMa30ShortWatch } from "../lib/radar/ma30-scanner.ts";
 
 const HOUR = 3_600_000;
 
@@ -99,4 +99,30 @@ test("user-visible short watch is capped and strongly prefers candidates closer 
   assert.equal(selected.length, 5);
   assert.equal(selected.some((row) => row.symbol === "FARUSDT"), false);
   assert.equal(selected[0].symbol, "NEAR2USDT");
+});
+
+
+test("stablecoin USDT perpetuals are excluded before ranking and API fetch", async () => {
+  const now = new Date("2026-09-14T04:19:00.000Z");
+  const fetched = [];
+  const result = await runMa30FullMarketScan({
+    now,
+    fetchers: {
+      listSymbols: async () => ["USDCUSDT", "FDUSDUSDT", "BTCUSDT", "KOMAUSDT"],
+      fetchClosedBars: async (symbol) => {
+        fetched.push(symbol);
+        return closedBars({ now, rate: symbol === "BTCUSDT" ? 0.0005 : 0.0008 });
+      },
+    },
+  });
+  assert.equal(isStablecoinUsdtPerpetual("USDCUSDT"), true);
+  assert.equal(isStablecoinUsdtPerpetual("FDUSDUSDT"), true);
+  assert.equal(isStablecoinUsdtPerpetual("BTCUSDT"), false);
+  assert.deepEqual(fetched.sort(), ["BTCUSDT", "KOMAUSDT"]);
+  assert.equal(result.coverage.universe, 2);
+  assert.equal(result.coverage.excludedStablecoins, 2);
+  assert.equal(result.a.some((row) => row.symbol === "USDCUSDT"), false);
+  assert.equal(result.b.some((row) => row.symbol === "USDCUSDT"), false);
+  assert.equal(result.c.some((row) => row.symbol === "USDCUSDT"), false);
+  assert.equal(result.ai.some((row) => row.symbol === "USDCUSDT"), false);
 });
