@@ -4,6 +4,7 @@ import {
   ASTPS_MODEL_VERSION,
   ASTPS_RUNTIME_VERSION,
   buildMa30AstpsValidationIndex,
+  summarizeMa30AstpsValidation,
   type StructureRadarSignalLike,
 } from "./ma30-astps-bridge.ts";
 import { evolveMa30Lifecycle, type Ma30LifecycleState } from "./ma30-lifecycle.ts";
@@ -140,6 +141,7 @@ export async function executeMa30ProductionCycle(options: {
     modelVersion: typeof ASTPS_MODEL_VERSION;
     candidateSymbols: number;
     validatedSymbols: number;
+    pendingSymbols: number;
     selectedA: number;
     selectedB: number;
     error?: string;
@@ -149,6 +151,7 @@ export async function executeMa30ProductionCycle(options: {
     modelVersion: ASTPS_MODEL_VERSION,
     candidateSymbols: abCandidateSymbols.length,
     validatedSymbols: 0,
+    pendingSymbols: 0,
     selectedA: notificationState.a.length,
     selectedB: notificationState.b.length,
   };
@@ -157,13 +160,15 @@ export async function executeMa30ProductionCycle(options: {
     try {
       const signals = await options.deps.loadAstpsSignals();
       const validation = buildMa30AstpsValidationIndex(signals, abCandidateSymbols);
+      const validationSummary = summarizeMa30AstpsValidation(validation);
       notificationState = applyMa30AstpsValidation(notificationState, validation);
       astpsValidation = {
         status: "READY",
         runtimeVersion: ASTPS_RUNTIME_VERSION,
         modelVersion: ASTPS_MODEL_VERSION,
         candidateSymbols: abCandidateSymbols.length,
-        validatedSymbols: validation.size,
+        validatedSymbols: validationSummary.validatedSymbols,
+        pendingSymbols: validationSummary.pendingSymbols,
         selectedA: notificationState.a.length,
         selectedB: notificationState.b.length,
       };
@@ -176,6 +181,7 @@ export async function executeMa30ProductionCycle(options: {
         modelVersion: ASTPS_MODEL_VERSION,
         candidateSymbols: abCandidateSymbols.length,
         validatedSymbols: 0,
+        pendingSymbols: 0,
         selectedA: 0,
         selectedB: 0,
         error: error instanceof Error ? error.message : String(error),
@@ -211,6 +217,7 @@ export async function executeMa30ProductionCycle(options: {
       astpsModelVersion: astpsValidation.modelVersion,
       astpsCandidateSymbols: astpsValidation.candidateSymbols,
       astpsValidatedSymbols: astpsValidation.validatedSymbols,
+      astpsPendingSymbols: astpsValidation.pendingSymbols,
       astpsSelectedA: astpsValidation.selectedA,
       astpsSelectedB: astpsValidation.selectedB,
     },
