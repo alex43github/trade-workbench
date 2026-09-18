@@ -52,6 +52,20 @@ function chineseConfidence(confidence: string): string {
   return "信心未知";
 }
 
+
+function modelBadge(row: { modelValidation?: { grade: string; alertPolicy: string; signalState: string } }): string | null {
+  const value = row.modelValidation;
+  if (!value) return null;
+  const policy = value.alertPolicy === "FULL_PLAN" ? "完整计划" : "积极候选";
+  const state = value.signalState === "CONFIRMED" ? "已确认" : "候选";
+  return `模型${value.grade}·${policy}·${state}`;
+}
+
+function withModelPrefix(row: { modelValidation?: { grade: string; alertPolicy: string; signalState: string } }, tail: string): string {
+  const badge = modelBadge(row);
+  return badge ? `${badge}，${tail}` : tail;
+}
+
 function signedPct(value: number): string {
   const normalized = Math.abs(value) < 0.05 ? 0 : value;
   return `${normalized >= 0 ? "+" : ""}${normalized.toFixed(1)}%`;
@@ -112,8 +126,8 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = rowsForEvents(selected, a).sort((left, right) => left.rank - right.rank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:A:lifecycle`,
-        title: `MA30 A组｜${scanTime}`,
-        body: rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，斜率${signedSlope(row.slope20)}`).join("\n"),
+        title: `MA30 A组${rows.some((row) => row.modelValidation) ? "·进化模型" : ""}｜${scanTime}`,
+        body: rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${withModelPrefix(row, `${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，斜率${signedSlope(row.slope20)}`)}`).join("\n"),
       });
       continue;
     }
@@ -122,8 +136,8 @@ export function buildMa30LifecycleBarkGroups(options: {
       const rows = rowsForEvents(selected, b).sort((left, right) => left.bRank - right.bRank);
       if (rows.length) groups.push({
         key: `radar:ma30-slope:${options.scanBucket}:B:lifecycle`,
-        title: `MA30 B组｜${scanTime}`,
-        body: rows.map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`).join("\n"),
+        title: `MA30 B组${rows.some((row) => row.modelValidation) ? "·进化模型" : ""}｜${scanTime}`,
+        body: rows.map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${withModelPrefix(row, `${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`)}`).join("\n"),
       });
       continue;
     }
@@ -165,14 +179,14 @@ export function buildMa30LifecycleBarkGroups(options: {
 function renderA(rows: Ma30NotificationState["a"]): string {
   return rows.slice(0, 10)
     .sort((left, right) => left.rank - right.rank)
-    .map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，斜率${signedSlope(row.slope20)}`)
+    .map((row) => `${row.rank}.${displaySymbol(row.symbol)}，${withModelPrefix(row, `${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}，斜率${signedSlope(row.slope20)}`)}`)
     .join("\n") || "无";
 }
 
 function renderB(rows: Ma30NotificationState["b"]): string {
   return rows.slice(0, 10)
     .sort((left, right) => left.bRank - right.bRank)
-    .map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`)
+    .map((row) => `${row.bRank}.${displaySymbol(row.symbol)}，${withModelPrefix(row, `${chineseStage(row.stage)}，${signedPct(row.priceVsMa30Pct)}`)}`)
     .join("\n") || "无";
 }
 
