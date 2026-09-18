@@ -218,6 +218,8 @@ test("production A/B uses ASTPS validation while C/AI discovery remains availabl
   assert.equal(result.notificationState.a.length, 1);
   assert.equal(result.notificationState.b.length, 1);
   assert.equal(result.notificationState.a[0].modelValidation.grade, "4/4");
+  assert.equal(result.astpsValidation.validatedSymbols, 1);
+  assert.equal(result.astpsValidation.pendingSymbols, 0);
   assert.equal(result.notificationState.c.length, 1);
   assert.equal(result.notificationState.ai.length, 1);
   assert.equal(d.calls.persisted[0].runtimeSnapshot.coverage.astpsStatus, "READY");
@@ -237,4 +239,39 @@ test("production A/B fails closed when ASTPS validation is unavailable", async (
   assert.deepEqual(result.notificationState.b, []);
   assert.equal(result.notificationState.c.length, 1);
   assert.equal(result.notificationState.ai.length, 1);
+});
+
+
+test("production A/B keeps MECHANICAL_ONLY active signals as pending deep validation", async () => {
+  const d = deps({
+    loadAstpsSignals: async () => [{
+      symbol: "AAAUSDT",
+      state: "CONFIRMED",
+      timeframe: "1h",
+      setup: "TRENDLINE_BREAKOUT",
+      detectedAt: 100,
+      lastProcessedBarTime: 200,
+      consultation: {
+        consensus: {
+          alertPolicy: "MECHANICAL_ONLY",
+          grade: "INCOMPLETE",
+          support: 0,
+          oppose: 0,
+          executionPlan: null,
+        },
+      },
+    }],
+  });
+  const result = await executeMa30ProductionCycle({
+    now: new Date("2026-09-14T00:10:00.000Z"),
+    notifications: "DRY_RUN",
+    deps: d.value,
+  });
+  assert.equal(result.astpsValidation.status, "READY");
+  assert.equal(result.astpsValidation.validatedSymbols, 0);
+  assert.equal(result.astpsValidation.pendingSymbols, 1);
+  assert.equal(result.notificationState.a.length, 1);
+  assert.equal(result.notificationState.b.length, 1);
+  assert.equal(result.notificationState.a[0].modelValidation.status, "PENDING_DEEP_VALIDATION");
+  assert.equal(d.calls.persisted[0].runtimeSnapshot.coverage.astpsPendingSymbols, 1);
 });
