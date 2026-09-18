@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "lastSyncedAt": "2026-09-18T14:10:00.000Z",
+  "tasks": [
+    {
+      "id": "6aa53485a3988191820a092f2c64f187",
+      "title": "永续强趋势雷达 + C/D Focus｜每小时10分",
+      "enabled": true,
+      "timing_mode": "exact_schedule",
+      "schedule": "每小时10分 Asia/Shanghai",
+      "last_run_time": "2026-09-18T14:09:11.297033Z",
+      "updated_at": "2026-09-18T14:09:33.835545Z"
+    },
+    {
+      "id": "6aa6b31b8f708191b46ebfe53f08ac72",
+      "title": "强趋势雷达35分兜底 + C/D",
+      "enabled": true,
+      "timing_mode": "condition_watch",
+      "schedule": "每小时35分 Asia/Shanghai",
+      "last_run_time": "2026-09-18T13:19:49.672130Z",
+      "updated_at": "2026-09-18T13:20:11.079827Z"
+    },
+    {
+      "id": "6aad38cdb4808191800a66fe9dba274e",
+      "title": "ATR历史缓存补全",
+      "enabled": true,
+      "timing_mode": "exact_schedule",
+      "schedule": "每小时45分 Asia/Shanghai",
+      "last_run_time": "2026-09-18T13:46:26.061714Z",
+      "updated_at": "2026-09-18T13:46:50.303743Z"
+    },
+    {
+      "id": "6aa4a3af22e88191b93788a87c8051ef",
+      "title": "交易系统进化（轧空/轧多双向挤压）+ Drive同步",
+      "enabled": true,
+      "timing_mode": "exact_schedule",
+      "schedule": "每小时",
+      "last_run_time": "2026-09-18T14:03:55.719134Z",
+      "updated_at": "2026-09-18T14:04:18.851663Z"
+    },
+    {
+      "id": "6aa56d95a98081919f40f1e54a4c8c03",
+      "title": "每日实盘成长与漏扫趋势复盘",
+      "enabled": true,
+      "timing_mode": "exact_schedule",
+      "schedule": "每天08:15 Asia/Shanghai",
+      "last_run_time": "2026-09-18T00:18:15.635782Z",
+      "updated_at": "2026-09-18T00:18:39.422893Z"
+    }
+  ]
+}
