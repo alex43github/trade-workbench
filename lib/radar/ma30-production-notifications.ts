@@ -221,8 +221,8 @@ export function buildMa30DTopBarkGroup(options: {
 }): RadarBarkGroup | null {
   if (isMa30BarkQuietHourBjt(options.bjtHour)) return null;
 
-  const longs = [...options.current.dLong].sort((left, right) => left.rank - right.rank).slice(0, 10);
-  const shorts = [...options.current.dShort].sort((left, right) => left.rank - right.rank).slice(0, 10);
+  const longs = [...(options.current.dLong ?? [])].sort((left, right) => left.rank - right.rank).slice(0, 10);
+  const shorts = [...(options.current.dShort ?? [])].sort((left, right) => left.rank - right.rank).slice(0, 10);
   if (!longs.length && !shorts.length) return null;
 
   const render = (rows: readonly { symbol: string; rank: number; slope20: number; priceVsMa30Pct: number }[]) =>
@@ -253,8 +253,8 @@ export function buildMa30OvernightBriefGroup(options: {
     key: `radar:ma30-slope:${options.scanBucket}:OVERNIGHT`,
     title: `MA30 夜间汇总｜${displayScanBucket(options.scanBucket)}`,
     body: [
-      "D类 LONG", options.current.dLong.slice(0, 10).map((row) => `${row.rank}.${displaySymbol(row.symbol)}，斜率${signedSlope(row.slope20)}`).join("\n") || "无",
-      "", "D类 SHORT", options.current.dShort.slice(0, 10).map((row) => `${row.rank}.${displaySymbol(row.symbol)}，斜率${signedSlope(row.slope20)}`).join("\n") || "无",
+      "D类 LONG", (options.current.dLong ?? []).slice(0, 10).map((row) => `${row.rank}.${displaySymbol(row.symbol)}，斜率${signedSlope(row.slope20)}`).join("\n") || "无",
+      "", "D类 SHORT", (options.current.dShort ?? []).slice(0, 10).map((row) => `${row.rank}.${displaySymbol(row.symbol)}，斜率${signedSlope(row.slope20)}`).join("\n") || "无",
       "", "A组", renderA(options.current.a),
       "", "B组", renderB(options.current.b),
       "", "C组", renderC(options.current.c),
