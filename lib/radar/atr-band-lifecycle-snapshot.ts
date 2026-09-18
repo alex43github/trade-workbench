@@ -1,5 +1,7 @@
 import { DEFAULT_ATR_MULTIPLIER, MIN_ATR_BAND_CONSECUTIVE_BARS } from "./atr-band.ts";
 import { deriveLifecycleSignal, transitionAtrBandLifecycle, type AtrBandLifecycle, type AtrBandLifecycleStatus } from "./atr-band-lifecycle.ts";
+import { computeMa30SlopeSnapshot } from "./ma30-slope.ts";
+import { isStablecoinUsdtPerpetual } from "./ma30-universe.ts";
 import type { ClosedBar } from "./reversal.ts";
 import { createRadarDiagnosticFromError, type RadarDiagnostic } from "./scan-diagnostic.ts";
 import { createScanProgress, type RadarScanProgress, type ScanProgressOptions } from "./scan-progress.ts";
@@ -56,6 +58,19 @@ export type AtrLifecycleScanOptions = ScanProgressOptions & {
   multiplier?: number;
 };
 
+export type AtrTier = "C5" | "C3" | "C1";
+export type AtrTierCandidate = {
+  tier: AtrTier;
+  rank: number;
+  symbol: string;
+  direction: "LONG";
+  consecutiveBars: number;
+  slope20: number;
+  signedAtrDistance: number;
+  priceVsMa30Pct: number;
+};
+export type AtrTierFocusCandidate = AtrTierCandidate & { focusRank: number };
+
 export type AtrLifecycleScan = {
   status: "ready" | "degraded" | "pending";
   scannedAt: string;
@@ -68,6 +83,10 @@ export type AtrLifecycleScan = {
   strong: AtrBandLifecycle[];
   warning: AtrBandLifecycle[];
   history: AtrBandLifecycle[];
+  c5: AtrTierCandidate[];
+  c3: AtrTierCandidate[];
+  c1: AtrTierCandidate[];
+  cFocus: AtrTierFocusCandidate[];
   scannedSymbols: number;
   successfulSymbols: number;
   failedSymbols: number;
@@ -91,6 +110,10 @@ export type AtrLifecycleDashboard = {
   strong: AtrBandLifecycle[];
   warning: AtrBandLifecycle[];
   history: AtrBandLifecycle[];
+  c5: AtrTierCandidate[];
+  c3: AtrTierCandidate[];
+  c1: AtrTierCandidate[];
+  cFocus: AtrTierFocusCandidate[];
   latestScanBucket?: string | null;
   lastScanBucket: string | null;
   realOrderRouteEnabled: false;
@@ -230,6 +253,56 @@ function isFourHourCloseBucket(now: Date) {
   return Number.isInteger(hour) && hour % 4 === 0;
 }
 
+
+function currentAtrTierCandidate(symbol: string, bars: readonly ClosedBar[]): Omit<AtrTierCandidate, "rank"> | null {
+  const slope = computeMa30SlopeSnapshot(bars.map((bar) => bar.close));
+  if (!slope) return null;
+  for (const [tier, multiplier] of [["C5", 5], ["C3", 3], ["C1", 1]] as const) {
+    const signal = deriveLifecycleSignal({
+      bars,
+      direction: "LONG",
+      multiplier,
+      minimumBars: MIN_ATR_BAND_CONSECUTIVE_BARS,
+    });
+    if (!signal || signal.status !== "STRONG" || signal.consecutiveBars < MIN_ATR_BAND_CONSECUTIVE_BARS) continue;
+    return {
+      tier,
+      symbol,
+      direction: "LONG",
+      consecutiveBars: signal.consecutiveBars,
+      slope20: slope.slope20,
+      signedAtrDistance: signal.signedAtrDistance,
+      priceVsMa30Pct: ((signal.close / signal.ma30) - 1) * 100,
+    };
+  }
+  return null;
+}
+
+function buildAtrTierLists(candidates: readonly Omit<AtrTierCandidate, "rank">[]) {
+  const persistenceOrder = (left: Omit<AtrTierCandidate, "rank">, right: Omit<AtrTierCandidate, "rank">) =>
+    right.consecutiveBars - left.consecutiveBars
+    || right.signedAtrDistance - left.signedAtrDistance
+    || right.slope20 - left.slope20
+    || left.symbol.localeCompare(right.symbol);
+  const slopeOrder = (left: Omit<AtrTierCandidate, "rank">, right: Omit<AtrTierCandidate, "rank">) =>
+    right.slope20 - left.slope20
+    || right.consecutiveBars - left.consecutiveBars
+    || left.symbol.localeCompare(right.symbol);
+
+  const byTier = (tier: AtrTier) => candidates.filter((row) => row.tier === tier);
+  const ranked = (tier: AtrTier) => byTier(tier).sort(persistenceOrder).slice(0, 10)
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+  const focus = (tier: AtrTier) => byTier(tier).sort(slopeOrder).slice(0, 10)
+    .map((row, index) => ({ ...row, rank: index + 1, focusRank: index + 1 }));
+
+  return {
+    c5: ranked("C5"),
+    c3: ranked("C3"),
+    c1: ranked("C1"),
+    cFocus: [...focus("C5"), ...focus("C3"), ...focus("C1")],
+  };
+}
+
 function groupLifecycles(input: readonly AtrBandLifecycle[]) {
   const lifecycles = [...input].filter(isLifecycle).sort(lifecycleOrder);
   const strong = lifecycles.filter((lifecycle) => lifecycle.status === "STRONG").sort(strongLifecycleOrder);
@@ -321,6 +394,7 @@ type ScanResult = {
   symbol: string;
   successful: boolean;
   lifecycles: AtrBandLifecycle[];
+  atrTierCandidate: Omit<AtrTierCandidate, "rank"> | null;
 };
 
 async function scanOne(
@@ -337,14 +411,15 @@ async function scanOne(
       oiFetcher ? oiFetcher(symbol, now) : Promise.resolve([] as AtrLifecycleOiInput),
     ]);
     const bars = normalizeBars(rawBars ?? [], now);
-    if (bars.length < MINIMUM_LIFECYCLE_BARS) return { symbol, successful: false, lifecycles: [] };
+    if (bars.length < MINIMUM_LIFECYCLE_BARS) return { symbol, successful: false, lifecycles: [], atrTierCandidate: null };
     return {
       symbol,
       successful: true,
       lifecycles: replayLifecycle(symbol, bars, normalizeOiInput(rawOi), previous, multiplier),
+      atrTierCandidate: currentAtrTierCandidate(symbol, bars),
     };
   } catch {
-    return { symbol, successful: false, lifecycles: [] };
+    return { symbol, successful: false, lifecycles: [], atrTierCandidate: null };
   }
 }
 
@@ -381,6 +456,10 @@ function emptyScan(
     strong: [],
     warning: [],
     history: [],
+    c5: [],
+    c3: [],
+    c1: [],
+    cFocus: [],
     scannedSymbols: 0,
     successfulSymbols: 0,
     failedSymbols: 0,
@@ -443,7 +522,7 @@ export async function buildAtrLifecycleScan(
     const rawSymbols = await fetchers.listSymbols();
     symbols = [...new Set((rawSymbols ?? []).flatMap((symbol) => {
       const normalized = normalizeSymbol(symbol);
-      return normalized ? [normalized] : [];
+      return normalized && !isStablecoinUsdtPerpetual(normalized) ? [normalized] : [];
     }))];
   } catch (error) {
     const diagnostic = createRadarDiagnosticFromError(error, "无法获取币安合约币种列表", currentTime);
@@ -480,6 +559,7 @@ export async function buildAtrLifecycleScan(
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, symbols.length) }, () => worker()));
 
+  const tierLists = buildAtrTierLists(results.flatMap((result) => result.atrTierCandidate ? [result.atrTierCandidate] : []));
   const successfulSymbols = results.filter((result) => result.successful).length;
   const failedSymbols = results.length - successfulSymbols;
   let grouped = groupLifecycles([...records.values()]);
@@ -507,6 +587,7 @@ export async function buildAtrLifecycleScan(
     multiplier,
     minimumBars: MIN_ATR_BAND_CONSECUTIVE_BARS,
     ...grouped,
+    ...tierLists,
     scannedSymbols: symbols.length,
     successfulSymbols,
     failedSymbols,
@@ -605,6 +686,10 @@ function emptyDashboard(): AtrLifecycleDashboard {
     strong: [],
     warning: [],
     history: [],
+    c5: [],
+    c3: [],
+    c1: [],
+    cFocus: [],
     latestScanBucket: null,
     realOrderRouteEnabled: false,
   };
@@ -646,6 +731,10 @@ export async function loadAtrLifecycleDashboard(
         try {
           const payload = JSON.parse(row.payload_json) as Partial<AtrLifecycleScan>;
           if (validNumber(payload.multiplier)) dashboard.multiplier = payload.multiplier;
+          dashboard.c5 = Array.isArray(payload.c5) ? payload.c5 : [];
+          dashboard.c3 = Array.isArray(payload.c3) ? payload.c3 : [];
+          dashboard.c1 = Array.isArray(payload.c1) ? payload.c1 : [];
+          dashboard.cFocus = Array.isArray(payload.cFocus) ? payload.cFocus : [];
         } catch {
           // A malformed scan marker must not hide valid lifecycle rows.
         }
