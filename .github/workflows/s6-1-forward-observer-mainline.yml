@@ -50,7 +50,23 @@ jobs:
             baseline-test-exit.txt
           if-no-files-found: error
       - name: Baseline typecheck
-        run: npx tsc --noEmit
+        shell: bash
+        run: |
+          set +e
+          npx tsc --noEmit 2>&1 | tee baseline-typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'error TS[0-9]+:' baseline-typecheck.log | sort -u > baseline-typecheck-errors.txt || true
+          printf '%s\n' "$status" > baseline-typecheck-exit.txt
+          echo "Baseline typecheck exit=$status; unique errors=$(wc -l < baseline-typecheck-errors.txt)"
+      - name: Upload baseline typecheck manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-typecheck-errors
+          path: |
+            baseline-typecheck-errors.txt
+            baseline-typecheck-exit.txt
+          if-no-files-found: error
 
   feature:
     runs-on: ubuntu-latest
@@ -86,7 +102,23 @@ jobs:
             feature-test-exit.txt
           if-no-files-found: error
       - name: Typecheck
-        run: npx tsc --noEmit
+        shell: bash
+        run: |
+          set +e
+          npx tsc --noEmit 2>&1 | tee feature-typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'error TS[0-9]+:' feature-typecheck.log | sort -u > feature-typecheck-errors.txt || true
+          printf '%s\n' "$status" > feature-typecheck-exit.txt
+          echo "Feature typecheck exit=$status; unique errors=$(wc -l < feature-typecheck-errors.txt)"
+      - name: Upload feature typecheck manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-typecheck-errors
+          path: |
+            feature-typecheck-errors.txt
+            feature-typecheck-exit.txt
+          if-no-files-found: error
       - name: Final build
         run: npm run build
       - name: Diff check
@@ -123,6 +155,16 @@ jobs:
         with:
           name: feature-test-failures
           path: feature
+      - name: Download baseline typecheck manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-typecheck-errors
+          path: baseline-typecheck
+      - name: Download feature typecheck manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: feature-typecheck-errors
+          path: feature-typecheck
       - name: Prove no new full-suite failures
         shell: bash
         run: |
@@ -137,4 +179,18 @@ jobs:
           fi
           echo "Baseline known failures: $(wc -l < baseline.sorted)"
           echo "Feature known failures:  $(wc -l < feature.sorted)"
-          echo 'S6.1 targeted tests, typecheck, build, safety audit and no-new-failure comparison passed.'
+      - name: Prove no new typecheck errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          sort -u baseline-typecheck/baseline-typecheck-errors.txt > baseline-typecheck.sorted
+          sort -u feature-typecheck/feature-typecheck-errors.txt > feature-typecheck.sorted
+          comm -13 baseline-typecheck.sorted feature-typecheck.sorted > new-typecheck-errors.txt
+          if test -s new-typecheck-errors.txt; then
+            echo 'S6.1 introduced new TypeScript errors:' >&2
+            cat new-typecheck-errors.txt >&2
+            exit 1
+          fi
+          echo "Baseline known type errors: $(wc -l < baseline-typecheck.sorted)"
+          echo "Feature known type errors:  $(wc -l < feature-typecheck.sorted)"
+          echo 'S6.1 targeted tests, build, safety audit, no-new-test-failure and no-new-type-error checks passed.'
