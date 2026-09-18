@@ -1,14 +1,10 @@
 import fs from "node:fs";
 
 import {
-  listUsdtPerpetuals,
-  fetchClosedKlines,
-} from "../services/structure-radar/binance-public.ts";
-import {
   FOCUS_LIMITS,
   rankCLevelRows,
 } from "../lib/radar/focus-pool-v22.ts";
-import { calculateLogNormalizedSlope20 } from "../lib/radar/slope20.ts";
+import { inspectFocusSource } from "../lib/radar/focus-pool-v23-cache.ts";
 import { isStablecoinUsdtPerpetual } from "../lib/radar/ma30-universe.ts";
 
 
@@ -131,6 +127,30 @@ function atomicWrite(
   );
 }
 
+function failClosed(
+  source: Extract<ReturnType<typeof inspectFocusSource>, { ok: false }>,
+): never {
+  const output = {
+    schemaVersion: "FOCUS_POOL_V23_CACHED_UNIVERSE_PARTIAL",
+    generatedAt: new Date().toISOString(),
+    mode: "PARTIAL_FAIL_CLOSED",
+    sourceGeneratedAt: source.sourceGeneratedAt,
+    sourceAge: source.sourceAge,
+    sourceCoverage: source.sourceCoverage,
+    usedCachedUniverse: source.usedCachedUniverse,
+    error: source.error,
+    counts: {
+      universe: source.sourceCoverage.universeCount,
+      analyzed: source.sourceCoverage.analyzedCount,
+      focus: 0,
+      watch15m: 0,
+    },
+  };
+  atomicWrite(OUTPUT, output);
+  console.error(JSON.stringify({ status: source.status, ...output }, null, 2));
+  throw new Error(source.error);
+}
+
 
 function numberValue(
   ...values: unknown[]
@@ -151,268 +171,6 @@ function numberValue(
   }
 
   return null;
-}
-
-
-function mean(
-  values: readonly number[],
-) {
-  return (
-    values.reduce(
-      (sum, value) =>
-        sum + value,
-      0,
-    )
-    / values.length
-  );
-}
-
-
-function regression(
-  values: readonly number[],
-) {
-  const n =
-    values.length;
-
-  const xs =
-    values.map(
-      (_, index) =>
-        index,
-    );
-
-  const mx =
-    mean(xs);
-
-  const my =
-    mean(values);
-
-  let numerator = 0;
-  let denominator = 0;
-
-  for (
-    let index = 0;
-    index < n;
-    index++
-  ) {
-    numerator +=
-      (xs[index]! - mx)
-      * (values[index]! - my);
-
-    denominator +=
-      (xs[index]! - mx) ** 2;
-  }
-
-  const slope =
-    denominator === 0
-      ? 0
-      : numerator / denominator;
-
-  const intercept =
-    my - slope * mx;
-
-  let ssTot = 0;
-  let ssRes = 0;
-
-  for (
-    let index = 0;
-    index < n;
-    index++
-  ) {
-    const actual =
-      values[index]!;
-
-    const predicted =
-      intercept
-      + slope * xs[index]!;
-
-    ssTot +=
-      (actual - my) ** 2;
-
-    ssRes +=
-      (actual - predicted) ** 2;
-  }
-
-  const r2 =
-    ssTot === 0
-      ? 1
-      : Math.max(
-          0,
-          1 - ssRes / ssTot,
-        );
-
-  return {
-    slope,
-    r2,
-  };
-}
-
-
-function trueRange(
-  bar: any,
-  previousClose: number | null,
-) {
-  if (
-    previousClose === null
-  ) {
-    return (
-      bar.high
-      - bar.low
-    );
-  }
-
-  return Math.max(
-    bar.high - bar.low,
-    Math.abs(
-      bar.high
-      - previousClose,
-    ),
-    Math.abs(
-      bar.low
-      - previousClose,
-    ),
-  );
-}
-
-
-function calculateMetric(
-  symbol: string,
-  bars: readonly any[],
-): Metric | null {
-  if (
-    bars.length < 70
-  ) {
-    return null;
-  }
-
-  const maSeries: number[] =
-    [];
-
-  for (
-    let index = 29;
-    index < bars.length;
-    index++
-  ) {
-    maSeries.push(
-      mean(
-        bars
-          .slice(
-            index - 29,
-            index + 1,
-          )
-          .map(
-            bar =>
-              Number(
-                bar.close,
-              ),
-          ),
-      ),
-    );
-  }
-
-  if (
-    maSeries.length < 40
-  ) {
-    return null;
-  }
-
-  const latest =
-    bars.at(-1)!;
-
-  const ma30 =
-    maSeries.at(-1)!;
-
-  const trs =
-    bars.map(
-      (bar, index) =>
-        trueRange(
-          bar,
-          index > 0
-            ? Number(
-                bars[index - 1]!
-                  .close,
-              )
-            : null,
-        ),
-    );
-
-  const atr14 =
-    mean(
-      trs.slice(-14),
-    );
-
-  const slope20 =
-    calculateLogNormalizedSlope20(
-      maSeries,
-    );
-
-  if (
-    !Number.isFinite(atr14)
-    || atr14 <= 0
-    || !Number.isFinite(ma30)
-    || ma30 <= 0
-    || slope20 === null
-  ) {
-    return null;
-  }
-
-  const recent =
-    maSeries.slice(-20);
-
-  const previous =
-    maSeries.slice(
-      -40,
-      -20,
-    );
-
-  const rr =
-    regression(recent);
-
-  const rp =
-    regression(previous);
-
-  const slopePct =
-    slope20 * 100;
-
-  const slopeAtr =
-    rr.slope
-    / atr14;
-
-  const acceleration =
-    (
-      rr.slope
-      - rp.slope
-    )
-    / atr14;
-
-  return {
-    symbol,
-
-    close:
-      Number(
-        latest.close,
-      ),
-
-    ma30,
-    atr14,
-
-    extensionAtr:
-      (
-        Number(
-          latest.close,
-        )
-        - ma30
-      )
-      / atr14,
-
-    slopePct,
-    slope20,
-    slopeAtr,
-
-    r2:
-      rr.r2,
-
-    acceleration,
-  };
 }
 
 
@@ -994,6 +752,13 @@ const raw =
 const cdata =
   readJson(CFILE);
 
+const sourceSnapshot =
+  inspectFocusSource(cdata);
+
+if (!sourceSnapshot.ok) {
+  failClosed(sourceSnapshot);
+}
+
 const rawItems =
   Array.isArray(
     raw?.items,
@@ -1146,8 +911,7 @@ const cPersistence = {
  */
 
 const universe =
-  (await listUsdtPerpetuals())
-    .filter((market) => !isStablecoinUsdtPerpetual(market.symbol));
+  sourceSnapshot.rows;
 
 const metrics =
   new Map<
@@ -1155,75 +919,11 @@ const metrics =
     Metric
   >();
 
-const failures: any[] =
-  [];
+const failures: any[] = [];
 
-let cursor = 0;
-
-const CONCURRENCY =
-  4;
-
-
-async function worker() {
-  while (true) {
-    const index =
-      cursor++;
-
-    if (
-      index
-      >= universe.length
-    ) {
-      return;
-    }
-
-    const market =
-      universe[index]!;
-
-    try {
-      const bars =
-        await fetchClosedKlines(
-          market.symbol,
-          "1h",
-          100,
-        );
-
-      const metric =
-        calculateMetric(
-          market.symbol,
-          bars,
-        );
-
-      if (metric) {
-        metrics.set(
-          market.symbol,
-          metric,
-        );
-      }
-    } catch (error) {
-      failures.push({
-        symbol:
-          market.symbol,
-
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
-      });
-    }
-  }
+for (const row of universe) {
+  metrics.set(row.symbol, row);
 }
-
-
-await Promise.all(
-  Array.from(
-    {
-      length:
-        CONCURRENCY,
-    },
-    () =>
-      worker(),
-  ),
-);
 
 
 const longSlope =
@@ -1767,9 +1467,23 @@ const output = {
     raw?.generatedAt
     ?? null,
 
+  sourceGeneratedAt:
+    sourceSnapshot.sourceGeneratedAt,
+
+  sourceAge:
+    sourceSnapshot.sourceAge,
+
+  sourceCoverage:
+    sourceSnapshot.sourceCoverage,
+
+  usedCachedUniverse:
+    true,
+
   cSourceGeneratedAt:
-    cdata?.generatedAt
-    ?? null,
+    sourceSnapshot.sourceGeneratedAt,
+
+  dSourceGeneratedAt:
+    sourceSnapshot.sourceGeneratedAt,
 
   limits:
     LIMITS,

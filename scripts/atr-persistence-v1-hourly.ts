@@ -280,6 +280,26 @@ async function worker() {
             .latest
             .slope20,
 
+        slopePct:
+          analysis
+            .dMetric
+            .slopePct,
+
+        slopeAtr:
+          analysis
+            .dMetric
+            .slopeAtr,
+
+        r2:
+          analysis
+            .dMetric
+            .r2,
+
+        acceleration:
+          analysis
+            .dMetric
+            .acceleration,
+
         slope20Definition:
           SLOPE20_DEFINITION,
 
@@ -722,6 +742,48 @@ const output = {
 
   cCandidateCount:
     cCandidates.length,
+
+  universeCache:
+    rows.map((item) => ({
+      symbol:
+        item.symbol,
+
+      quoteAsset:
+        item.quoteAsset,
+
+      latestClosedAt:
+        item.latestClosedAt,
+
+      close:
+        item.close,
+
+      ma30:
+        item.ma30,
+
+      atr14:
+        item.atr14,
+
+      extensionAtr:
+        item.extensionAtr,
+
+      slope20:
+        item.slope20,
+
+      slope20Definition:
+        item.slope20Definition,
+
+      slopePct:
+        item.slopePct,
+
+      slopeAtr:
+        item.slopeAtr,
+
+      r2:
+        item.r2,
+
+      acceleration:
+        item.acceleration,
+    })),
 
   queues,
 

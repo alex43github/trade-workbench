@@ -50,8 +50,17 @@ export type ExtremeTouch = {
   extremeAtr: number | null;
 };
 
+export type SlopeMetrics = {
+  slopePct: number;
+  slopeAtr: number;
+  r2: number;
+  acceleration: number;
+};
+
 export type Analysis = {
   latest: BandRow;
+
+  dMetric: SlopeMetrics;
 
   long: PersistenceCounts;
   short: PersistenceCounts;
@@ -100,6 +109,52 @@ function average(
     )
     / values.length
   );
+}
+
+function regression(values: readonly number[]) {
+  const meanX = (values.length - 1) / 2;
+  const meanY = average(values);
+  let numerator = 0;
+  let denominator = 0;
+
+  for (let index = 0; index < values.length; index += 1) {
+    numerator += (index - meanX) * (values[index]! - meanY);
+    denominator += (index - meanX) ** 2;
+  }
+
+  const slope = denominator === 0 ? 0 : numerator / denominator;
+  const intercept = meanY - slope * meanX;
+  let total = 0;
+  let residual = 0;
+
+  for (let index = 0; index < values.length; index += 1) {
+    const actual = values[index]!;
+    total += (actual - meanY) ** 2;
+    residual += (actual - (intercept + slope * index)) ** 2;
+  }
+
+  return {
+    slope,
+    r2: total === 0 ? 1 : Math.max(0, 1 - residual / total),
+  };
+}
+
+export function calculateSlopeMetrics(
+  rows: readonly BandRow[],
+): SlopeMetrics | null {
+  if (rows.length < 40) return null;
+  const recent = rows.slice(-20).map((row) => row.ma30);
+  const previous = rows.slice(-40, -20).map((row) => row.ma30);
+  const latest = rows.at(-1)!;
+  const recentRegression = regression(recent);
+  const previousRegression = regression(previous);
+
+  return {
+    slopePct: (latest.slope20 ?? 0) * 100,
+    slopeAtr: recentRegression.slope / latest.atr14,
+    r2: recentRegression.r2,
+    acceleration: (recentRegression.slope - previousRegression.slope) / latest.atr14,
+  };
 }
 
 export function calculateWilderRma(
@@ -411,6 +466,9 @@ export function analyzeAtrPersistence(
     return null;
   }
 
+  const dMetric = calculateSlopeMetrics(rows);
+  if (!dMetric) return null;
+
   const long =
     classifyPersistence(
       rows,
@@ -425,6 +483,8 @@ export function analyzeAtrPersistence(
 
   return {
     latest,
+
+    dMetric,
 
     long,
     short,

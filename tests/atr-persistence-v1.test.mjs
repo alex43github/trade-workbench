@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildBandRows,
   calculateWilderRma,
+  calculateSlopeMetrics,
   countConsecutivePersistence,
   qualifiedLevels,
   scanExtremeTouches,
@@ -274,4 +275,22 @@ test("each band row has its own MA30/ATR14 and the latest row exposes log-normal
   assert.equal(rows[0].ma30, 114.5);
   assert.equal(rows[0].atr14, 2);
   assert.equal(rows.at(-1).slope20, (Math.log(139.5) - Math.log(119.5)) / 20);
+});
+
+test("ATR analysis exposes the D metrics needed by the shared universe cache", () => {
+  const bars = Array.from({ length: 80 }, (_, index) => ({
+    time: index,
+    open: 100 + index,
+    high: 101 + index,
+    low: 99 + index,
+    close: 100 + index,
+    volume: 1,
+  }));
+  const rows = buildBandRows(bars);
+  const metrics = calculateSlopeMetrics(rows);
+  assert.ok(metrics);
+  assert.equal(metrics.slopePct, rows.at(-1).slope20 * 100);
+  assert.equal(Number.isFinite(metrics.slopeAtr), true);
+  assert.equal(Number.isFinite(metrics.r2), true);
+  assert.equal(Number.isFinite(metrics.acceleration), true);
 });
