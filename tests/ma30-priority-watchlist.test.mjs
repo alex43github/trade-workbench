@@ -83,3 +83,13 @@ test("new opposite direction replaces stale opposite-direction watch item", () =
   assert.equal(second.length, 1);
   assert.equal(second[0].direction, "SHORT");
 });
+
+test("priority watcher rejects stablecoin symbols from every source", () => {
+  const rows = buildMa30PriorityCandidates(scan({
+    a: [{ symbol: "USDCUSDT", rank: 1, stage: "STEADY_UPTREND" }],
+    b: [{ symbol: "FDUSDUSDT", bRank: 1, stage: "EARLY_ACCELERATION" }],
+    c: [{ symbol: "USDPUSDT", rank: 1, stage: "PERSISTENT_ACCELERATION" }],
+    ai: [{ symbol: "DAIUSDT", direction: "LONG", aiRank: 1, longStage: "EARLY_ACCELERATION" }],
+  }), NOW);
+  assert.deepEqual(rows, []);
+});
