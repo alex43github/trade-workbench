@@ -1,4 +1,4 @@
-import { isStablecoinUsdtPerpetual } from "./ma30-scanner.ts";
+import { isStablecoinUsdtPerpetual } from "./ma30-universe.ts";
 
 export const MA30_PRIORITY_TTL_MS = 8 * 60 * 60 * 1000;
 
