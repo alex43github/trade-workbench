@@ -37,51 +37,60 @@ const bucket =
   );
 
 
-function previewRows(
-  key,
-  limit,
-) {
-  const rows =
-    data?.barkPreview?.[key];
-
-  return Array.isArray(rows)
-    ? rows.slice(
-        0,
-        limit,
-      )
-    : [];
-}
-
 const c5Rows =
-  previewRows(
-    "C5",
-    10,
-  );
+  Array.isArray(
+    data?.barkPreview?.C5,
+  )
+    ? data.barkPreview.C5
+        .slice(
+          0,
+          10,
+        )
+    : [];
 
 const c3Rows =
-  previewRows(
-    "C3",
-    10,
-  );
+  Array.isArray(
+    data?.barkPreview?.C3,
+  )
+    ? data.barkPreview.C3
+        .slice(
+          0,
+          10,
+        )
+    : [];
 
 const c1Rows =
-  previewRows(
-    "C1",
-    10,
-  );
+  Array.isArray(
+    data?.barkPreview?.C1,
+  )
+    ? data.barkPreview.C1
+        .slice(
+          0,
+          10,
+        )
+    : [];
 
 const dLongRows =
-  previewRows(
-    "DLong",
-    10,
-  );
+  Array.isArray(
+    data?.barkPreview?.DLong,
+  )
+    ? data.barkPreview.DLong
+        .slice(
+          0,
+          10,
+        )
+    : [];
 
 const dShortRows =
-  previewRows(
-    "DShort",
-    10,
-  );
-
+  Array.isArray(
+    data?.barkPreview?.DShort,
+  )
+    ? data.barkPreview.DShort
+        .slice(
+          0,
+          10,
+        )
+    : [];
 
 function n(
   value: unknown,
@@ -100,50 +109,60 @@ function n(
 
 const body = [
   "【C5｜ATR持续 Top10】",
-
   ...(c5Rows.length
-    ? c5Rows.map((row: any, index: number) =>
-        `${index + 1}. ${row.symbol} ${row.direction} 连续${row.cCount}`)
+    ? c5Rows.map(
+        (row: any, index: number) =>
+          `${index + 1}. `
+          + `${row.symbol} `
+          + `${row.direction} `
+          + `连续${row.cCount}`,
+      )
     : ["本小时无C5候选"]),
-
   "",
-
   "【C3｜ATR持续 Top10】",
-
   ...(c3Rows.length
-    ? c3Rows.map((row: any, index: number) =>
-        `${index + 1}. ${row.symbol} ${row.direction} 连续${row.cCount}`)
+    ? c3Rows.map(
+        (row: any, index: number) =>
+          `${index + 1}. `
+          + `${row.symbol} `
+          + `${row.direction} `
+          + `连续${row.cCount}`,
+      )
     : ["本小时无C3候选"]),
-
   "",
-
   "【C1｜ATR持续 Top10】",
-
   ...(c1Rows.length
-    ? c1Rows.map((row: any, index: number) =>
-        `${index + 1}. ${row.symbol} ${row.direction} 连续${row.cCount}`)
+    ? c1Rows.map(
+        (row: any, index: number) =>
+          `${index + 1}. `
+          + `${row.symbol} `
+          + `${row.direction} `
+          + `连续${row.cCount}`,
+      )
     : ["本小时无C1候选"]),
-
   "",
-
   "【D｜1H MA30斜率 Long Top10】",
-
   ...(dLongRows.length
-    ? dLongRows.map((row: any, index: number) =>
-        `${index + 1}. ${row.symbol} LONG Slope ${n(row.slopePct)}% R² ${n(row.r2)}`)
+    ? dLongRows.map(
+        (row: any, index: number) =>
+          `${index + 1}. `
+          + `${row.symbol} LONG `
+          + `Slope ${n(row.slopePct)}% `
+          + `R² ${n(row.r2)}`,
+      )
     : ["本小时无D Long候选"]),
-
   "",
-
   "【D｜1H MA30斜率 Short Top10】",
-
   ...(dShortRows.length
-    ? dShortRows.map((row: any, index: number) =>
-        `${index + 1}. ${row.symbol} SHORT Slope ${n(row.slopePct)}% R² ${n(row.r2)}`)
+    ? dShortRows.map(
+        (row: any, index: number) =>
+          `${index + 1}. `
+          + `${row.symbol} SHORT `
+          + `Slope ${n(row.slopePct)}% `
+          + `R² ${n(row.r2)}`,
+      )
     : ["本小时无D Short候选"]),
-
   "",
-
   `后台15m监控：${Array.isArray(data?.items) ? data.items.length : 0}个`,
   `扫描：${generatedAt}`,
 ].join("\n");
