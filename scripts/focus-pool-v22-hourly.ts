@@ -4,6 +4,8 @@ import {
   listUsdtPerpetuals,
   fetchClosedKlines,
 } from "../services/structure-radar/binance-public.ts";
+import { isStablecoinUsdtPerpetual } from "../lib/radar/ma30-universe.ts";
+import { buildCLevelSelections, buildDSelections } from "../lib/radar/focus-cd-selection.ts";
 
 
 const STATE =
@@ -26,14 +28,14 @@ const LIMITS = {
   B_WATCH: 10,
   B_BARK: 10,
 
-  C_WATCH: 20,
-  C_BARK: 10,
+  C_LEVEL_FOCUS: 10,
+  C_LEVEL_BARK: 10,
 
-  D_LONG_WATCH: 10,
+  D_LONG_WATCH: 20,
   D_SHORT_WATCH: 10,
 
-  D_LONG_BARK: 5,
-  D_SHORT_BARK: 5,
+  D_LONG_BARK: 10,
+  D_SHORT_BARK: 10,
 };
 
 
@@ -69,6 +71,7 @@ type Candidate = {
 
   cLevel?: number;
   cCount?: number;
+  cSlopeRanks?: Record<string, number>;
 
   slopeRank?: number;
   slopePct?: number;
@@ -724,6 +727,13 @@ function mergeCandidates(
           );
       }
 
+      if (item.cSlopeRanks) {
+        existing.cSlopeRanks = {
+          ...(existing.cSlopeRanks ?? {}),
+          ...item.cSlopeRanks,
+        };
+      }
+
       for (
         const field
         of [
@@ -990,19 +1000,9 @@ const B: Candidate[] =
 
 
 /*
- * C
+ * C selection is intentionally deferred until shared 1H slope metrics exist.
+ * Bark ranks persistence independently by C5/C3/C1; Focus ranks slope independently per level.
  */
-
-const allC =
-  cRankingRows(
-    cdata,
-  );
-
-const C =
-  allC.slice(
-    0,
-    LIMITS.C_WATCH,
-  );
 
 
 /*
@@ -1010,7 +1010,8 @@ const C =
  */
 
 const universe =
-  await listUsdtPerpetuals();
+  (await listUsdtPerpetuals())
+    .filter((market) => !isStablecoinUsdtPerpetual(market.symbol));
 
 const metrics =
   new Map<
@@ -1089,111 +1090,32 @@ await Promise.all(
 );
 
 
-const longSlope =
-  [...metrics.values()]
-    .filter(
-      item =>
-        item.slopePct > 0,
-    )
-    .sort(
-      (a, b) =>
-        b.slopePct
-        - a.slopePct
-        || b.r2 - a.r2
-        || a.symbol.localeCompare(
-          b.symbol,
-        ),
-    )
-    .slice(
-      0,
-      LIMITS.D_LONG_WATCH,
-    );
+const cSelections =
+  buildCLevelSelections(
+    cdata,
+    metrics,
+    {
+      barkPerLevel: LIMITS.C_LEVEL_BARK,
+      focusPerLevel: LIMITS.C_LEVEL_FOCUS,
+    },
+  );
 
+const C: Candidate[] =
+  cSelections.focus;
 
-const shortSlope =
-  [...metrics.values()]
-    .filter(
-      item =>
-        item.slopePct < 0,
-    )
-    .sort(
-      (a, b) =>
-        a.slopePct
-        - b.slopePct
-        || b.r2 - a.r2
-        || a.symbol.localeCompare(
-          b.symbol,
-        ),
-    )
-    .slice(
-      0,
-      LIMITS.D_SHORT_WATCH,
-    );
+const dSelections =
+  buildDSelections(
+    metrics,
+    {
+      longWatch: LIMITS.D_LONG_WATCH,
+      shortWatch: LIMITS.D_SHORT_WATCH,
+      longBark: LIMITS.D_LONG_BARK,
+      shortBark: LIMITS.D_SHORT_BARK,
+    },
+  );
 
-
-const D: Candidate[] = [
-  ...longSlope.map(
-    (
-      item,
-      index,
-    ) => ({
-      symbol:
-        item.symbol,
-
-      direction:
-        "LONG" as const,
-
-      sources:
-        ["D"],
-
-      slopeRank:
-        index + 1,
-
-      slopePct:
-        item.slopePct,
-
-      slopeAtr:
-        item.slopeAtr,
-
-      r2:
-        item.r2,
-
-      acceleration:
-        item.acceleration,
-    }),
-  ),
-
-  ...shortSlope.map(
-    (
-      item,
-      index,
-    ) => ({
-      symbol:
-        item.symbol,
-
-      direction:
-        "SHORT" as const,
-
-      sources:
-        ["D"],
-
-      slopeRank:
-        index + 1,
-
-      slopePct:
-        item.slopePct,
-
-      slopeAtr:
-        item.slopeAtr,
-
-      r2:
-        item.r2,
-
-      acceleration:
-        item.acceleration,
-    }),
-  ),
-];
+const D: Candidate[] =
+  dSelections.focus;
 
 
 /*
@@ -1414,38 +1336,20 @@ const barkB =
     LIMITS.B_BARK,
   );
 
-const barkC =
-  C.slice(
-    0,
-    LIMITS.C_BARK,
-  );
+const barkCByLevel =
+  cSelections.barkByLevel;
 
+const barkC = [
+  ...(barkCByLevel.C5 ?? []),
+  ...(barkCByLevel.C3 ?? []),
+  ...(barkCByLevel.C1 ?? []),
+];
 
 const barkDLong =
-  D
-    .filter(
-      item =>
-        item.direction
-        === "LONG",
-    )
-    .slice(
-      0,
-      LIMITS.D_LONG_BARK,
-    );
-
+  dSelections.barkByDirection.LONG;
 
 const barkDShort =
-  D
-    .filter(
-      item =>
-        item.direction
-        === "SHORT",
-    )
-    .slice(
-      0,
-      LIMITS.D_SHORT_BARK,
-    );
-
+  dSelections.barkByDirection.SHORT;
 
 const barkD = [
   ...barkDLong,
@@ -1568,6 +1472,10 @@ const items =
           item.cCount
           ?? null,
 
+        cSlopeRanks:
+          item.cSlopeRanks
+          ?? null,
+
         slopeRank:
           item.slopeRank
           ?? null,
@@ -1587,6 +1495,9 @@ const output = {
 
   mode:
     "LIVE_POOL_NO_DIRECT_BARK",
+
+  selectionVersion:
+    "C_LEVEL_SPLIT_D_DIRECTION_SPLIT_V1",
 
   productionRawPoolGeneratedAt:
     raw?.generatedAt
@@ -1618,8 +1529,23 @@ const output = {
     C:
       C.length,
 
+    C5Focus:
+      cSelections.focusByLevel.C5?.length ?? 0,
+
+    C3Focus:
+      cSelections.focusByLevel.C3?.length ?? 0,
+
+    C1Focus:
+      cSelections.focusByLevel.C1?.length ?? 0,
+
     D:
       D.length,
+
+    DLongFocus:
+      D.filter((item) => item.direction === "LONG").length,
+
+    DShortFocus:
+      D.filter((item) => item.direction === "SHORT").length,
 
     unionBeforeStructure:
       union.length,
@@ -1680,8 +1606,16 @@ const output = {
     C:
       barkC,
 
+    CByLevel:
+      barkCByLevel,
+
     D:
       barkD,
+
+    DByDirection: {
+      LONG: barkDLong,
+      SHORT: barkDShort,
+    },
 
     resonance:
       resonance.slice(
