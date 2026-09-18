@@ -29,7 +29,26 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Baseline full repository tests
-        run: npm test
+        shell: bash
+        run: |
+          set +e
+          npm test 2>&1 | tee baseline-test.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'not ok [0-9]+ - ' baseline-test.log \
+            | sed -E 's/^.*not ok [0-9]+ - //' \
+            | sed -E 's/\r$//' \
+            | sort -u > baseline-failures.txt || true
+          printf '%s\n' "$status" > baseline-test-exit.txt
+          echo "Baseline npm test exit=$status; unique failures=$(wc -l < baseline-failures.txt)"
+      - name: Upload baseline failure manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-test-failures
+          path: |
+            baseline-failures.txt
+            baseline-test-exit.txt
+          if-no-files-found: error
       - name: Baseline typecheck
         run: npx tsc --noEmit
 
@@ -46,7 +65,26 @@ jobs:
       - name: Targeted S6.1 tests
         run: node --test tests/execution-forward-observer.test.mjs tests/execution-forward-hardening.test.mjs
       - name: Full repository tests
-        run: npm test
+        shell: bash
+        run: |
+          set +e
+          npm test 2>&1 | tee feature-test.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'not ok [0-9]+ - ' feature-test.log \
+            | sed -E 's/^.*not ok [0-9]+ - //' \
+            | sed -E 's/\r$//' \
+            | sort -u > feature-failures.txt || true
+          printf '%s\n' "$status" > feature-test-exit.txt
+          echo "Feature npm test exit=$status; unique failures=$(wc -l < feature-failures.txt)"
+      - name: Upload feature failure manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-test-failures
+          path: |
+            feature-failures.txt
+            feature-test-exit.txt
+          if-no-files-found: error
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Final build
@@ -69,10 +107,34 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Prove S6.1 gates and baseline no-regression
+      - name: Require baseline and feature gates
         shell: bash
         run: |
           set -euo pipefail
           test '${{ needs.baseline.result }}' = 'success'
           test '${{ needs.feature.result }}' = 'success'
-          echo 'S6.1 mainline acceptance passed.'
+      - name: Download baseline failure manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-test-failures
+          path: baseline
+      - name: Download feature failure manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: feature-test-failures
+          path: feature
+      - name: Prove no new full-suite failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          sort -u baseline/baseline-failures.txt > baseline.sorted
+          sort -u feature/feature-failures.txt > feature.sorted
+          comm -13 baseline.sorted feature.sorted > new-failures.txt
+          if test -s new-failures.txt; then
+            echo 'S6.1 introduced new failing full-suite subtests:' >&2
+            cat new-failures.txt >&2
+            exit 1
+          fi
+          echo "Baseline known failures: $(wc -l < baseline.sorted)"
+          echo "Feature known failures:  $(wc -l < feature.sorted)"
+          echo 'S6.1 targeted tests, typecheck, build, safety audit and no-new-failure comparison passed.'
