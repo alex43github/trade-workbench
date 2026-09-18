@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildMa30DTopBarkGroup,
   buildMa30LifecycleBarkGroups,
   buildMa30OvernightBriefGroup,
 } from "../lib/radar/ma30-production-notifications.ts";
@@ -169,4 +170,28 @@ test("A/B Bark labels incomplete consensus as pending deep validation", () => {
   assert.equal(groups.length, 1);
   assert.equal(groups[0].title, "MA30 A组·进化模型｜0914-10:00");
   assert.match(groups[0].body, /模型待深验·结构确认/);
+});
+
+
+test("D Bark combines long10 and short10 into one notification", () => {
+  const dLong = Array.from({ length: 20 }, (_, i) => ({
+    symbol: `L${i}USDT`, rank: i + 1, direction: "LONG", stage: "STEADY_UPTREND",
+    slope20: 2 - i * 0.05, priceVsMa30Pct: 1 + i * 0.1,
+  }));
+  const dShort = Array.from({ length: 10 }, (_, i) => ({
+    symbol: `S${i}USDT`, rank: i + 1, direction: "SHORT", stage: "STEADY_DOWNTREND",
+    slope20: -2 + i * 0.05, priceVsMa30Pct: -1 - i * 0.1,
+  }));
+  const group = buildMa30DTopBarkGroup({
+    current: { ...current, dLong, dShort },
+    scanBucket: "2026-09-14T10",
+    bjtHour: 10,
+  });
+  assert.ok(group);
+  assert.equal(group.title, "MA30 D类·1H斜率｜0914-10:00");
+  assert.match(group.body, /LONG 前10/);
+  assert.match(group.body, /SHORT 前10/);
+  assert.match(group.body, /10\.L9/);
+  assert.doesNotMatch(group.body, /11\.L10/);
+  assert.match(group.body, /10\.S9/);
 });
