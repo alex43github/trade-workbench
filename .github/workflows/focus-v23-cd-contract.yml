@@ -1,0 +1,31 @@
+name: Focus V2.3 C/D contract
+
+on:
+  push:
+    branches:
+      - feature/focus-v23-cd-ranking
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.0
+      - name: Syntax check
+        run: |
+          node --experimental-strip-types --check scripts/focus-pool-v22-hourly.ts
+          node --experimental-strip-types --check scripts/focus-pool-v22-cd-bark.ts
+      - name: Contract check
+        run: |
+          grep -q 'C_LEVEL_SLOPE_WATCH: 10' scripts/focus-pool-v22-hourly.ts
+          grep -q 'D_LONG_WATCH: 20' scripts/focus-pool-v22-hourly.ts
+          grep -q 'D_SHORT_WATCH: 10' scripts/focus-pool-v22-hourly.ts
+          grep -q 'D_LONG_BARK: 10' scripts/focus-pool-v22-hourly.ts
+          grep -q 'D_SHORT_BARK: 10' scripts/focus-pool-v22-hourly.ts
+          grep -q '【C5｜ATR持续 Top10】' scripts/focus-pool-v22-cd-bark.ts
+          grep -q '【C3｜ATR持续 Top10】' scripts/focus-pool-v22-cd-bark.ts
+          grep -q '【C1｜ATR持续 Top10】' scripts/focus-pool-v22-cd-bark.ts
+          grep -q 'Long Top10' scripts/focus-pool-v22-cd-bark.ts
+          grep -q 'Short Top10' scripts/focus-pool-v22-cd-bark.ts
