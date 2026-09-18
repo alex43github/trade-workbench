@@ -19,6 +19,7 @@ console.log(`ASTPS_STATUS=${result.astpsValidation.status}`);
 console.log(`ASTPS_MODEL=${result.astpsValidation.modelVersion}`);
 console.log(`ASTPS_CANDIDATES=${result.astpsValidation.candidateSymbols}`);
 console.log(`ASTPS_VALIDATED=${result.astpsValidation.validatedSymbols}`);
+console.log(`ASTPS_PENDING=${result.astpsValidation.pendingSymbols}`);
 console.log(`ASTPS_A=${result.astpsValidation.selectedA}`);
 console.log(`ASTPS_B=${result.astpsValidation.selectedB}`);
 console.log(`UNIVERSE=${result.scan.coverage.universe}`);
