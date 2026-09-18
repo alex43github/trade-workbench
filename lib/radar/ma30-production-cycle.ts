@@ -1,4 +1,11 @@
 import { createImmutableMa30AiSnapshot, type Ma30AiSnapshot } from "./ma30-ai-selection.ts";
+import {
+  applyMa30AstpsValidation,
+  ASTPS_MODEL_VERSION,
+  ASTPS_RUNTIME_VERSION,
+  buildMa30AstpsValidationIndex,
+  type StructureRadarSignalLike,
+} from "./ma30-astps-bridge.ts";
 import { evolveMa30Lifecycle, type Ma30LifecycleState } from "./ma30-lifecycle.ts";
 import type { Ma30NotificationState } from "./ma30-notifications.ts";
 import {
@@ -29,6 +36,7 @@ export type Ma30ProductionCycleDeps = {
   loadLifecycle: () => Promise<Ma30LifecycleState | undefined>;
   loadOvernightEvents: (startBjt: string, endBjt: string) => Promise<Ma30OvernightEventRecord[]>;
   scan: (now: Date) => Promise<Ma30FullMarketScanResult>;
+  loadAstpsSignals?: () => Promise<readonly StructureRadarSignalLike[]>;
   persist: (input: Ma30ProductionPersistInput) => Promise<void>;
   notify: (group: RadarBarkGroup) => Promise<unknown>;
 };
@@ -120,7 +128,61 @@ export async function executeMa30ProductionCycle(options: {
 
   const previousLifecycle = await options.deps.loadLifecycle();
   const scan = await options.deps.scan(now);
-  const notificationState = toMa30NotificationState(scan);
+  let notificationState = toMa30NotificationState(scan);
+  const abCandidateSymbols = [...new Set([
+    ...notificationState.a.map((row) => row.symbol),
+    ...notificationState.b.map((row) => row.symbol),
+  ])];
+
+  let astpsValidation: {
+    status: "NOT_CONFIGURED" | "READY" | "UNAVAILABLE";
+    runtimeVersion: typeof ASTPS_RUNTIME_VERSION;
+    modelVersion: typeof ASTPS_MODEL_VERSION;
+    candidateSymbols: number;
+    validatedSymbols: number;
+    selectedA: number;
+    selectedB: number;
+    error?: string;
+  } = {
+    status: "NOT_CONFIGURED",
+    runtimeVersion: ASTPS_RUNTIME_VERSION,
+    modelVersion: ASTPS_MODEL_VERSION,
+    candidateSymbols: abCandidateSymbols.length,
+    validatedSymbols: 0,
+    selectedA: notificationState.a.length,
+    selectedB: notificationState.b.length,
+  };
+
+  if (options.deps.loadAstpsSignals) {
+    try {
+      const signals = await options.deps.loadAstpsSignals();
+      const validation = buildMa30AstpsValidationIndex(signals, abCandidateSymbols);
+      notificationState = applyMa30AstpsValidation(notificationState, validation);
+      astpsValidation = {
+        status: "READY",
+        runtimeVersion: ASTPS_RUNTIME_VERSION,
+        modelVersion: ASTPS_MODEL_VERSION,
+        candidateSymbols: abCandidateSymbols.length,
+        validatedSymbols: validation.size,
+        selectedA: notificationState.a.length,
+        selectedB: notificationState.b.length,
+      };
+    } catch (error) {
+      // A/B execution-facing alerts fail closed. Discovery/C/SHORT/AI continue.
+      notificationState = { ...notificationState, a: [], b: [] };
+      astpsValidation = {
+        status: "UNAVAILABLE",
+        runtimeVersion: ASTPS_RUNTIME_VERSION,
+        modelVersion: ASTPS_MODEL_VERSION,
+        candidateSymbols: abCandidateSymbols.length,
+        validatedSymbols: 0,
+        selectedA: 0,
+        selectedB: 0,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   const lifecycleResult = evolveMa30Lifecycle(previousLifecycle, notificationState, clock.runTimeBjt);
 
   let overnightEvents: Ma30OvernightEventRecord[] = [];
@@ -142,7 +204,16 @@ export async function executeMa30ProductionCycle(options: {
     runTimeBjt: clock.runTimeBjt,
     scannerVersion: scan.scannerVersion,
     status: scan.status,
-    coverage: scan.coverage,
+    coverage: {
+      ...scan.coverage,
+      astpsStatus: astpsValidation.status,
+      astpsRuntimeVersion: astpsValidation.runtimeVersion,
+      astpsModelVersion: astpsValidation.modelVersion,
+      astpsCandidateSymbols: astpsValidation.candidateSymbols,
+      astpsValidatedSymbols: astpsValidation.validatedSymbols,
+      astpsSelectedA: astpsValidation.selectedA,
+      astpsSelectedB: astpsValidation.selectedB,
+    },
     notificationState,
     lifecycle: lifecycleResult.state,
     lifecycleEvents: lifecycleResult.events,
@@ -183,6 +254,7 @@ export async function executeMa30ProductionCycle(options: {
     runId,
     runTimeBjt: clock.runTimeBjt,
     scan,
+    astpsValidation,
     notificationState,
     lifecycle: lifecycleResult.state,
     lifecycleEvents: lifecycleResult.events,
