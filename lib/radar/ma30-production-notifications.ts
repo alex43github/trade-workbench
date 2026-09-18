@@ -214,6 +214,30 @@ function renderAi(rows: Ma30NotificationState["ai"]): string {
     .join("\n") || "无";
 }
 
+export function buildMa30DTopBarkGroup(options: {
+  current: Ma30NotificationState;
+  scanBucket: string;
+  bjtHour: number;
+}): RadarBarkGroup | null {
+  if (isMa30BarkQuietHourBjt(options.bjtHour)) return null;
+
+  const longs = [...options.current.dLong].sort((left, right) => left.rank - right.rank).slice(0, 10);
+  const shorts = [...options.current.dShort].sort((left, right) => left.rank - right.rank).slice(0, 10);
+  if (!longs.length && !shorts.length) return null;
+
+  const render = (rows: readonly { symbol: string; rank: number; slope20: number; priceVsMa30Pct: number }[]) =>
+    rows.map((row) => `${row.rank}.${displaySymbol(row.symbol)}，斜率${signedSlope(row.slope20)}，距MA30 ${signedPct(row.priceVsMa30Pct)}`).join("\n") || "无";
+
+  return {
+    key: `radar:ma30-slope:${options.scanBucket}:D:top`,
+    title: `MA30 D类·1H斜率｜${displayScanBucket(options.scanBucket)}`,
+    body: [
+      "LONG 前10", render(longs),
+      "", "SHORT 前10", render(shorts),
+    ].join("\n"),
+  };
+}
+
 /**
  * Special 07:00 BJT digest. It intentionally bypasses ordinary 02:00-08:00
  * quiet-hour suppression; all other ordinary Bark remains quiet until 08:00.
@@ -229,7 +253,9 @@ export function buildMa30OvernightBriefGroup(options: {
     key: `radar:ma30-slope:${options.scanBucket}:OVERNIGHT`,
     title: `MA30 夜间汇总｜${displayScanBucket(options.scanBucket)}`,
     body: [
-      "A组", renderA(options.current.a),
+      "D类 LONG", options.current.dLong.slice(0, 10).map((row) => `${row.rank}.${displaySymbol(row.symbol)}，斜率${signedSlope(row.slope20)}`).join("\n") || "无",
+      "", "D类 SHORT", options.current.dShort.slice(0, 10).map((row) => `${row.rank}.${displaySymbol(row.symbol)}，斜率${signedSlope(row.slope20)}`).join("\n") || "无",
+      "", "A组", renderA(options.current.a),
       "", "B组", renderB(options.current.b),
       "", "C组", renderC(options.current.c),
       "", "空头", renderShort(options.current.shorts),
