@@ -19,6 +19,22 @@ import { runMa30FullMarketScan } from "./ma30-scanner.ts";
 
 export type Ma30VpsEnv = Record<string, string | undefined>;
 
+async function loadAstpsStructureRadarSignals(env: Ma30VpsEnv = process.env) {
+  const url = env.MA30_ASTPS_RADAR_SIGNALS_URL?.trim() || "http://127.0.0.1:8790/signals";
+  const response = await fetch(url, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`Structure Radar signals unavailable: HTTP ${response.status}`);
+  const value: unknown = await response.json();
+  if (!value || typeof value !== "object" || !("signals" in value)) {
+    throw new Error("Structure Radar signals payload is invalid");
+  }
+  const signals = (value as { signals?: unknown }).signals;
+  if (!Array.isArray(signals)) throw new Error("Structure Radar signals must be an array");
+  return signals;
+}
+
 /**
  * Safety gate: VPS execution is DRY_RUN unless both --live and an explicit
  * environment acknowledgement are supplied. This prevents an accidental shell
@@ -47,6 +63,7 @@ export async function createMa30VpsProductionDeps(): Promise<Ma30ProductionCycle
     loadLifecycle: () => loadLatestMa30LifecycleState(db),
     loadOvernightEvents: (startBjt, endBjt) => loadMa30LifecycleEventsInWindow(db, startBjt, endBjt),
     scan: (now) => runMa30FullMarketScan({ now }),
+    loadAstpsSignals: () => loadAstpsStructureRadarSignals(process.env),
     persist: (input) => appendMa30ProductionBundle(db, input),
     notify: (group) => notifyBark({
       db: localDb as unknown as D1Database,
