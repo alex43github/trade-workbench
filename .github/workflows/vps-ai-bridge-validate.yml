@@ -1,0 +1,23 @@
+name: VPS bridge executor validation
+
+on:
+  push:
+    branches:
+      - infra/vps-ai-bridge-v1
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile bridge Python
+        run: python3 -m py_compile ops/vps-ai-bridge/agent.py ops/vps-ai-bridge/executor.py
+      - name: Reject arbitrary shell action
+        run: |
+          set +e
+          python3 ops/vps-ai-bridge/executor.py '{"action":"shell","command":"id"}' >/tmp/out 2>/tmp/err
+          rc=$?
+          set -e
+          test "$rc" -ne 0
+          grep -q "action not allowed" /tmp/err
