@@ -13,7 +13,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V10"
+VERSION = "VPS_BRIDGE_EXECUTOR_V11"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -58,6 +58,12 @@ CD_FOCUS_DEPLOY_PATHS = (
     "app/api/radar/atr-band/route.ts",
     "scripts/ma30-production-live-safe.ts",
 )
+FOCUS_V23_DEPLOY_PATHS = (
+    "scripts/focus-pool-v22-hourly.ts",
+    "scripts/focus-pool-v22-cd-bark.ts",
+)
+FOCUS_V23_BACKUP_ROOT = Path("/var/backups/trade-workbench/focus-v23")
+
 CD_FOCUS_TEST_PATHS = (
     "tests/ma30-scanner.test.mjs",
     "tests/ma30-priority-watchlist.test.mjs",
@@ -346,6 +352,289 @@ def action_focus_v22_read_source(payload):
         "content": data.decode("utf-8"),
         "modified": False,
     }}
+
+
+def action_focus_v23_symbol_diagnostic(payload):
+    requested = payload.get("symbols")
+    if not isinstance(requested, list) or not requested:
+        raise ValueError("symbols list required")
+    symbols = []
+    for value in requested[:20]:
+        symbol = str(value).strip().upper()
+        if not symbol:
+            continue
+        if not symbol.endswith("USDT"):
+            symbol += "USDT"
+        symbols.append(symbol)
+
+    state_root = Path("/var/lib/trade-workbench/structure-radar")
+    def read_json(name):
+        path = state_root / name
+        try:
+            return json.loads(path.read_text())
+        except Exception:
+            return {}
+
+    raw = read_json("hourly-priority-pool.json")
+    focus = read_json("hourly-focus-pool-v22.json")
+    atr = read_json("atr-persistence-v1.json")
+
+    raw_items = raw.get("items", []) if isinstance(raw, dict) else []
+    focus_rows = focus.get("focus", []) if isinstance(focus, dict) else []
+    focus_items = focus.get("items", []) if isinstance(focus, dict) else []
+    sources = focus.get("sources", {}) if isinstance(focus, dict) else {}
+    previews = focus.get("barkPreview", {}) if isinstance(focus, dict) else {}
+
+    try:
+        req = urllib.request.Request(RADAR_SIGNALS_URL, headers={"User-Agent": "trade-workbench-ai-bridge/11"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            signal_data = json.load(resp)
+        signals = signal_data.get("signals", []) if isinstance(signal_data, dict) else []
+        if not isinstance(signals, list):
+            signals = []
+    except Exception:
+        signals = []
+
+    diagnostics = []
+    for symbol in symbols:
+        raw_matches = [
+            item for item in raw_items
+            if isinstance(item, dict) and str(item.get("symbol", "")).upper() == symbol
+        ]
+        raw_summary = []
+        for item in raw_matches[:10]:
+            raw_summary.append({
+                "direction": item.get("direction"),
+                "sources": item.get("sources"),
+                "sourceRanks": item.get("sourceRanks"),
+                "modelScore": item.get("modelScore"),
+                "score": item.get("score"),
+                "trendScore": item.get("trendScore"),
+                "priorityScore": item.get("priorityScore"),
+            })
+
+        c_membership = {}
+        queues = atr.get("queues", {}) if isinstance(atr, dict) else {}
+        for direction in ("LONG", "SHORT"):
+            side = queues.get(direction, {}) if isinstance(queues, dict) else {}
+            for level in ("C5", "C3", "C1"):
+                rows = side.get(level, []) if isinstance(side, dict) else []
+                match = next((
+                    row for row in rows
+                    if isinstance(row, dict) and str(row.get("symbol", "")).upper() == symbol
+                ), None)
+                if match:
+                    c_membership[f"{direction}_{level}"] = {
+                        "count": match.get("count"),
+                        "extensionAtr": match.get("extensionAtr"),
+                    }
+
+        focus_match = next((
+            row for row in focus_rows
+            if isinstance(row, dict) and str(row.get("symbol", "")).upper() == symbol
+        ), None)
+        item_match = next((
+            row for row in focus_items
+            if isinstance(row, dict) and str(row.get("symbol", "")).upper() == symbol
+        ), None)
+
+        source_membership = {}
+        if isinstance(sources, dict):
+            for key, rows in sources.items():
+                if not isinstance(rows, list):
+                    continue
+                found = next((
+                    row for row in rows
+                    if isinstance(row, dict) and str(row.get("symbol", "")).upper() == symbol
+                ), None)
+                if found:
+                    source_membership[str(key)] = found
+
+        preview_membership = []
+        if isinstance(previews, dict):
+            for key, rows in previews.items():
+                if not isinstance(rows, list):
+                    continue
+                if any(
+                    isinstance(row, dict) and str(row.get("symbol", "")).upper() == symbol
+                    for row in rows
+                ):
+                    preview_membership.append(str(key))
+
+        symbol_signals = [
+            row for row in signals
+            if isinstance(row, dict) and str(row.get("symbol", "")).upper() == symbol
+        ]
+        active = [
+            row for row in symbol_signals
+            if row.get("state") in ("CANDIDATE", "CONFIRMED")
+        ]
+        active.sort(
+            key=lambda row: int(row.get("lastProcessedBarTime") or 0),
+            reverse=True,
+        )
+        signal_summary = []
+        for row in active[:8]:
+            consultation = row.get("consultation")
+            consensus = consultation.get("consensus") if isinstance(consultation, dict) else None
+            plan = consensus.get("executionPlan") if isinstance(consensus, dict) else None
+            signal_summary.append({
+                "state": row.get("state"),
+                "timeframe": row.get("timeframe"),
+                "setup": row.get("setup"),
+                "score": row.get("score"),
+                "alertPolicy": consensus.get("alertPolicy") if isinstance(consensus, dict) else None,
+                "grade": consensus.get("grade") if isinstance(consensus, dict) else None,
+                "support": consensus.get("support") if isinstance(consensus, dict) else None,
+                "oppose": consensus.get("oppose") if isinstance(consensus, dict) else None,
+                "direction": plan.get("direction") if isinstance(plan, dict) else None,
+                "lastProcessedBarTime": row.get("lastProcessedBarTime"),
+            })
+
+        diagnostics.append({
+            "symbol": symbol,
+            "rawPriorityPool": raw_summary,
+            "rawHasStrongTrend": any(
+                "STRONG_TREND" in [str(v).upper() for v in (item.get("sources") or [])]
+                for item in raw_matches if isinstance(item, dict)
+            ),
+            "rawHasSqueeze": any(
+                "SQUEEZE" in [str(v).upper() for v in (item.get("sources") or [])]
+                for item in raw_matches if isinstance(item, dict)
+            ),
+            "cMembership": c_membership,
+            "focusSourceMembership": source_membership,
+            "focusRow": focus_match,
+            "watchItem": item_match,
+            "barkPreviewMembership": preview_membership,
+            "activeStructureSignals": len(active),
+            "latestStructureSignals": signal_summary,
+        })
+
+    return {"ok": True, "summary": {
+        "rawGeneratedAt": raw.get("generatedAt") if isinstance(raw, dict) else None,
+        "focusGeneratedAt": focus.get("generatedAt") if isinstance(focus, dict) else None,
+        "atrGeneratedAt": atr.get("generatedAt") if isinstance(atr, dict) else None,
+        "rawItemCount": len(raw_items) if isinstance(raw_items, list) else 0,
+        "focusCounts": focus.get("counts") if isinstance(focus, dict) else None,
+        "symbols": diagnostics,
+        "modified": False,
+    }}
+
+
+def action_deploy_focus_v23(payload):
+    if payload.get("approved") is not True:
+        raise ValueError("approved=true required")
+    commit = str(payload.get("commit", "")).strip().lower()
+    if not COMMIT_RE.fullmatch(commit):
+        raise ValueError("exact 40-hex commit required")
+
+    before_radar = health_json(RADAR_HEALTH_URL)
+    if before_radar.get("status") != "ok" or before_radar.get("realOrderRouteEnabled") is not False:
+        raise RuntimeError("preflight radar safety gate failed")
+
+    with tempfile.TemporaryDirectory(prefix="focus-v23-", dir="/tmp") as tmp:
+        tmp_path = Path(tmp)
+        source_bytes = download(f"https://codeload.github.com/alex43github/trade-workbench/tar.gz/{commit}")
+        source_root = _safe_extract_tar_gz(source_bytes, tmp_path)
+        for relative in FOCUS_V23_DEPLOY_PATHS:
+            if not (source_root / relative).is_file():
+                raise ValueError(f"candidate missing required file: {relative}")
+            rc, out, err = run([
+                "/usr/bin/node", "--experimental-strip-types", "--check",
+                str(source_root / relative),
+            ], timeout=30)
+            if rc != 0:
+                raise RuntimeError(f"syntax check failed for {relative}: " + (err or out)[-800:])
+
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        backup = FOCUS_V23_BACKUP_ROOT / f"{stamp}-{commit[:12]}"
+        backup.mkdir(parents=True, exist_ok=False)
+        manifest = _manifest_for(FOCUS_V23_DEPLOY_PATHS)
+        for row in manifest:
+            if not row["exists"]:
+                continue
+            source = WORKBENCH_ROOT / row["path"]
+            destination = backup / row["path"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
+        (backup / "manifest.json").write_bytes(manifest_bytes)
+
+        try:
+            installed = _install_ma30(source_root, FOCUS_V23_DEPLOY_PATHS)
+            focus_rc, focus_out, focus_err = run(
+                ["/usr/bin/systemctl", "start", "trade-workbench-focus-pool-v22.service"],
+                timeout=900,
+            )
+            if focus_rc != 0:
+                raise RuntimeError("focus pool regeneration failed: " + (focus_err or focus_out)[-1200:])
+
+            output_path = Path("/var/lib/trade-workbench/structure-radar/hourly-focus-pool-v22.json")
+            output = json.loads(output_path.read_text())
+            preview = output.get("barkPreview") if isinstance(output, dict) else {}
+            limits = output.get("limits") if isinstance(output, dict) else {}
+            checks = {
+                "schema": output.get("schemaVersion") == "FOCUS_POOL_V23_C_LEVELS_D_SPLIT_LIVE",
+                "c5Preview": isinstance(preview, dict) and isinstance(preview.get("C5"), list) and len(preview.get("C5")) <= 10,
+                "c3Preview": isinstance(preview, dict) and isinstance(preview.get("C3"), list) and len(preview.get("C3")) <= 10,
+                "c1Preview": isinstance(preview, dict) and isinstance(preview.get("C1"), list) and len(preview.get("C1")) <= 10,
+                "dLongPreview": isinstance(preview, dict) and isinstance(preview.get("DLong"), list) and len(preview.get("DLong")) <= 10,
+                "dShortPreview": isinstance(preview, dict) and isinstance(preview.get("DShort"), list) and len(preview.get("DShort")) <= 10,
+                "dLongWatch20": isinstance(limits, dict) and limits.get("D_LONG_WATCH") == 20,
+                "dShortWatch10": isinstance(limits, dict) and limits.get("D_SHORT_WATCH") == 10,
+                "cSlopeWatch10": isinstance(limits, dict) and limits.get("C_LEVEL_SLOPE_WATCH") == 10,
+            }
+            if not all(checks.values()):
+                raise RuntimeError("focus v23 output contract failed: " + json.dumps(checks, sort_keys=True))
+
+            bark_rc, bark_out, bark_err = run([
+                "/usr/bin/env", "DRY_RUN=1",
+                "/usr/bin/node", "--experimental-strip-types",
+                str(WORKBENCH_ROOT / "scripts/focus-pool-v22-cd-bark.ts"),
+            ], timeout=60)
+            if bark_rc != 0:
+                raise RuntimeError("Bark dry-run failed: " + (bark_err or bark_out)[-1200:])
+            required_labels = (
+                "【C5｜ATR持续 Top10】",
+                "【C3｜ATR持续 Top10】",
+                "【C1｜ATR持续 Top10】",
+                "【D｜1H MA30斜率 Long Top10】",
+                "【D｜1H MA30斜率 Short Top10】",
+                "DRY_RUN=1",
+            )
+            if not all(label in bark_out for label in required_labels):
+                raise RuntimeError("Bark dry-run missing required sections")
+
+            after_radar = health_json(RADAR_HEALTH_URL)
+            if after_radar.get("status") != "ok" or after_radar.get("realOrderRouteEnabled") is not False:
+                raise RuntimeError("postflight radar safety gate failed")
+
+            return {"ok": True, "summary": {
+                "phase": "FOCUS_V23_DEPLOYED",
+                "commit": commit,
+                "backup": str(backup),
+                "manifestSha256": hashlib.sha256(manifest_bytes).hexdigest(),
+                "installed": installed,
+                "checks": checks,
+                "counts": output.get("counts"),
+                "previewCounts": {
+                    key: len(preview.get(key, []))
+                    for key in ("C5", "C3", "C1", "DLong", "DShort")
+                } if isinstance(preview, dict) else {},
+                "barkDryRun": "PASS",
+                "sentBark": False,
+                "radarHealth": after_radar,
+                "rolledBack": False,
+                "modified": True,
+            }}
+        except Exception:
+            _restore_ma30(backup, manifest)
+            try:
+                run(["/usr/bin/systemctl", "start", "trade-workbench-focus-pool-v22.service"], timeout=900)
+            except Exception:
+                pass
+            raise
 
 def action_ma30_status(_payload):
     units = (
@@ -793,6 +1082,8 @@ ACTIONS = {
     "health": action_health,
     "focus_v22_layout": action_focus_v22_layout,
     "focus_v22_read_source": action_focus_v22_read_source,
+    "focus_v23_symbol_diagnostic": action_focus_v23_symbol_diagnostic,
+    "deploy_focus_v23": action_deploy_focus_v23,
     "ma30_status": action_ma30_status,
     "ma30_isolated_validation": action_ma30_isolated_validation,
     "ma30_astps_diagnostic": action_ma30_astps_diagnostic,
