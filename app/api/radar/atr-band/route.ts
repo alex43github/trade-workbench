@@ -2,7 +2,7 @@ import { ensureAtrBandLifecycleSchema, ensureWatchlistSchema } from "@/db/ensure
 import { getD1 } from "@/db";
 import { createAtrLifecycleFetchers } from "@/lib/radar/binance-public";
 import { buildAtrLifecycleScan, getAtrLifecycleScanBucket, hasAtrLifecycleScanBucket, loadAtrLifecycleDashboard, saveAtrLifecycle } from "@/lib/radar/atr-band-lifecycle-snapshot";
-import { notifyAtrLifecycleTransitions } from "@/lib/radar/bark-notifications";
+import { notifyAtrLifecycleTransitions, notifyAtrTierTop } from "@/lib/radar/bark-notifications";
 import { requireOperatorMutation, requireScheduler } from "@/lib/security/operator-guard";
 import { syncHourlyStrongWatchlist } from "@/lib/watchlist";
 import { detachTask } from "@/services/workbench/background-task.mjs";
@@ -20,6 +20,7 @@ export async function runAtrLifecycleScan(now = new Date(), options: { force?: b
   await ensureWatchlistSchema();
   await syncHourlyStrongWatchlist(db, scan);
   await notifyAtrLifecycleTransitions({ db, previous: previous.lifecycles, current: scan.lifecycles, scanBucket });
+  await notifyAtrTierTop({ db, c5: scan.c5, c3: scan.c3, c1: scan.c1, scanBucket });
   return scan;
 }
 
