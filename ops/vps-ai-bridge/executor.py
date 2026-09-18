@@ -13,7 +13,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "VPS_BRIDGE_EXECUTOR_V9"
+VERSION = "VPS_BRIDGE_EXECUTOR_V10"
 ALLOWED_SERVICES = ("squeeze-radar.service", "trade-workbench.service")
 RADAR_HEALTH_URL = os.environ.get("RADAR_HEALTH_URL", "http://127.0.0.1:8790/health")
 RADAR_SIGNALS_URL = os.environ.get("RADAR_SIGNALS_URL", "http://127.0.0.1:8790/signals")
@@ -250,6 +250,81 @@ def action_repo_status(_payload):
         },
     }
 
+
+
+FOCUS_V22_SERVICES = (
+    "trade-workbench-atr-persistence-v1.service",
+    "trade-workbench-focus-pool-v22.service",
+    "trade-workbench-focus-v22-cd-bark.service",
+    "trade-workbench-radar-priority-watcher.service",
+)
+
+def action_focus_v22_layout(_payload):
+    units = {}
+    for name in FOCUS_V22_SERVICES:
+        rc, out, _ = run([
+            "/usr/bin/systemctl", "show", name,
+            "--property=FragmentPath,WorkingDirectory,ExecStart,LoadState,ActiveState,SubState",
+            "--no-pager",
+        ])
+        values = {}
+        if rc == 0:
+            for line in out.splitlines():
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    values[k] = v
+        units[name] = values
+    scripts = []
+    root = WORKBENCH_ROOT / "scripts"
+    try:
+        for item in sorted(root.iterdir(), key=lambda p: p.name):
+            if not item.is_file() or item.suffix != ".ts":
+                continue
+            lower = item.name.lower()
+            if not (
+                lower.startswith("focus")
+                or lower.startswith("atr")
+                or lower == "structure-radar-priority-watcher.ts"
+            ):
+                continue
+            data = item.read_bytes()
+            scripts.append({
+                "name": item.name,
+                "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            })
+    except Exception as exc:
+        scripts.append({"error": type(exc).__name__})
+    return {"ok": True, "summary": {
+        "units": units,
+        "scripts": scripts,
+        "modified": False,
+    }}
+
+def action_focus_v22_read_source(payload):
+    name = str(payload.get("name", "")).strip()
+    if "/" in name or "\\" in name or not name.endswith(".ts"):
+        raise ValueError("invalid source name")
+    lower = name.lower()
+    if not (
+        lower.startswith("focus")
+        or lower.startswith("atr")
+        or lower == "structure-radar-priority-watcher.ts"
+    ):
+        raise ValueError("source not allowlisted")
+    path = WORKBENCH_ROOT / "scripts" / name
+    if not path.is_file():
+        raise FileNotFoundError(name)
+    data = path.read_bytes()
+    if len(data) > 120_000:
+        raise ValueError("source too large")
+    return {"ok": True, "summary": {
+        "name": name,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "size": len(data),
+        "content": data.decode("utf-8"),
+        "modified": False,
+    }}
 
 def action_ma30_status(_payload):
     units = (
@@ -637,6 +712,8 @@ def action_deploy_ma30_astps(payload):
 
 ACTIONS = {
     "health": action_health,
+    "focus_v22_layout": action_focus_v22_layout,
+    "focus_v22_read_source": action_focus_v22_read_source,
     "ma30_status": action_ma30_status,
     "ma30_isolated_validation": action_ma30_isolated_validation,
     "ma30_astps_diagnostic": action_ma30_astps_diagnostic,
