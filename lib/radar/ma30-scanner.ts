@@ -4,21 +4,13 @@ import { fetchClosedBars as fetchBinanceClosedBars, listUsdtPerpetualSymbols } f
 import { enrichMa30Rankable, rankMa30Universe, type Ma30Rankable } from "./ma30-ranking.ts";
 import { computeMa30ShortAccelerationSnapshot } from "./ma30-short-acceleration.ts";
 import { computeMa30SlopeSnapshot } from "./ma30-slope.ts";
+import { isStablecoinUsdtPerpetual } from "./ma30-universe.ts";
+export { isStablecoinUsdtPerpetual } from "./ma30-universe.ts";
 
 const HOUR_MS = 3_600_000;
 export const MA30_SCANNER_VERSION = "MA30_SCANNER_V1";
 export const MA30_DEFAULT_HISTORY_LIMIT = 1_000;
 export const MA30_DEFAULT_SHORT_WATCH_LIMIT = 5;
-
-const STABLECOIN_BASE_ASSETS = new Set([
-  "USDC", "FDUSD", "TUSD", "USDP", "DAI", "BUSD", "USDE", "USDS", "PYUSD", "USD1",
-]);
-
-export function isStablecoinUsdtPerpetual(symbol: string): boolean {
-  const normalized = symbol.trim().toUpperCase();
-  if (!normalized.endsWith("USDT")) return false;
-  return STABLECOIN_BASE_ASSETS.has(normalized.slice(0, -4));
-}
 
 export type Ma30ScannerBar = {
   close: number;
