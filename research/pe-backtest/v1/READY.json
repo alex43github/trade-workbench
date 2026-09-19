@@ -1,0 +1,8 @@
+{
+  "Status": "READY",
+  "SchemaVersion": "pe-top10-ma30-atr-10x-v1",
+  "TradeRows": 1700,
+  "DailyRows": 170,
+  "ChunkCount": 34,
+  "GeneratedAtUTC": "2026-09-19T16:17:07.318588+00:00"
+}

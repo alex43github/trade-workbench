@@ -1,0 +1,315 @@
+{
+  "SchemaVersion": "pe-top10-ma30-atr-10x-v1",
+  "GeneratedAtUTC": "2026-09-19T16:17:07.316587+00:00",
+  "Source15m": "/var/lib/trade-workbench/market-cache/15m-history-v1",
+  "SourceRule": "527 current-universe Binance USD-M 15m cache; historical universe not reconstructed",
+  "SelectionTime": "08:00 Asia/Shanghai; uses only last fully closed 1H and earlier",
+  "Ranking": "Signed PE6h descending; PE12h/24h/72h recorded",
+  "MA30": "SMA30",
+  "ATR14": "Wilder/RMA",
+  "FeeRatePerExecution": 0.0005,
+  "ChunkDays": 5,
+  "ChunkCount": 34,
+  "Chunks": [
+    {
+      "File": "chunks/chunk_000_2026-04-02_2026-04-06.json",
+      "DateStart_BJT": "2026-04-02",
+      "DateEnd_BJT": "2026-04-06",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "6b6c653a9446eb9e9dc21e227e621ddbbd00aee4cc2d711efa364d2d23b01521"
+    },
+    {
+      "File": "chunks/chunk_001_2026-04-07_2026-04-11.json",
+      "DateStart_BJT": "2026-04-07",
+      "DateEnd_BJT": "2026-04-11",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "d19401d46bac7bc02b164c445df023fdbf44e28b8119a4d4e3e0332e3086e37b"
+    },
+    {
+      "File": "chunks/chunk_002_2026-04-12_2026-04-16.json",
+      "DateStart_BJT": "2026-04-12",
+      "DateEnd_BJT": "2026-04-16",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6"
+    },
+    {
+      "File": "chunks/chunk_003_2026-04-17_2026-04-21.json",
+      "DateStart_BJT": "2026-04-17",
+      "DateEnd_BJT": "2026-04-21",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "d017c7aade6cf83f49bc7ed0c94ecf02f320c5e28663b484896e0c4b9a5bc5bb"
+    },
+    {
+      "File": "chunks/chunk_004_2026-04-22_2026-04-26.json",
+      "DateStart_BJT": "2026-04-22",
+      "DateEnd_BJT": "2026-04-26",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "7036150b7f063642dfe4eae6e00911be9e0e289dfb76af54e1f3cfb6a38e624f"
+    },
+    {
+      "File": "chunks/chunk_005_2026-04-27_2026-05-01.json",
+      "DateStart_BJT": "2026-04-27",
+      "DateEnd_BJT": "2026-05-01",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "f6e8773ccd5403ce4ce7dce10fdaf522835cf1a69ff120b60ccd5bb21ff3c9a8"
+    },
+    {
+      "File": "chunks/chunk_006_2026-05-02_2026-05-06.json",
+      "DateStart_BJT": "2026-05-02",
+      "DateEnd_BJT": "2026-05-06",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "4f8f8209d84124919fe25679adb0d8c03c484548bff60863bed9ca490b7ad4b2"
+    },
+    {
+      "File": "chunks/chunk_007_2026-05-07_2026-05-11.json",
+      "DateStart_BJT": "2026-05-07",
+      "DateEnd_BJT": "2026-05-11",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "6dd23374554cb357947d0f10036613500412f4b67aeb672c3e9dd262a9af19e7"
+    },
+    {
+      "File": "chunks/chunk_008_2026-05-12_2026-05-16.json",
+      "DateStart_BJT": "2026-05-12",
+      "DateEnd_BJT": "2026-05-16",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "20b3dd038ffd5c14ddbccfe9fda372b8fff139e714c7c4f0161444624940e327"
+    },
+    {
+      "File": "chunks/chunk_009_2026-05-17_2026-05-21.json",
+      "DateStart_BJT": "2026-05-17",
+      "DateEnd_BJT": "2026-05-21",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "3aff56aff8365271acbb31d08d63c0949356c10aa646a0fcd29bf3c968a29312"
+    },
+    {
+      "File": "chunks/chunk_010_2026-05-22_2026-05-26.json",
+      "DateStart_BJT": "2026-05-22",
+      "DateEnd_BJT": "2026-05-26",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "ecb805929943bf234a9ad96ec9ec119817ec653201535929af17b4d3740387f5"
+    },
+    {
+      "File": "chunks/chunk_011_2026-05-27_2026-05-31.json",
+      "DateStart_BJT": "2026-05-27",
+      "DateEnd_BJT": "2026-05-31",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "7da4d85dd31ef3f5dfed0059aec92f86cfd4edf9a4fc3d338dc531102e7b3af9"
+    },
+    {
+      "File": "chunks/chunk_012_2026-06-01_2026-06-05.json",
+      "DateStart_BJT": "2026-06-01",
+      "DateEnd_BJT": "2026-06-05",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "213997ccd6a9cd3487c631937c32498f5773fb863582d03946fa2aa007dd4325"
+    },
+    {
+      "File": "chunks/chunk_013_2026-06-06_2026-06-10.json",
+      "DateStart_BJT": "2026-06-06",
+      "DateEnd_BJT": "2026-06-10",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "c5fa86f75fc3a07e0f5933a51aba37c38a293997be17a705c2dfb66625011fb1"
+    },
+    {
+      "File": "chunks/chunk_014_2026-06-11_2026-06-15.json",
+      "DateStart_BJT": "2026-06-11",
+      "DateEnd_BJT": "2026-06-15",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "ddb101c3af43c4a60d00192dcd50f7a944bb6f9e1930623fbc15d91b986b1118"
+    },
+    {
+      "File": "chunks/chunk_015_2026-06-16_2026-06-20.json",
+      "DateStart_BJT": "2026-06-16",
+      "DateEnd_BJT": "2026-06-20",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "bb1bdc456f83b9981da0400f7248fe723524e70f78a3728d21d848c229eb0ccf"
+    },
+    {
+      "File": "chunks/chunk_016_2026-06-21_2026-06-25.json",
+      "DateStart_BJT": "2026-06-21",
+      "DateEnd_BJT": "2026-06-25",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "1ef3823466f69d851bbffd9a4dfd04df42f23d3bb932f619a5e8e22517c308d0"
+    },
+    {
+      "File": "chunks/chunk_017_2026-06-26_2026-06-30.json",
+      "DateStart_BJT": "2026-06-26",
+      "DateEnd_BJT": "2026-06-30",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "56556ee5d8e52811bb588f87fc2677d66c5a600e395adeadadacd9f6fbead508"
+    },
+    {
+      "File": "chunks/chunk_018_2026-07-01_2026-07-05.json",
+      "DateStart_BJT": "2026-07-01",
+      "DateEnd_BJT": "2026-07-05",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "5e23e462bc26fa7be249516ba8f1fd919bb6c86d4da469b495df1da3e9398a0f"
+    },
+    {
+      "File": "chunks/chunk_019_2026-07-06_2026-07-10.json",
+      "DateStart_BJT": "2026-07-06",
+      "DateEnd_BJT": "2026-07-10",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "a0a8abfa44c1187bdb6a75e8620b1ef82885b0df4ceff0d39269a6a7bcfc3fa2"
+    },
+    {
+      "File": "chunks/chunk_020_2026-07-11_2026-07-15.json",
+      "DateStart_BJT": "2026-07-11",
+      "DateEnd_BJT": "2026-07-15",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "a4a9b71d84a2ef10a8f5b8c74dca6d49f68bcd04c4cc598b23eafde843749f7b"
+    },
+    {
+      "File": "chunks/chunk_021_2026-07-16_2026-07-20.json",
+      "DateStart_BJT": "2026-07-16",
+      "DateEnd_BJT": "2026-07-20",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "9e9c3aed8ac429474e4b6e54c952369cc04ece34aeb740b7ea0ac157d02de941"
+    },
+    {
+      "File": "chunks/chunk_022_2026-07-21_2026-07-25.json",
+      "DateStart_BJT": "2026-07-21",
+      "DateEnd_BJT": "2026-07-25",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "f27022fc8bf96fafd17567668a8f816c14000c18cc16779ad3d9c7f43f371e16"
+    },
+    {
+      "File": "chunks/chunk_023_2026-07-26_2026-07-30.json",
+      "DateStart_BJT": "2026-07-26",
+      "DateEnd_BJT": "2026-07-30",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "c267e62f7072e31d084652e66e8d4c0d1438f4b192528d102ef35062d5beb539"
+    },
+    {
+      "File": "chunks/chunk_024_2026-07-31_2026-08-04.json",
+      "DateStart_BJT": "2026-07-31",
+      "DateEnd_BJT": "2026-08-04",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "b4889c610158a7c3bbe77c2dca985bd35ac89a8f7c983b22c72583c2a7c30622"
+    },
+    {
+      "File": "chunks/chunk_025_2026-08-05_2026-08-09.json",
+      "DateStart_BJT": "2026-08-05",
+      "DateEnd_BJT": "2026-08-09",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "eb42b80c5005dbc535bc22e999c11048c49a7e1dca5c574ef963dd4c3b280fef"
+    },
+    {
+      "File": "chunks/chunk_026_2026-08-10_2026-08-14.json",
+      "DateStart_BJT": "2026-08-10",
+      "DateEnd_BJT": "2026-08-14",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "ced652f914971effb87619fedf8c9a9157bffe4ba89ea866c0a36a07c51d5a88"
+    },
+    {
+      "File": "chunks/chunk_027_2026-08-15_2026-08-19.json",
+      "DateStart_BJT": "2026-08-15",
+      "DateEnd_BJT": "2026-08-19",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "3624febb241fba97746ca071cccb9cc67024c7a529e9326227afb8467529e46b"
+    },
+    {
+      "File": "chunks/chunk_028_2026-08-20_2026-08-24.json",
+      "DateStart_BJT": "2026-08-20",
+      "DateEnd_BJT": "2026-08-24",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "b9551e0b23823e08298ae05a03926a9f9cb9576c9017bc1df1e73eaecb33f7ae"
+    },
+    {
+      "File": "chunks/chunk_029_2026-08-25_2026-08-29.json",
+      "DateStart_BJT": "2026-08-25",
+      "DateEnd_BJT": "2026-08-29",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "6f715c08a4a5dbc6293813a16daf1994133a4e64d117dda015afad5126b48bad"
+    },
+    {
+      "File": "chunks/chunk_030_2026-08-30_2026-09-03.json",
+      "DateStart_BJT": "2026-08-30",
+      "DateEnd_BJT": "2026-09-03",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "17f91cdc4dff9df809f52759ae85cbb1fa0156ff5beb13697e71700b50d63596"
+    },
+    {
+      "File": "chunks/chunk_031_2026-09-04_2026-09-08.json",
+      "DateStart_BJT": "2026-09-04",
+      "DateEnd_BJT": "2026-09-08",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "3227df5f6f634edea1c97d5a76839604db984ce5112a0a1acecb3e0df6261466"
+    },
+    {
+      "File": "chunks/chunk_032_2026-09-09_2026-09-13.json",
+      "DateStart_BJT": "2026-09-09",
+      "DateEnd_BJT": "2026-09-13",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "d6235cc25d6199acf8039faab44a345eddcb013886c0b38795bc78a365a290d0"
+    },
+    {
+      "File": "chunks/chunk_033_2026-09-14_2026-09-18.json",
+      "DateStart_BJT": "2026-09-14",
+      "DateEnd_BJT": "2026-09-18",
+      "ProcessedDays": 5,
+      "TradeRows": 50,
+      "SHA256": "d3d2106e7ebdaf3862c2ea515ffee422893101b76ffdb923b1c2a120cd971592"
+    }
+  ],
+  "TotalSummary": {
+    "SchemaVersion": "pe-top10-ma30-atr-10x-v1",
+    "StartDate_BJT": "2026-04-02",
+    "EndDate_BJT": "2026-09-18",
+    "CandidateRows": 1700,
+    "ExecutedInstances": 1573,
+    "ClosedInstances": 1568,
+    "Wins": 470,
+    "WinRatePct": 29.97448979591837,
+    "GrossPnL_USD": 541.4710423424889,
+    "FeesAssumed_USD": 416.3522355211713,
+    "NetPnL_USD": 125.11880682131756,
+    "CumulativeMarginUsed_USD": 41650.0,
+    "ROI_Pct": 0.30040529849055836,
+    "TP1HitRatePct": 35.15575333757152,
+    "TP2HitRatePct": 9.218054672600127,
+    "StopRatePct": 90.46408137317228,
+    "LiqRiskRatePct": 4.0686586141131595,
+    "BestDate": "2026-05-29",
+    "BestDateNetPnL_USD": 203.49020955366856,
+    "WorstDate": "2026-04-17",
+    "WorstDateNetPnL_USD": -146.5498029322154,
+    "BestSymbol": "VELVETUSDT",
+    "BestSymbolNetPnL_USD": 123.06187130035752,
+    "WorstSymbol": "SIRENUSDT",
+    "WorstSymbolNetPnL_USD": -235.41896153496353,
+    "UniverseBias": "SURVIVORSHIP_BIAS_CURRENT_527"
+  }
+}
