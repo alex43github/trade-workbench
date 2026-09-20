@@ -1,0 +1,20 @@
+[Unit]
+Description=Trade Workbench Focus V23 heartbeat -> Google Sheet mirror
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=-/etc/trade-workbench/heartbeat-bridge.env
+ExecStart=/usr/bin/python3 /opt/trade-workbench/ops/heartbeat-sheet-sync.py
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# Mirror failures must never affect scanner services.
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
