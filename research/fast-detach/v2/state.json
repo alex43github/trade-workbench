@@ -1,0 +1,30 @@
+{
+  "SchemaVersion": "fast-detach-research-state-v1",
+  "UpdatedAtUTC": "2026-09-23T12:54:00Z",
+  "StudyComplete": false,
+  "RepairPhase": "FOUNDATION",
+  "CurrentIssue": 1,
+  "CurrentIssueName": "Frozen Research Chunk V2 schema",
+  "Issue1Status": "FIXED_SPEC_LOCKED",
+  "V1Immutable": true,
+  "V1Audit": {
+    "chunkCount": 34,
+    "dateStartBJT": "2026-04-02",
+    "dateEndBJT": "2026-09-18",
+    "candidateRows": 1700,
+    "source15m": "/var/lib/trade-workbench/market-cache/15m-history-v1",
+    "survivorshipBias": "SURVIVORSHIP_BIAS_CURRENT_527"
+  },
+  "V2Ready": false,
+  "BlockingNext": [
+    "Implement V2 generator against VPS 15m cache",
+    "Audit/complete 5m cache and mark VALID or DATA_GAP",
+    "Generate chronological event dataset and first-touch labels"
+  ],
+  "Invariants": [
+    "Google Sheet Progress never gates frozen GitHub research",
+    "max one 5-day chunk per study iteration",
+    "same-chunk discovery cannot count as OOS confirmation",
+    "missing optional data is null/DATA_GAP, never zero"
+  ]
+}
