@@ -14,7 +14,9 @@
     "db:generate": "drizzle-kit generate",
     "radar:start": "node --use-env-proxy --env-file-if-exists=.env services/structure-radar/main.ts",
     "radar:test": "node --test tests/structure-radar-*.test.mjs",
-    "radar:check": "npm run radar:test && tsc --noEmit"
+    "radar:check": "npm run radar:test && tsc --noEmit",
+    "stage6:forward:test": "node --experimental-strip-types --test tests/structure-radar-execution-forward.test.mjs",
+    "stage6:forward:dry": "node --experimental-strip-types scripts/execution-forward-cycle.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
