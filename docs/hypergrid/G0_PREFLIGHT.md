@@ -8,7 +8,7 @@ Generated on 2026-09-25 by the unattended local runner. This records capability 
     EXECUTION_IS_LOCAL_MAC=true
     EXECUTION_IS_VPS=false
     GITHUB_READ=true
-    GITHUB_WRITE=false
+    GITHUB_WRITE=true
     ISSUE_1_READ=true
     ISSUE_1_WRITE=false
     UNATTENDED_REQUIRES_HOST_AWAKE=true
@@ -32,8 +32,9 @@ The user's existing dirty worktree at /Users/niangao/Downloads/交易文档/trad
 
 - Public repository read was verified through git fetch and the public GitHub API.
 - Issue #1 read was verified through the public GitHub API.
-- GitHub CLI identity existed locally but its token was invalid; no write probe, comment, PR, or branch push was performed during preflight.
-- Therefore GITHUB_WRITE=false and ISSUE_1_WRITE=false are conservative, unverified-write results.
+- During initial preflight the GitHub CLI token was not usable, so write access was recorded as unverified.
+- After local verification, the isolated branch was pushed successfully and PR #11 was created successfully. Therefore final GITHUB_WRITE=true.
+- No Issue #1 comment or other issue mutation was attempted, so ISSUE_1_WRITE=false.
 
 Issue #1 safety requirements were treated as hard boundaries: no VPS deployment, service restart, wallet mutation, live order, approval, secret request or production connection.
 
@@ -50,7 +51,7 @@ A prior read-only VPS status check showed the existing trade-workbench.service a
 
 ## Verification status
 
-- HyperGrid focused tests: 21 passing.
+- HyperGrid focused tests: 22 passing.
 - Existing full-suite baseline: build passed, but the pre-existing suite exits non-zero on unrelated legacy TradingView/live/radar tests; see handoff summary.
 - Full TypeScript baseline: exits non-zero on pre-existing repository errors; no HyperGrid type errors remain after replacing unsupported BigInt literal syntax for the repository's ES2017 target.
 - Official RPC CLI: health returned HEALTHY; discover returned the requested snapshot and marked it STALE when the latest block changed during the read window.
