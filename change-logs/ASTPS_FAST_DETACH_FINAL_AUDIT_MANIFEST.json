@@ -117,7 +117,9 @@
     "HISTORICAL_FROZEN_UNCHANGED": true
   },
   "production_side_effects": {
-    "CHUNK002_ACCESSED": true,
+    "CHUNK002_EVER_ACCESSED_AFTER_PREREG": true,
+    "CHUNK002_ACCESSED_THIS_REPAIR": false,
+    "CHUNK002_REEVALUATED_THIS_REPAIR": false,
     "PRODUCTION_MODEL_CHANGED": false,
     "PRODUCTION_CODE_CHANGED": false,
     "PRODUCTION_SERVICE_RESTARTED": false,
@@ -128,8 +130,9 @@
     "ORDER_PATH_CHANGED": false
   },
   "tests": {
-    "focused": "41 total / 41 pass / 0 fail / 0 skip",
-    "related_regression": "88 total / 87 pass / 0 fail / 1 environment skip",
+    "focused": "42 total / 42 pass / 0 fail / 0 skip",
+    "materialization_fixture": "1 total / 1 pass / 0 fail / 0 skip",
+    "related_regression": "88 total / 88 pass / 0 fail / 0 skip",
     "repository_build": "PASS",
     "repository_full_suite": "exit 1; 1098 total / 1010 pass / 88 fail / 0 skip; build phase PASS",
     "typecheck": "FAIL on 31 pre-existing app/lib errors; no TASK-007 scope errors",

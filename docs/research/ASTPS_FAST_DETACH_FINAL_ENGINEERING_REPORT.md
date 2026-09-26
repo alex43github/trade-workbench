@@ -67,8 +67,7 @@ Frozen-at-EDP strata: timeframe `15m=62, 1h=98, 4h=17`; setup `PLATFORM_RECLAIM=
 
 ## Verification
 
-- Focused TASK-007/007B/007C/007D: `41/41 PASS`, `0 FAIL`, `0 SKIP`.
-- Radar regression (`npm run radar:test`): `88 total`, `87 PASS`, `0 FAIL`, `1 environment skip` (loopback listener prohibited by the execution environment).
+- Final verification at 2026-09-26T21:27:24+08:00: focused TASK-007/007B/007C/007D 42/42 PASS; master-to-symbol cache fixture 1/1 PASS; radar regression 88/88 PASS.
 - Repository build: `PASS`.
 - Repository full suite (`npm test`): exit `1`, `1098 total`, `1010 PASS`, `88 FAIL`, `0 SKIP`; the additional passing tests are the EDP price/timestamp contract regressions. Failures are existing live-exchange/Bybit/trade/UI scope outside this research-only repair. The build phase passed.
 - Typecheck (`npx tsc --noEmit`): `FAIL` on 31 pre-existing `app/` and `lib/` errors; no TASK-007/007B/007C/007D errors were reported.
@@ -86,7 +85,9 @@ OUTCOME_MUTATION_COUNT=0
 HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_FROZEN_UNCHANGED=true
-CHUNK002_ACCESSED=true
+CHUNK002_EVER_ACCESSED_AFTER_PREREG=true
+CHUNK002_ACCESSED_THIS_REPAIR=false
+CHUNK002_REEVALUATED_THIS_REPAIR=false
 PRODUCTION_EXECUTION_PERMISSION_SEMANTICS_FOUND=true
 NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER=true
 REAL_LIVE_EAP_SOURCE_FOUND=false
