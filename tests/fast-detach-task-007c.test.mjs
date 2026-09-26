@@ -59,9 +59,10 @@ test("buildTask007CIdentity freezes EDP price with the EDP timestamp", () => {
     expiresAfterBars: 4,
     lastProcessedBarTime: 1_758_726_900,
     geometry: { tolerance: 0.1, platformLower: 100, invalidationPrice: 99 },
-  }, "epoch-test", "2026-09-24T19:00:00.000Z", "EAP_NOT_OBSERVED", 101.25, "2026-09-24T18:59:59.999Z");
+  }, "epoch-test", "2026-09-24T19:00:00.000Z", "EAP_NOT_OBSERVED", 101.25, "2025-09-24T15:29:59.999Z");
 
-  assert.equal(result.execution_context.edp_utc, "2026-09-24T18:59:59.999Z");
+  assert.equal(result.identity.decision_bar_close_utc, "2025-09-24T15:29:59.999Z");
+  assert.equal(result.execution_context.edp_utc, result.identity.decision_bar_close_utc);
   assert.equal(result.execution_context.edp_price, 101.25);
   assert.throws(
     () => buildTask007CIdentity({
@@ -76,8 +77,8 @@ test("buildTask007CIdentity freezes EDP price with the EDP timestamp", () => {
       expiresAfterBars: 4,
       lastProcessedBarTime: 1_758_726_900,
       geometry: { tolerance: 0.1, platformLower: 100, invalidationPrice: 99 },
-    }, "epoch-test", "2026-09-24T19:00:00.000Z", "EAP_NOT_OBSERVED", 101.25, "2026-09-24T19:00:00.001Z"),
-    /after detectedAtUtc/i,
+    }, "epoch-test", "2026-09-24T19:00:00.000Z", "EAP_NOT_OBSERVED", 101.25, "2025-09-24T15:30:00.000Z"),
+    /decision bar close/i,
   );
 });
 
@@ -215,7 +216,7 @@ test("Task-007C identity remains deterministic and transition mapping never infe
   const second = buildTask007CIdentity({ ...signal }, "epoch-20260924T185000", "2026-09-24T19:00:00.000Z");
   assert.deepEqual(first, second);
   assert.equal(first.scanner_signal_id, signal.id);
-  assert.equal(first.execution_context.edp_utc, "2026-09-24T19:00:00.000Z");
+  assert.equal(first.execution_context.edp_utc, first.identity.decision_bar_close_utc);
   assert.equal(first.execution_context.eap_utc, null);
   assert.equal(first.identity.source, "LIVE_FORWARD");
   assert.equal(first.identity.event_id.length, 64);
@@ -224,7 +225,7 @@ test("Task-007C identity remains deterministic and transition mapping never infe
   assert.equal(transitionTypeForTask007C("EXPIRED"), "TERMINAL");
 });
 
-function rawKline(symbol, timeframe, time, closed) {
+function rawKline(symbol, timeframe, time, closed, close = 100.5) {
   const open = 100;
   return {
     data: {
@@ -237,7 +238,7 @@ function rawKline(symbol, timeframe, time, closed) {
         o: String(open),
         h: "101",
         l: "99",
-        c: "100.5",
+        c: String(close),
         v: "10",
       },
     },
@@ -321,6 +322,76 @@ test("collector uses the RadarScanner raw-event path and freezes one snapshot pl
     assert.equal(result.NEW_LIVE_EVENTS, 1);
     assert.equal(result.TOTAL_LIVE_EVENTS, 1);
     assert.equal((await repository.readEpoch()).epoch_sha256, epoch.epoch_sha256);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("collector keeps the EDP pair on the original detector decision bar when persistence is delayed", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "task007c-delayed-edp-"));
+  const liveDirectory = join(directory, "live");
+  const historicalPath = join(directory, "chunk_001_unified.jsonl");
+  const epochRepository = new LiveEventRepository(liveDirectory);
+  await epochRepository.createEpoch({
+    forward_epoch_id: "epoch-test",
+    started_at_utc: "2026-09-24T19:00:00.000Z",
+    run_id: "run-test",
+    scanner_version: "structure-radar-v0.1",
+    protocol_version: "fast-detach-v2-task-007-1",
+  });
+  await writeFile(historicalPath, "", "utf8");
+  const decisionTime = 1_758_735_600;
+  const laterTime = decisionTime + 900;
+  try {
+    await runTask007CShadowCollector({
+      TASK007C_TEST_MODE: "true",
+      TASK007C_SHADOW_ROOT: directory,
+      TASK007C_LIVE_DIRECTORY: liveDirectory,
+      TASK007C_HISTORICAL_CHUNK_PATH: historicalPath,
+      TASK007C_EXPECTED_EPOCH_ID: "epoch-test",
+      TASK007C_DURATION_MS: "50",
+    }, {
+      historicalLoader: async () => [],
+      fetchFiveMinuteKlines: async () => [],
+      fetchOutcomeKlines: async () => [],
+      bootstrapMarket: async ({ cache }) => {
+        cache.replace("ETHUSDT", "15m", [{ time: decisionTime - 900, open: 99, high: 100, low: 98, close: 99, volume: 10, closed: true }]);
+        return { symbols: ["ETHUSDT"], failures: [], batches: [["ethusdt@kline_15m"]] };
+      },
+      detectors: [async (bars, context) => {
+        const decision = bars.at(-1);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        if (decision.time !== decisionTime) return null;
+        return {
+          symbol: context.symbol,
+          timeframe: context.timeframe,
+          setup: "PLATFORM_RECLAIM",
+          state: "CANDIDATE",
+          detectedAt: decision.time,
+          score: 80,
+          anchorHash: "anchor-delayed-edp",
+          platformLower: 99,
+          tolerance: 1,
+          invalidationPrice: 97,
+          atr: 1,
+          reclaimHigh: 100,
+        };
+      }],
+      feedFactory: (options) => ({
+        start() {
+          void options.onEvent(rawKline("ETHUSDT", "15m", decisionTime, true, 101));
+          setTimeout(() => void options.onEvent(rawKline("ETHUSDT", "15m", laterTime, true, 100.9)), 1);
+        },
+        stop() {},
+      }),
+    });
+
+    const { snapshots } = await new LiveEventRepository(liveDirectory).readAll();
+    assert.equal(snapshots.length, 1);
+    assert.equal(snapshots[0].identity.decision_bar_close_utc, "2025-09-24T17:54:59.999Z");
+    assert.equal(snapshots[0].execution_context.edp_utc, snapshots[0].identity.decision_bar_close_utc);
+    assert.equal(snapshots[0].execution_context.edp_price, 101);
+    assert.notEqual(snapshots[0].execution_context.edp_price, 100.9);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

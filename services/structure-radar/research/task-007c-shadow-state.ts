@@ -124,7 +124,7 @@ export function buildTask007CIdentity(
   detectedAtUtc: string,
   eapStatus: "NOT_ESTABLISHED" | "EAP_NOT_OBSERVED" = "NOT_ESTABLISHED",
   edpPrice?: number,
-  edpUtc = detectedAtUtc,
+  edpUtc?: string,
 ): {
   identity: LiveEventIdentity & { event_id: string };
   scanner_signal_id: string;
@@ -138,18 +138,21 @@ export function buildTask007CIdentity(
   if (!forwardEpochId.trim()) throw new Error("forward epoch id is required");
   if (!Number.isFinite(Date.parse(detectedAtUtc))) throw new Error("detectedAtUtc must be an ISO timestamp");
   const detectedAtMs = Date.parse(detectedAtUtc);
-  const edpMs = Date.parse(edpUtc);
+  const decisionBarCloseMs = signal.detectedAt * 1_000 + TIMEFRAME_SECONDS[signal.timeframe] * 1_000 - 1;
+  const decisionBarCloseUtc = new Date(decisionBarCloseMs).toISOString();
+  const frozenEdpUtc = edpUtc ?? decisionBarCloseUtc;
+  const edpMs = Date.parse(frozenEdpUtc);
   if (!Number.isFinite(edpMs)) throw new Error("edpUtc must be an ISO timestamp");
   if (edpMs > detectedAtMs) throw new Error("edpUtc cannot be after detectedAtUtc");
+  if (frozenEdpUtc !== decisionBarCloseUtc) throw new Error("edpUtc must equal the immutable decision bar close");
   if (edpPrice !== undefined && (!Number.isFinite(edpPrice) || edpPrice <= 0)) throw new Error("edpPrice must be positive when provided");
-  const decisionBarCloseMs = signal.detectedAt * 1_000 + TIMEFRAME_SECONDS[signal.timeframe] * 1_000 - 1;
   const identityBase = {
     source: "LIVE_FORWARD" as const,
     forward_epoch_id: forwardEpochId,
     symbol: signal.symbol.toUpperCase(),
     timeframe: signal.timeframe,
     setup: signal.setup,
-    decision_bar_close_utc: new Date(decisionBarCloseMs).toISOString(),
+    decision_bar_close_utc: decisionBarCloseUtc,
     anchor_time_utc: new Date(signal.detectedAt * 1_000).toISOString(),
     anchor_hash: signal.anchorHash,
   };
@@ -163,7 +166,7 @@ export function buildTask007CIdentity(
     identity,
     scanner_signal_id: signal.id,
     execution_context: {
-      edp_utc: edpUtc,
+      edp_utc: frozenEdpUtc,
       ...(edpPrice === undefined ? {} : { edp_price: edpPrice }),
       eap_utc: null,
       eap_status: eapStatus,
