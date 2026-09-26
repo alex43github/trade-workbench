@@ -1,13 +1,13 @@
-# CODEX REVIEW PACKET — ASTPS FAST-DETACH PHASE 1
+# CODEX REVIEW PACKET — ASTPS FAST-DETACH PHASES 1–2
 
-TASK_ID=ASTPS_FAST_DETACH_PHASE1_007D_REPAIR
+TASK_ID=ASTPS_FAST_DETACH_PHASE2_PERSISTENT_EPOCH_AUDIT
 STATUS=PASS_WITH_KNOWN_BASELINE_LIMITATIONS
 STARTED_AT=2026-09-26T12:00:00+08:00
-FINISHED_AT=2026-09-26T12:50:00+08:00
+FINISHED_AT=2026-09-26T13:05:00+08:00
 COMMIT_SHA=6e0350e
 
 SUMMARY=
-Rebuilt the existing TASK-007/007B/007C/007D research/shadow surface on the real `origin/main` commit `b68c44d4fd3689e8e9909d53cbc137afa219122b`. Fixed later-bar EAP causal validation and replaced the hard-coded EAP 6H denominator with an observed-event-id plus mature-outcome calculation. No production behavior or historical/live evidence was changed.
+Rebuilt the existing TASK-007/007B/007C/007D research/shadow surface on the real `origin/main` commit `b68c44d4fd3689e8e9909d53cbc137afa219122b`, fixed later-bar EAP causal validation, replaced the hard-coded EAP 6H denominator, and completed the Phase 2 read-only VPS persistence audit. No production behavior or historical/live evidence was changed.
 
 CHANGED_FILES=
 Every file below is in the isolated ASTPS research branch. Imported baseline files are included to make the prior 007D implementation reviewable from real ancestry; only the files marked “modified” contain Phase 1 behavior changes.
@@ -48,6 +48,9 @@ TEST_RESULTS=
 - Fast-Detach Python regression: NOT AVAILABLE in this branch.
 - `git diff --check`: PASS.
 - `git status --short --untracked-files=all`: only the files listed above are present.
+- Phase 2 VPS persistence audit: PASS. Forward epoch `epoch-20260924T185000` has 177 snapshots, 185 transitions, 1064 outcomes, and 227 unified-view rows; manifest and copied-file SHA-256 values match and `source_preserved=true`.
+- Phase 2 historical SHA: `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
+- Phase 2 service PID readback: `1412125` before and after; no service operation was issued.
 
 DATA_INVARIANTS=
 FEATURE_LEAKAGE_COUNT=0
@@ -76,12 +79,13 @@ KNOWN_LIMITATIONS=
 - No Fast-Detach Python regression suite exists in the checked-out branch.
 - Repository-wide pre-existing tests and typecheck errors remain; they are outside this research-only change and must not be silently attributed to Phase 1.
 - This phase did not connect a production EAP observer or run VPS validation.
+- The branch push was attempted but the GitHub connection did not produce a response within the bounded wait; local commits remain intact and no force push was attempted.
 
 BLOCKERS=
-[]
+["GITHUB_PUSH_UNCONFIRMED_NETWORK_TIMEOUT"]
 
 APPROVAL_REQUIRED=
 Review Phase 1 ancestry, later-bar causal contract, dynamic EAP denominator, and the known baseline test/typecheck failures before treating this phase as accepted. Do not merge, deploy, restart, promote, or access `chunk_002`.
 
 RECOMMENDED_NEXT_TASK=
-After review approval, continue to PHASE 2: reverify the persistent Forward Epoch copy and its byte/SHA invariants, still in shadow/research scope.
+After the branch push is confirmed, continue to PHASE 3: connect only a real explicit EAP observer source; preserve `EAP_NOT_OBSERVED` for all historical events and do not backfill EAP.

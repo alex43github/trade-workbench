@@ -1,15 +1,26 @@
 # ASTPS FAST-DETACH — CODEX AUTONOMOUS STATUS
 
 TASK_ID=ASTPS_FAST_DETACH_PHASE1_007D_REPAIR
-PHASE=1/10
+PHASE=2/10
 STATUS=PASS_WITH_KNOWN_BASELINE_LIMITATIONS
 PHASE1_007D_REVIEW_BASELINE=PASS
 STARTED_AT=2026-09-26T12:00:00+08:00
-FINISHED_AT=2026-09-26T12:50:00+08:00
+FINISHED_AT=2026-09-26T13:05:00+08:00
 BASE_BRANCH=origin/main
 BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
 BRANCH=codex/astps-fast-detach-handoff-20260926
 IMPLEMENTATION_COMMIT_SHA=6e0350e
+PHASE2_PERSISTENCE_AUDIT=PASS
+PERSISTENT_FORWARD_EPOCH_READY=true
+PERSISTENT_COPY_SHA_MATCH=true
+SOURCE_TMP_PRESERVED=true
+FORWARD_EPOCH_ID=epoch-20260924T185000
+PERSISTENT_SNAPSHOT_ROWS=177
+PERSISTENT_TRANSITION_ROWS=185
+PERSISTENT_OUTCOME_ROWS=1064
+PERSISTENT_UNIFIED_VIEW_ROWS=227
+PRODUCTION_PID_BEFORE=1412125
+PRODUCTION_PID_AFTER=1412125
 
 ## Summary
 
@@ -49,8 +60,16 @@ BARK_CHANGED=false
 ORDER_PATH_CHANGED=false
 DEPLOYED=false
 
+## Phase 2 read-only VPS evidence
+
+- Persistent epoch file inventory contains the expected audit, manifest, snapshot, transition, outcome, and unified-view files under `/var/lib/trade-workbench/research/forward-shadow/epochs/epoch-20260924T185000/`.
+- `PERSISTENT_COPY_MANIFEST.json` reports matching source/destination SHA-256 values for the canonical seven copied ledger files, `source_preserved=true`, `event_count=177`, and `outcome_count=1064`.
+- Read-only `sha256sum` and row counts match the manifest: snapshot 177, transitions 185, outcomes 1064, unified view 227.
+- The immutable historical path was read once for SHA verification and returned `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
+- Production MainPID was read before/after the audit as `1412125` / `1412125`; no service operation was issued.
+
 The historical and live VPS ledgers were not opened or modified in this code-only phase. The SHA values above are the handoff immutable contract, not a newly read VPS file result.
 
 ## Approval gate
 
-Phase 1 is complete and auditable. No merge, deployment, restart, promotion, threshold/model/Bark/order change, or `chunk_002` access occurred. The branch remains eligible for review before continuing to Phase 2.
+Phases 1–2 are complete and auditable. No merge, deployment, restart, promotion, threshold/model/Bark/order change, or `chunk_002` access occurred. The branch remains eligible for review before continuing to Phase 3.
