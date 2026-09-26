@@ -556,12 +556,17 @@ export async function runTask007CShadowCollector(
           const bars = cache.get(signal.symbol, signal.timeframe);
           const latest = bars.find((bar) => bar.time === signal.detectedAt);
           if (!latest) throw new Error(`scanner signal has no decision bar: ${signal.id}`);
+          const edpObservation = bars
+            .filter((bar) => bar.closed && closeTimeMs(bar.time, signal.timeframe) <= now())
+            .at(-1) ?? latest;
+          const edpUtc = iso(closeTimeMs(edpObservation.time, signal.timeframe));
           const snapshotIdentityInfo = buildTask007CIdentity(
             signal,
             forwardEpochId,
             detectedAtUtc,
             "EAP_NOT_OBSERVED",
-            latest.close,
+            edpObservation.close,
+            edpUtc,
           );
           if (snapshotIdentityInfo.identity.event_id !== identityInfo.identity.event_id) {
             throw new Error(`EDP price capture changed event identity: ${signal.id}`);
@@ -585,7 +590,7 @@ export async function runTask007CShadowCollector(
           });
           await repository.appendSnapshot(snapshot);
           snapshotsByEventId.set(snapshot.identity.event_id!, snapshot);
-          context = { eventId: snapshot.identity.event_id!, identity: snapshot.identity, edpUtc: detectedAtUtc };
+          context = { eventId: snapshot.identity.event_id!, identity: snapshot.identity, edpUtc };
         }
         signalContexts.set(signal.id, context);
       }

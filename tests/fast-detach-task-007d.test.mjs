@@ -238,6 +238,21 @@ test("EDP excursion metrics use immutable EDP price and fail closed without it",
     }),
     /immutable EDP price/i,
   );
+  assert.throws(
+    () => calculateEapSeparatedMetrics({
+      snapshot: snapshot("event-1", {
+        first_detected_at_utc: "2026-09-24T10:00:00.000Z",
+        execution_context: { edp_price: 90 },
+      }),
+      decision: permissionDecision({
+        eap_time_utc: "2026-09-24T10:20:00.000Z",
+        decision_bar_close_utc: "2026-09-24T10:15:00.000Z",
+        causal_evidence: { timestamps_utc: ["2026-09-24T10:14:59.999Z"], state: "CONFIRMED" },
+      }),
+      bars: [],
+    }),
+    /immutable EDP timestamp/i,
+  );
 });
 
 test("sample quality exposes discovery and EAP denominators separately", () => {

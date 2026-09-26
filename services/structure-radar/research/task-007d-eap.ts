@@ -40,11 +40,12 @@ type SnapshotLike = Pick<LiveEventSnapshot, "identity" | "anchor_price"> | JsonO
 
 /**
  * Frozen EDP timestamp contract for every EDP→EAP metric:
- * use immutable snapshot.execution_context.edp_utc when present, otherwise
- * immutable snapshot.first_detected_at_utc. The EAP decision bar is never a
- * substitute for the EDP timestamp.
+ * use immutable snapshot.execution_context.edp_utc. The
+ * snapshot.first_detected_at_utc fallback is retained only for legacy
+ * discovery-only shadow summaries; the EDP-price metrics require the explicit
+ * timestamp/price pair. The EAP decision bar is never a substitute for EDP.
  */
-export const EDP_TIMESTAMP_CONTRACT = "immutable snapshot.execution_context.edp_utc ?? snapshot.first_detected_at_utc" as const;
+export const EDP_TIMESTAMP_CONTRACT = "immutable snapshot.execution_context.edp_utc (legacy discovery-only fallback: snapshot.first_detected_at_utc)" as const;
 /**
  * The price baseline must be captured at the same immutable EDP observation as
  * the timestamp. `anchor_price` is a decision-bar field and is never an
@@ -111,6 +112,10 @@ export function immutableEdpPrice(snapshot: SnapshotLike) {
   const candidate = snapshot && typeof snapshot === "object" ? snapshot as JsonObject : {};
   const execution = candidate.execution_context;
   const context = execution && typeof execution === "object" ? execution as JsonObject : {};
+  if (typeof context.edp_utc !== "string" || !context.edp_utc.trim()) {
+    throw new Error(`immutable EDP timestamp is missing for the EDP price (${EDP_TIMESTAMP_CONTRACT})`);
+  }
+  parseUtc(context.edp_utc, "immutable_edp_timestamp");
   const edpPrice = context.edp_price;
   if (typeof edpPrice !== "number" || !Number.isFinite(edpPrice) || edpPrice <= 0) {
     throw new Error(`immutable EDP price is missing or invalid (${EDP_PRICE_CONTRACT})`);
