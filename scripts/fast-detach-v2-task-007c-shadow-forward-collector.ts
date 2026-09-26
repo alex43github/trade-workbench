@@ -614,9 +614,9 @@ export async function runTask007CShadowCollector(
       await assertHistoricalStable();
       const currentSnapshots = await repository.readSnapshots();
       const currentTransitions = await repository.readTransitions();
-      const eapObservedEventIds = new Set(currentTransitions
-        .filter((transition) => transition.transition_type === "EAP_GRANTED")
-        .map((transition) => transition.event_id));
+      const eapGrantedTransitions = currentTransitions
+        .filter((transition) => transition.transition_type === "EAP_GRANTED") as unknown as JsonObject[];
+      const eapObservedEventIds = new Set(eapGrantedTransitions.map((transition) => String(transition.event_id ?? "")));
       const currentBeforeOutcomes = await repository.readOutcomes();
       const ledgerAudit = auditLiveLedger(currentSnapshots, currentTransitions as unknown as JsonObject[], currentBeforeOutcomes as unknown as JsonObject[]);
       if (ledgerAudit.duplicateEventIds || ledgerAudit.duplicateTransitionKeys || ledgerAudit.duplicateOutcomeKeys) {
@@ -643,6 +643,7 @@ export async function runTask007CShadowCollector(
         snapshots: currentSnapshots as unknown as JsonObject[],
         outcomes: currentOutcomes as unknown as JsonObject[],
         eapObservedEventIds,
+        eapGrantedTransitions,
       }) as unknown as JsonObject;
       const summaryWrite = summary ? await writeCohortSummary(summaryPath, summary) : null;
       return { ...outcomeResult, summary, summary_write: summaryWrite };
@@ -780,6 +781,8 @@ export async function runTask007CShadowCollector(
       snapshots: snapshotsAfter as unknown as JsonObject[],
       outcomes: outcomesAfter as unknown as JsonObject[],
       eapObservedEventIds: eapGrantedEventIds,
+      eapGrantedTransitions: transitionsAfter
+        .filter((transition) => transition.transition_type === "EAP_GRANTED") as unknown as JsonObject[],
     }) as unknown as JsonObject;
   }
   const result = {

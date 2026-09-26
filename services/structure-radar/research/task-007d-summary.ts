@@ -23,6 +23,16 @@ function symbol(snapshot: JsonObject) { return String(identity(snapshot).symbol 
 function timeframe(snapshot: JsonObject) { return String(identity(snapshot).timeframe ?? snapshot.timeframe ?? "UNKNOWN"); }
 function setup(snapshot: JsonObject) { return String(identity(snapshot).setup ?? snapshot.setup ?? "UNKNOWN"); }
 function discoveryChannel(snapshot: JsonObject) { return String(snapshot.discovery_channel ?? "UNKNOWN"); }
+const UNAVAILABLE_FROZEN_FIELD = "__UNAVAILABLE_FROZEN_FIELD__";
+
+function frozenDimension(snapshot: JsonObject, dimension: "family" | "mechanism") {
+  const direct = snapshot[dimension];
+  const identityValue = identity(snapshot)[dimension];
+  for (const candidate of [direct, identityValue]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+  }
+  return UNAVAILABLE_FROZEN_FIELD;
+}
 
 function groupCount(rows: readonly JsonObject[], valueOf: (row: JsonObject) => string) {
   const counts: Record<string, number> = {};
@@ -63,16 +73,19 @@ function horizonSummary(rows: readonly JsonObject[]) {
 }
 
 function stratify(snapshots: readonly JsonObject[], outcomesById: Map<string, JsonObject[]>, keyOf: (snapshot: JsonObject) => string) {
-  const groups = new Map<string, JsonObject[]>();
+  const groups = new Map<string, { eventIds: Set<string>; rows: JsonObject[] }>();
   for (const snapshot of snapshots) {
     const key = keyOf(snapshot);
-    const rows = groups.get(key) ?? [];
-    rows.push(...(outcomesById.get(eventId(snapshot)) ?? []));
-    groups.set(key, rows);
+    const group = groups.get(key) ?? { eventIds: new Set<string>(), rows: [] };
+    const id = eventId(snapshot);
+    if (id) group.eventIds.add(id);
+    group.rows.push(...(outcomesById.get(id) ?? []));
+    groups.set(key, group);
   }
-  return Object.fromEntries([...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, rows]) => [key, {
-    N: rows.length,
-    horizons: Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [horizon, horizonSummary(rows.filter((row) => row.horizon === horizon))])),
+  return Object.fromEntries([...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, group]) => [key, {
+    event_n: group.eventIds.size,
+    N: group.rows.length,
+    horizons: Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [horizon, horizonSummary(group.rows.filter((row) => row.horizon === horizon))])),
   }]));
 }
 
@@ -121,6 +134,12 @@ export function buildEdpOnlyForwardSummary({
     stratified_by_timeframe: stratify(live, outcomesById, timeframe),
     stratified_by_setup: stratify(live, outcomesById, setup),
     stratified_by_discovery_channel: stratify(live, outcomesById, discoveryChannel),
+    frozen_stratification_field_status: {
+      family: live.some((snapshot) => frozenDimension(snapshot, "family") !== UNAVAILABLE_FROZEN_FIELD) ? "AVAILABLE" : "UNAVAILABLE_FROZEN_FIELD",
+      mechanism: live.some((snapshot) => frozenDimension(snapshot, "mechanism") !== UNAVAILABLE_FROZEN_FIELD) ? "AVAILABLE" : "UNAVAILABLE_FROZEN_FIELD",
+    },
+    stratified_by_family: stratify(live, outcomesById, (snapshot) => frozenDimension(snapshot, "family")),
+    stratified_by_mechanism: stratify(live, outcomesById, (snapshot) => frozenDimension(snapshot, "mechanism")),
     sample_quality: sampleQuality,
     portfolio_interpretation: "DIAGNOSTIC_OVERLAPPING_EVENT_PF_ONLY",
     eap_mature_6h_n: eapMatureSixHourRows.length,

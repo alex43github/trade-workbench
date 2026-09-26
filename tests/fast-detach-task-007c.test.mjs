@@ -60,6 +60,7 @@ test("buildCohortSummary is deterministic, LOW_SAMPLE, and excludes non-mature h
       outcome("e3", "6h", { TTP_5: null, TTP_10: null, MFE_pct: 2, MAE_pct: -4, time_to_positive_min: null }),
       outcome("e1", "24h", { TTP_5: 1, MFE_pct: 99, MAE_pct: -99 }),
     ],
+    eapObservedEventIds: new Set(["e1"]),
   });
 
   assert.equal(summary.sample_quality, "LOW_SAMPLE");
@@ -80,6 +81,18 @@ test("buildCohortSummary is deterministic, LOW_SAMPLE, and excludes non-mature h
   assert.equal(summary.summary_at_utc, "2026-09-25T01:00:00.000Z");
 });
 
+test("buildCohortSummary ignores legacy snapshot EAP fields without an EAP_GRANTED ledger id", () => {
+  const summary = buildCohortSummary({
+    summary_at_utc: "2026-09-25T01:00:00.000Z",
+    started_at_utc: "2026-09-24T19:00:00.000Z",
+    snapshots: [snapshot("legacy-eap", "2026-09-24T19:01:00.000Z", { edp_utc: "2026-09-24T19:01:00.000Z", eap_utc: "2026-09-24T19:06:00.000Z" })],
+    outcomes: [outcome("legacy-eap", "6h", { MFE_pct: 4, MAE_pct: -1 })],
+  });
+  assert.equal(summary.live_events_with_eap, 0);
+  assert.equal(summary.eap_mature_6h_n, 0);
+  assert.equal(summary.median_edp_to_eap_min, null);
+});
+
 test("buildCohortSummary derives EAP maturity from immutable observed transition ids", () => {
   const summary = buildCohortSummary({
     summary_at_utc: "2026-09-25T01:00:00.000Z",
@@ -93,12 +106,18 @@ test("buildCohortSummary derives EAP maturity from immutable observed transition
       outcome("discovery-only-event", "6h", { MFE_pct: 2, MAE_pct: -2 }),
     ],
     eapObservedEventIds: new Set(["eap-event"]),
+    eapGrantedTransitions: [{
+      event_id: "eap-event",
+      transition_type: "EAP_GRANTED",
+      transition_time_utc: "2026-09-24T19:06:00.000Z",
+    }],
   });
 
   assert.equal(summary.live_events_with_eap, 1);
   assert.equal(summary.discovery_mature_6h_n, 2);
   assert.equal(summary.eap_mature_6h_n, 1);
   assert.equal(summary.eap_sample_quality_6h, "LOW_SAMPLE");
+  assert.equal(summary.median_edp_to_eap_min, 5);
 });
 
 test("approved shadow paths reject production, traversal, and chunk002 targets", () => {

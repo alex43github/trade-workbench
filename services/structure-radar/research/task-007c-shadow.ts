@@ -3,6 +3,7 @@ import { lstat, realpath } from "node:fs/promises";
 
 import { SUPPORTED_OUTCOME_HORIZONS } from "./task-007b-outcomes.ts";
 import { buildSampleQuality } from "./task-007d-summary.ts";
+import { immutableEdpTimestamp } from "./task-007d-eap.ts";
 
 type JsonObject = Record<string, unknown>;
 
@@ -27,30 +28,9 @@ function uniqueInOrder(values: readonly string[]) {
   return [...new Set(values)];
 }
 
-function executionContext(snapshot: JsonObject) {
-  const nested = snapshot.execution_context;
-  return nested && typeof nested === "object" ? nested as JsonObject : {};
-}
-
 function eventId(snapshot: JsonObject) {
   const identity = snapshot.identity;
   return identity && typeof identity === "object" ? String((identity as JsonObject).event_id ?? "") : "";
-}
-
-function isEap(snapshot: JsonObject) {
-  const context = executionContext(snapshot);
-  return typeof context.eap_utc === "string" || typeof context.eap_time_utc === "string" ||
-    typeof snapshot.eap_time_utc === "string";
-}
-
-function edpUtc(snapshot: JsonObject) {
-  const context = executionContext(snapshot);
-  return context.edp_utc ?? snapshot.first_detected_at_utc;
-}
-
-function eapUtc(snapshot: JsonObject) {
-  const context = executionContext(snapshot);
-  return context.eap_utc ?? context.eap_time_utc ?? snapshot.eap_time_utc;
 }
 
 export function cohortEventIds(snapshots: readonly JsonObject[], startedAtUtc: string) {
@@ -132,17 +112,25 @@ export function buildCohortSummary({
   snapshots,
   outcomes,
   eapObservedEventIds = [],
+  eapGrantedTransitions = [],
 }: {
   summary_at_utc: string;
   started_at_utc: string;
   snapshots: readonly JsonObject[];
   outcomes: readonly JsonObject[];
   eapObservedEventIds?: Iterable<string>;
+  eapGrantedTransitions?: readonly JsonObject[];
 }) {
   parseUtc(summary_at_utc, "summary_at_utc");
   const { prospectiveEventIds } = cohortEventIds(snapshots, started_at_utc);
   const prospectiveIds = new Set(prospectiveEventIds);
-  const observedEapIds = new Set(eapObservedEventIds);
+  const grantedTransitions = new Map<string, JsonObject>();
+  for (const transition of eapGrantedTransitions) {
+    if (transition.transition_type !== "EAP_GRANTED") continue;
+    const id = String(transition.event_id ?? "");
+    if (id && !grantedTransitions.has(id)) grantedTransitions.set(id, transition);
+  }
+  const observedEapIds = new Set([...eapObservedEventIds, ...grantedTransitions.keys()]);
   const snapshotById = new Map(snapshots.map((snapshot) => [eventId(snapshot), snapshot]));
   const mature = matureOutcomeMap(outcomes, prospectiveIds);
   const matureOutcomeCounts = Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [
@@ -160,22 +148,22 @@ export function buildCohortSummary({
   };
   const eapDelayMinutes = prospectiveEventIds.map((id) => {
     const snapshot = snapshotById.get(id);
-    if (!snapshot || !isEap(snapshot)) return null;
-    const start = parseUtc(edpUtc(snapshot), `${id}.EDP`);
-    const end = parseUtc(eapUtc(snapshot), `${id}.EAP`);
-    return Math.max(0, Math.floor((end - start) / 60_000));
+    const transition = grantedTransitions.get(id);
+    if (!snapshot || !observedEapIds.has(id) || !transition) return null;
+    const start = parseUtc(immutableEdpTimestamp(snapshot), `${id}.EDP`);
+    const end = parseUtc(transition.transition_time_utc, `${id}.EAP_GRANTED.transition_time_utc`);
+    if (end < start) throw new Error(`${id}.EAP_GRANTED precedes immutable EDP timestamp`);
+    return Math.floor((end - start) / 60_000);
   }).filter((value): value is number => value !== null);
   const maeValues = metricValues("MAE_pct");
   const occupancyValues = metricValues("capital_occupancy_pct");
   const efficiencyValues = metricValues("capital_efficiency");
   const eapCount = prospectiveEventIds.filter((id) => {
-    const snapshot = snapshotById.get(id);
-    return snapshot ? observedEapIds.has(id) || isEap(snapshot) : false;
+    return observedEapIds.has(id);
   }).length;
   const eapMatureSixHourCount = sixHour.filter((outcome) => {
     const id = String(outcome.event_id ?? "");
-    const snapshot = snapshotById.get(id);
-    return snapshot ? observedEapIds.has(id) || isEap(snapshot) : false;
+    return observedEapIds.has(id);
   }).length;
   const sampleQuality = buildSampleQuality({ mature6hN: sixHour.length, eapMature6hN: eapMatureSixHourCount });
 
@@ -191,6 +179,7 @@ export function buildCohortSummary({
     new_event_count: prospectiveEventIds.length,
     total_live_events: uniqueInOrder(snapshots.map(eventId).filter(Boolean)).length,
     live_events_with_eap: eapCount,
+    eap_denominator_source: "IMMUTABLE_EAP_GRANTED_LEDGER_EVENT_IDS",
     mature_outcome_counts: matureOutcomeCounts,
     median_edp_to_eap_min: median(eapDelayMinutes),
     plus5_hit_rate_6h: hitRate("TTP_5"),

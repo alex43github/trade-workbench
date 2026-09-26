@@ -64,6 +64,13 @@ test("classifies absent immutable permission evidence as EAP_NOT_OBSERVED", () =
   assert.equal(classifyEapObservation({ permissionSourceConnected: true, decisionLogged: false }), "EAP_NOT_OBSERVED");
   assert.equal(classifyEapObservation({ permissionSourceConnected: true, decisionLogged: true, decision: { status: "DENIED" } }), "EAP_CONFIRMED_ABSENT");
   assert.equal(classifyEapObservation({ permissionSourceConnected: true, decisionLogged: true, decision: { status: "GRANTED" } }), "EAP_OBSERVED");
+  for (const status of ["UNKNOWN", "PENDING", "ERROR", undefined]) {
+    assert.equal(
+      classifyEapObservation({ permissionSourceConnected: true, decisionLogged: true, decision: status === undefined ? {} : { status } }),
+      "EAP_NOT_OBSERVED",
+      `status ${String(status)} must fail closed`,
+    );
+  }
   assert.equal(classifyEapObservation({ replay: true, permissionSourceConnected: true, decisionLogged: true, decision: { status: "GRANTED" } }), "REPLAY_EAP");
 });
 
@@ -140,11 +147,27 @@ test("EDP and EAP metrics keep separate prices and timestamps", () => {
       { open_time_utc: "2026-09-24T10:25:00.000Z", close: 103, high: 104, low: 100 },
     ],
   });
-  assert.equal(metrics.EDP_TO_EAP_MIN, 5);
+  assert.equal(metrics.EDP_TO_EAP_MIN, 4);
   assert.ok(Math.abs(metrics.PRICE_EDP_TO_EAP_PCT - 1) < 1e-12);
   assert.ok(Math.abs(metrics.MFE_FROM_EDP - 4) < 1e-12);
   assert.ok(Math.abs(metrics.MFE_FROM_EAP - 2.97029702970297) < 1e-12);
   assert.ok(Math.abs(metrics.MAE_FROM_EAP - -0.9900990099009901) < 1e-12);
+});
+
+test("EDP_TO_EAP_MIN uses immutable EDP timestamp when EAP decision is on a later bar", () => {
+  const metrics = calculateEapSeparatedMetrics({
+    snapshot: snapshot("event-1", {
+      first_detected_at_utc: "2026-09-24T10:10:00.000Z",
+      execution_context: { edp_utc: "2026-09-24T10:10:00.000Z" },
+    }),
+    decision: permissionDecision({
+      eap_time_utc: "2026-09-24T10:35:00.000Z",
+      decision_bar_close_utc: "2026-09-24T10:30:00.000Z",
+      causal_evidence: { timestamps_utc: ["2026-09-24T10:29:59.999Z"], state: "CONFIRMED" },
+    }),
+    bars: [{ open_time_utc: "2026-09-24T10:35:00.000Z", close: 101, high: 102, low: 100 }],
+  });
+  assert.equal(metrics.EDP_TO_EAP_MIN, 25);
 });
 
 test("sample quality exposes discovery and EAP denominators separately", () => {
@@ -221,6 +244,19 @@ test("EDP-only summary excludes observed EAP without a mature 6H outcome", () =>
   assert.equal(result.mature_outcome_counts["6h"], 1);
   assert.equal(result.eap_mature_6h_n, 0);
   assert.equal(result.sample_quality.EAP_SAMPLE_QUALITY_6H, "LOW_SAMPLE");
+});
+
+test("EDP-only LIVE_FORWARD EAP denominator ignores legacy snapshot EAP fields", () => {
+  const result = buildEdpOnlyForwardSummary({
+    snapshots: [snapshot("legacy-eap", { execution_context: { eap_utc: "2026-09-24T10:20:00.000Z" } })],
+    outcomes: [{
+      event_id: "legacy-eap",
+      horizon: "6h",
+      metrics: { return_pct: 1, MFE_pct: 2, MAE_pct: -1, TTP_5: 30 },
+    }],
+  });
+  assert.equal(result.eap_mature_6h_n, 0);
+  assert.equal(result.eap_metrics, "NOT_CALCULATED_FOR_EAP_NOT_OBSERVED");
 });
 
 test("production observability gap JSON is deterministic and preserves repair boundaries", () => {

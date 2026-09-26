@@ -38,6 +38,14 @@ type EapDecisionInput = Omit<EapDecision, "permission_payload_sha256" | "eap_sou
 
 type SnapshotLike = Pick<LiveEventSnapshot, "identity" | "anchor_price"> | JsonObject;
 
+/**
+ * Frozen EDP timestamp contract for every EDP→EAP metric:
+ * use immutable snapshot.execution_context.edp_utc when present, otherwise
+ * immutable snapshot.first_detected_at_utc. The EAP decision bar is never a
+ * substitute for the EDP timestamp.
+ */
+export const EDP_TIMESTAMP_CONTRACT = "immutable snapshot.execution_context.edp_utc ?? snapshot.first_detected_at_utc" as const;
+
 function parseUtc(value: unknown, label: string) {
   const timestamp = typeof value === "string" ? Date.parse(value) : Number.NaN;
   if (!Number.isFinite(timestamp)) throw new Error(`${label} must be an ISO timestamp`);
@@ -80,6 +88,17 @@ function snapshotEventId(snapshot: SnapshotLike) {
 function snapshotDecisionBar(snapshot: SnapshotLike) {
   const identity = snapshot.identity;
   return identity && typeof identity === "object" ? (identity as JsonObject).decision_bar_close_utc : undefined;
+}
+
+export function immutableEdpTimestamp(snapshot: SnapshotLike) {
+  const candidate = snapshot && typeof snapshot === "object" ? snapshot as JsonObject : {};
+  const execution = candidate.execution_context;
+  const context = execution && typeof execution === "object" ? execution as JsonObject : {};
+  const edpUtc = context.edp_utc ?? candidate.first_detected_at_utc;
+  if (typeof edpUtc !== "string" || !edpUtc.trim()) {
+    throw new Error(`immutable EDP timestamp is missing (${EDP_TIMESTAMP_CONTRACT})`);
+  }
+  return edpUtc;
 }
 
 export function validateEapDecision(decision: EapDecision, snapshot: SnapshotLike) {
@@ -126,7 +145,9 @@ export function classifyEapObservation(input: {
 }): EapStatus {
   if (input.replay) return "REPLAY_EAP";
   if (!input.permissionSourceConnected || !input.decisionLogged) return "EAP_NOT_OBSERVED";
-  return input.decision?.status === "GRANTED" ? "EAP_OBSERVED" : "EAP_CONFIRMED_ABSENT";
+  if (input.decision?.status === "GRANTED") return "EAP_OBSERVED";
+  if (input.decision?.status === "DENIED") return "EAP_CONFIRMED_ABSENT";
+  return "EAP_NOT_OBSERVED";
 }
 
 type TransitionRepository = {
@@ -167,12 +188,13 @@ export function calculateEapSeparatedMetrics({
   validateEapDecision(decision, snapshot);
   const edpPrice = Number(snapshot.anchor_price);
   const eapPrice = decision.eap_price;
+  const edpMs = parseUtc(immutableEdpTimestamp(snapshot), "immutable_edp_timestamp");
   const eapMs = parseUtc(decision.eap_time_utc, "eap_time_utc");
   const eligible = bars.filter((bar) => parseUtc(bar.open_time_utc, "bar.open_time_utc") >= eapMs);
   const highs = eligible.map((bar) => bar.high);
   const lows = eligible.map((bar) => bar.low);
   return {
-    EDP_TO_EAP_MIN: Math.floor((eapMs - parseUtc(decision.decision_bar_close_utc, "decision_bar_close_utc")) / 60_000),
+    EDP_TO_EAP_MIN: Math.floor((eapMs - edpMs) / 60_000),
     PRICE_EDP_TO_EAP_PCT: ((eapPrice / edpPrice) - 1) * 100,
     MFE_FROM_EDP: highs.length ? ((Math.max(...highs) / edpPrice) - 1) * 100 : null,
     MAE_FROM_EDP: lows.length ? ((Math.min(...lows) / edpPrice) - 1) * 100 : null,
