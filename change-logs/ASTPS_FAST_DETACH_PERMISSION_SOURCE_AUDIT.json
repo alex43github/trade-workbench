@@ -1,0 +1,151 @@
+{
+  "audit_version": "astps-fast-detach-permission-source-audit-2",
+  "task_id": "ASTPS_FAST_DETACH_PR15_THIRD_FINAL_AUDIT_REPAIR",
+  "audited_at": "2026-09-26T16:24:20+08:00",
+  "timestamp_source": "git-commit-derived:b624779b82c092019bdc87509a9fc1a919e8f57e",
+  "scope": {
+    "repository": "alex43github/trade-workbench",
+    "repository_search": "entire checked-out repository excluding .git, node_modules, dist, and generated review patch",
+    "drive_model_registry_parent_id": "1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM",
+    "drive_model_current_id": "1pC40sbP9oj82At8G6aBjZcGzY2BfTnaa",
+    "drive_workbench_spec_id": "1m6IbzlvUFrxTTW9vMP5wx4vW4nP6tqoY",
+    "drive_candidate_model_id": "1LoHtmTqhDL6jY4D6XzH5jU-SCcZOyQu1",
+    "drive_data_registry_id": "1KOxMEcovLj9DvNibDDxf1j_icTHHDl46",
+    "search_terms": [
+      "execution permission",
+      "execution_permission",
+      "permission ledger",
+      "EAP_GRANTED",
+      "eap_status",
+      "permission_state",
+      "execute_now",
+      "short_allowed",
+      "tradingPermission",
+      "Final Action"
+    ]
+  },
+  "PRODUCTION_EXECUTION_PERMISSION_SEMANTICS_FOUND": true,
+  "NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER": true,
+  "REAL_LIVE_EAP_SOURCE_FOUND": false,
+  "historical_live_eap_state": {
+    "event_count": 177,
+    "status": "EAP_NOT_OBSERVED",
+    "backfill_performed": false,
+    "immutable_eap_granted_event_ids": 0
+  },
+  "final_action_semantics": {
+    "canonical_vocabulary": [
+      "BUY RESET",
+      "RE-IGNITION LONG",
+      "CHASE ALLOWED",
+      "HOLD ONLY",
+      "NO CHASE",
+      "ABSOLUTELY_NO_SHORT",
+      "SHORT_WARNING",
+      "SHORT_PERMISSION_PENDING",
+      "SHORT_ALLOWED"
+    ],
+    "model_current": {
+      "file_id": "1pC40sbP9oj82At8G6aBjZcGzY2BfTnaa",
+      "path": "03_MODEL_REGISTRY/MODEL_CURRENT.md",
+      "modified_time": "2026-09-12T16:17:09.988Z",
+      "current_revision_id": "0B-0oAJIjSHwhcktKbmV2SSt4SWloNmtpSk9qR284OFFwcXNvPQ",
+      "finding": "Production baseline explicitly defines Execution Outputs and separates Discovery from Execution."
+    },
+    "workbench_spec": {
+      "file_id": "1m6IbzlvUFrxTTW9vMP5wx4vW4nP6tqoY",
+      "path": "WORKBENCH_SPEC.md",
+      "modified_time": "2026-09-12T16:50:59.446Z",
+      "current_revision_id": "0B-0oAJIjSHwhb2N3anF5RWlwYzhrUXFLazZZL3kzRzZJQXRBPQ",
+      "finding": "Workbench interface requires Final Action, but interface vocabulary is not itself an immutable permission decision stream."
+    }
+  },
+  "runtime_lineage_audit": {
+    "production_final_action_generator_found": false,
+    "production_final_action_runtime_path_checked": [
+      "services/structure-radar/main.ts:65-81",
+      "services/structure-radar/orchestrator.ts:80-116",
+      "lib/structure-radar/expert-consensus.ts:74-91",
+      "lib/structure-radar/state-machine.ts:121-142",
+      "services/structure-radar/radar-repository.ts",
+      "services/execution-forward/execution-forward-v1.ts:80-155",
+      "services/execution-forward/execution-forward-persistence.ts",
+      "services/execution-forward/execution-forward-watcher.ts",
+      "lib/radar/sticky-lifecycle.ts:123-131"
+    ],
+    "consultation_execution_plan_found": true,
+    "consultation_execution_plan_is_permission": false,
+    "runtime_permission_status_persistence_found": false,
+    "immutable_permission_ledger_found": false,
+    "event_id_join_found": false,
+    "closed_bar_decision_time_contract_found": false,
+    "source_decision_id_version_payload_hash_contract_found": false,
+    "exact_gap": "Canonical Final Action vocabulary is documented, but no runtime implementation was found that emits a GRANTED/DENIED/UNKNOWN decision with immutable closed-bar timestamp, stable source decision identity, payload hash, and deterministic Task-007 event_id join."
+  },
+  "repository_evidence": [
+    {
+      "path": "services/structure-radar/main.ts:65-81",
+      "finding": "RadarScanner.onSignal invokes consultation for closed-bar signals; it does not append a permission decision."
+    },
+    {
+      "path": "services/structure-radar/orchestrator.ts:80-116",
+      "finding": "Orchestrator persists consultation/enriched signal and sends notification; executionPlan is a consultation output, not immutable EAP."
+    },
+    {
+      "path": "lib/structure-radar/expert-consensus.ts:74-91",
+      "finding": "Consensus may select an executionPlan under alert policy, but no GRANTED/DENIED status or permission ledger key is emitted."
+    },
+    {
+      "path": "services/execution-forward/execution-forward-v1.ts:80-155",
+      "finding": "EDP, recheck, and paper-plan records explicitly carry tradingPermission=false and scorer unavailable; they are CANDIDATE_EAP/SHADOW_EAP records."
+    },
+    {
+      "path": "services/execution-forward/execution-forward-persistence.ts",
+      "finding": "Append-only forward persistence rejects production permission enablement and does not provide a Production permission ledger."
+    },
+    {
+      "path": "services/structure-radar/research/task-007d-eap.ts",
+      "finding": "Task-007D accepts an externally supplied immutable decision and fail-closes absent/malformed input; it is not connected to Production Final Action."
+    },
+    {
+      "path": "lib/radar/sticky-lifecycle.ts:123-131",
+      "finding": "EAP-like evaluator accepts optional external input and has no Task-007 event_id join; it is not a LIVE_FORWARD source."
+    }
+  ],
+  "drive_evidence": [
+    {
+      "file_id": "1pC40sbP9oj82At8G6aBjZcGzY2BfTnaa",
+      "title": "MODEL_CURRENT.md",
+      "modified_time": "2026-09-12T16:17:09.988Z",
+      "current_revision_id": "0B-0oAJIjSHwhcktKbmV2SSt4SWloNmtpSk9qR284OFFwcXNvPQ",
+      "finding": "Canonical Production baseline defines Final Action outputs; it does not expose an immutable runtime permission ledger."
+    },
+    {
+      "file_id": "1m6IbzlvUFrxTTW9vMP5wx4vW4nP6tqoY",
+      "title": "WORKBENCH_SPEC.md",
+      "modified_time": "2026-09-12T16:50:59.446Z",
+      "current_revision_id": "0B-0oAJIjSHwhb2N3anF5RWlwYzhrUXFLazZZL3kzRzZJQXRBPQ",
+      "finding": "Canonical Workbench interface exposes Final Action vocabulary but not a permission decision stream."
+    },
+    {
+      "file_id": "1LoHtmTqhDL6jY4D6XzH5jU-SCcZOyQu1",
+      "title": "CURRENT_CANDIDATE_MODEL.md",
+      "modified_time": "2026-09-16T10:28:33.066Z",
+      "current_revision_id": "0B-0oAJIjSHwhVHN3ZzVBWEh3cFVucEVJZk1vdU9kOHZweWNRPQ",
+      "finding": "Candidate execution-permission architecture remains research/candidate and requires prospective validation; it is not a Production ledger."
+    },
+    {
+      "file_id": "1LccJTNfOca5VBaeEIs0mWhyzHz6Wad9A",
+      "title": "workbench_stage6_implementation_spec.md",
+      "finding": "Stage6 observer is explicitly research-only, append-only, and paper-only with tradingPermission=false."
+    }
+  ],
+  "candidate_shadow_boundary": {
+    "candidate_or_shadow_permission_logic_present": true,
+    "candidate_or_shadow_names": ["CANDIDATE_EAP", "SHADOW_EAP"],
+    "counted_as_live_eap": false,
+    "synthetic_live_eap_events_created": 0,
+    "persistent_shadow_collector_started": false
+  },
+  "conclusion": "Production Final Action semantics are documented, but no auditable runtime lineage to an immutable permission ledger exists in the repository or canonical model artifacts. Historical LIVE_FORWARD remains EAP_NOT_OBSERVED; no live EAP denominator, collector, or promotion evidence is claimed."
+}

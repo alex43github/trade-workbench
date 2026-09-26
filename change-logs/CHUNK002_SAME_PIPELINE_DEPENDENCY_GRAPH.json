@@ -1,0 +1,16 @@
+{
+  "graph_version": "chunk002-same-pipeline-2",
+  "status": "FROZEN_DEPENDENCIES_PINNED_OOS_NOT_RUN",
+  "task006_orchestrator": {"path": "/tmp/fast-detach-v2-task006/task_006_oos.py", "sha256": "4774eb2d52526206b77de8571c58598dd29cfc466f335d57bb6be8ec0cda6acb"},
+  "scripts": [
+    {"path": "/tmp/fast-detach-v2-task006/generate_fast_detach_v2.py", "role": "Task-001 generator", "sha256": "cb61bd34bf7f5e184ad013b0c208abfc09f9db4918ee640081479f597bd1461a"},
+    {"path": "/tmp/fast-detach-v2-task006/task_002_5m.py", "role": "Task-002B path/barrier and cache parser", "sha256": "d4e8134d93ad386db0e6ef8ef332d07cdbe71fbcffb4beadbf5cce20d6ee402c"},
+    {"path": "/tmp/fast-detach-v2-task006/task_003_pe.py", "role": "dynamically loaded Task-003 PE evidence", "sha256": "008637270224a764512de0f2840ae0b2f3a1f03f3dc40dd94247fe02c76aaceb"},
+    {"path": "/tmp/fast-detach-v2-task006/task_004_unified.py", "role": "dynamically loaded Task-004 unified join", "sha256": "47a17b79de957506a3a6b8b4119075e419558193fed5aa4c4d8e32fbf322cc6e"},
+    {"path": "/tmp/fast-detach-v2-task006/task_005_discovery.py", "role": "frozen sibling dependency present in Task-006 workspace", "sha256": "7840b65530f285e4f617708079eeb452669dd5ec52b27aa61187128f804ba918"}
+  ],
+  "schemas": {"unified_event_schema_version": "fast-detach-v2-unified-event-2", "expected_schema_sha256": "d74ddb1722d1f87c5b290f7c2e761e0e4d095183a811cbf16bd6c350ac3e9327", "task001_schema_path": "/var/lib/trade-workbench/research/fast-detach/v2/schema.json", "task001_schema_sha256": "1d27e979c2fd39b62b90975ba62ea91191338072d62248419f183a25af516627", "task002_schema_path": "/var/lib/trade-workbench/research/fast-detach/v2/schema_task_002.json", "task002_schema_sha256": "a9ab3b7fa3d7930b9af243f289aacd669c79d2ea10a18cfb6506d6262c0dd17d"},
+  "input_contracts": {"v1_root": "/var/lib/trade-workbench/research/pe/backtest-output/v1", "chunk002_source": "chunks/chunk_002_2026-04-12_2026-04-16.json", "cache15": "/var/lib/trade-workbench/market-cache/15m-history-v1/symbols/<SYMBOL>.jsonl.gz", "cache5": "<isolated_materialized_cache>/symbols/<SYMBOL>.csv.zst", "cache5_completion_required": "TASK002B_CACHE_COMPLETE.json"},
+  "frozen_orchestration_command": "python3 /tmp/fast-detach-v2-task006/task_006_oos.py --v1-root /var/lib/trade-workbench/research/pe/backtest-output/v1 --v2-root /tmp/fast-detach-v2-chunk002-materialization/v2 --layers-root /tmp/fast-detach-v2-chunk002-materialization/layers --study-root /tmp/fast-detach-v2-chunk002-materialization/study --cache15-root /var/lib/trade-workbench/market-cache/15m-history-v1 --cache5-root /tmp/fast-detach-v2-chunk002-materialization/cache5",
+  "oos_guard": {"chunk002_hypotheses_rerun": false, "isolated_output_root": "/tmp/fast-detach-v2-chunk002-materialization", "production_write": false}
+}
