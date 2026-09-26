@@ -4,7 +4,7 @@ TASK_ID=ASTPS_FAST_DETACH_PHASE1_007D_REPAIR
 STATUS=PASS_WITH_KNOWN_BASELINE_LIMITATIONS
 STARTED_AT=2026-09-26T12:00:00+08:00
 FINISHED_AT=2026-09-26T12:50:00+08:00
-COMMIT_SHA=IMPLEMENTATION_COMMIT_PENDING
+COMMIT_SHA=6e0350e
 
 SUMMARY=
 Rebuilt the existing TASK-007/007B/007C/007D research/shadow surface on the real `origin/main` commit `b68c44d4fd3689e8e9909d53cbc137afa219122b`. Fixed later-bar EAP causal validation and replaced the hard-coded EAP 6H denominator with an observed-event-id plus mature-outcome calculation. No production behavior or historical/live evidence was changed.
