@@ -12,6 +12,8 @@
   "repair_commit_timestamp": "2026-09-26T17:10:47+08:00",
   "prior_audit_evidence_commit": "e36308f1079638dd1194f8a39e0fc574f760b051",
   "prior_audit_evidence_commit_timestamp": "2026-09-26T16:45:19+08:00",
+  "audit_artifact_commit": "13f3cb604123291c57e017102c3698ea6d3a81e6",
+  "audit_artifact_commit_timestamp": "2026-09-26T20:43:52+08:00",
   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_frozen_unchanged": true,
