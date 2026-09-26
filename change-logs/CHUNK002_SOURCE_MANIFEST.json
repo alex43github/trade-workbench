@@ -11,5 +11,16 @@
   "read_order_verified": true,
   "chunk002_accessed_after_prereg_commit": true,
   "threshold_retuned": false,
-  "production_changed": false
+  "production_changed": false,
+  "same_schema_generation_attempt": {
+    "status": "DATA_BLOCKED",
+    "output_path": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002/chunks/chunk_002_2026-04-12_2026-04-16.jsonl",
+    "output_sha256": "6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e",
+    "output_schema_version": "fast-detach-v2-task-001",
+    "required_schema_version": "fast-detach-v2-unified-event-2",
+    "output_event_count": 50,
+    "duplicate_event_ids": 0,
+    "feature_leakage_count": 0,
+    "exact_missing_details_artifact": "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json"
+  }
 }

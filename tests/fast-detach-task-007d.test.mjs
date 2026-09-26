@@ -170,6 +170,30 @@ test("EDP_TO_EAP_MIN uses immutable EDP timestamp when EAP decision is on a late
   assert.equal(metrics.EDP_TO_EAP_MIN, 25);
 });
 
+test("EDP and EAP excursion windows remain disjoint at the EAP boundary", () => {
+  const metrics = calculateEapSeparatedMetrics({
+    snapshot: snapshot("event-1", {
+      first_detected_at_utc: "2026-09-24T10:00:00.000Z",
+      execution_context: { edp_utc: "2026-09-24T10:00:00.000Z" },
+    }),
+    decision: permissionDecision({
+      eap_time_utc: "2026-09-24T10:20:00.000Z",
+      eap_price: 100,
+      decision_bar_close_utc: "2026-09-24T10:15:00.000Z",
+      causal_evidence: { timestamps_utc: ["2026-09-24T10:14:59.999Z"], state: "CONFIRMED" },
+    }),
+    bars: [
+      { open_time_utc: "2026-09-24T10:00:00.000Z", close: 100, high: 110, low: 90 },
+      { open_time_utc: "2026-09-24T10:20:00.000Z", close: 101, high: 102, low: 99 },
+    ],
+  });
+
+  assert.ok(Math.abs(metrics.MFE_FROM_EDP - 10) < 1e-12);
+  assert.ok(Math.abs(metrics.MAE_FROM_EDP - -10) < 1e-12);
+  assert.ok(Math.abs(metrics.MFE_FROM_EAP - 2) < 1e-12);
+  assert.ok(Math.abs(metrics.MAE_FROM_EAP - -1) < 1e-12);
+});
+
 test("sample quality exposes discovery and EAP denominators separately", () => {
   assert.deepEqual(buildSampleQuality({ mature6hN: 177, eapMature6hN: 0 }), {
     DISCOVERY_SAMPLE_QUALITY_6H: "READY_FOR_DESCRIPTIVE_SUMMARY",

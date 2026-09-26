@@ -19,8 +19,9 @@ Do not promote any Fast-Detach rule, threshold, feature combination, EAP gate, o
 2. No prospective EAP cohort or stable persistent collector evidence exists; EAP sample quality is `LOW_SAMPLE` with immutable EAP-granted N=0.
 3. The prereg freeze was completed before chunk002 access, but the available chunk002 object is not the frozen unified-event schema. The six required results are `INSUFFICIENT`, not valid temporal OOS evidence.
 4. Historical Replay vs LIVE_FORWARD comparison is descriptive and explicitly marks detection/execution/capital data gaps.
-5. Drive paths were formally reconciled; `MODEL_REGISTRY.json` is genuinely absent and was not replaced with `MODEL_CURRENT.json`.
-6. No threshold/model/Bark/order change is authorized or present.
+5. Drive paths were formally reconciled; the exact `MODEL_REGISTRY.json` and `CHANGELOG.md` are present at the canonical parent, but writeback was intentionally not performed. Exact pending payloads and revision guards are recorded in `DRIVE_PENDING_WRITEBACK_MANIFEST.json`.
+6. Repository-wide and canonical-model audit found no real auditable execution-permission source: `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`. Existing permission logic remains `CANDIDATE_EAP`/`SHADOW_EAP` only.
+7. No threshold/model/Bark/order change is authorized or present.
 
 ## Required gates before reconsideration
 

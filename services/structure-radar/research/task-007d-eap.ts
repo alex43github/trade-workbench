@@ -192,16 +192,21 @@ export function calculateEapSeparatedMetrics({
   const eapPrice = decision.eap_price;
   const edpMs = parseUtc(immutableEdpTimestamp(snapshot), "immutable_edp_timestamp");
   const eapMs = parseUtc(decision.eap_time_utc, "eap_time_utc");
-  const eligible = bars.filter((bar) => parseUtc(bar.open_time_utc, "bar.open_time_utc") >= eapMs);
-  const highs = eligible.map((bar) => bar.high);
-  const lows = eligible.map((bar) => bar.low);
+  // Keep both causal windows: EDP metrics include the path before permission,
+  // while EAP metrics start only when immutable permission was observed.
+  const edpWindow = bars.filter((bar) => parseUtc(bar.open_time_utc, "bar.open_time_utc") >= edpMs);
+  const eapWindow = edpWindow.filter((bar) => parseUtc(bar.open_time_utc, "bar.open_time_utc") >= eapMs);
+  const edpHighs = edpWindow.map((bar) => bar.high);
+  const edpLows = edpWindow.map((bar) => bar.low);
+  const eapHighs = eapWindow.map((bar) => bar.high);
+  const eapLows = eapWindow.map((bar) => bar.low);
   return {
     EDP_TO_EAP_MIN: Math.floor((eapMs - edpMs) / 60_000),
     PRICE_EDP_TO_EAP_PCT: ((eapPrice / edpPrice) - 1) * 100,
-    MFE_FROM_EDP: highs.length ? ((Math.max(...highs) / edpPrice) - 1) * 100 : null,
-    MAE_FROM_EDP: lows.length ? ((Math.min(...lows) / edpPrice) - 1) * 100 : null,
-    MFE_FROM_EAP: highs.length ? ((Math.max(...highs) / eapPrice) - 1) * 100 : null,
-    MAE_FROM_EAP: lows.length ? ((Math.min(...lows) / eapPrice) - 1) * 100 : null,
+    MFE_FROM_EDP: edpHighs.length ? ((Math.max(...edpHighs) / edpPrice) - 1) * 100 : null,
+    MAE_FROM_EDP: edpLows.length ? ((Math.min(...edpLows) / edpPrice) - 1) * 100 : null,
+    MFE_FROM_EAP: eapHighs.length ? ((Math.max(...eapHighs) / eapPrice) - 1) * 100 : null,
+    MAE_FROM_EAP: eapLows.length ? ((Math.min(...eapLows) / eapPrice) - 1) * 100 : null,
     MISSED_CONVEXITY: null,
     TIME_TO_POSITIVE_FROM_EAP: null,
     CAPITAL_OCCUPANCY_FROM_EAP: null,

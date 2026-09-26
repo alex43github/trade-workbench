@@ -1,0 +1,93 @@
+{
+  "audit_version": "astps-fast-detach-permission-source-audit-1",
+  "task_id": "ASTPS_FAST_DETACH_PR15_SECOND_FINAL_AUDIT_REPAIR",
+  "audited_at": "2026-09-26T17:00:00+08:00",
+  "scope": {
+    "repository": "alex43github/trade-workbench",
+    "repository_search": "entire checked-out repository excluding .git, node_modules, dist, and generated review patch",
+    "drive_parent_id": "1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM",
+    "drive_model_registry_id": "16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp",
+    "drive_changelog_id": "10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV",
+    "search_terms": [
+      "execution permission",
+      "execution_permission",
+      "permission ledger",
+      "EAP_GRANTED",
+      "eap_status",
+      "permission_state",
+      "execute_now",
+      "short_allowed",
+      "tradingPermission"
+    ]
+  },
+  "REAL_LIVE_EAP_SOURCE_FOUND": false,
+  "PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE": true,
+  "historical_live_eap_state": {
+    "event_count": 177,
+    "status": "EAP_NOT_OBSERVED",
+    "backfill_performed": false
+  },
+  "candidate_shadow_boundary": {
+    "candidate_or_shadow_permission_logic_present": true,
+    "candidate_or_shadow_names": ["CANDIDATE_EAP", "SHADOW_EAP"],
+    "counted_as_live_eap": false,
+    "synthetic_live_eap_events_created": 0
+  },
+  "repository_evidence": [
+    {
+      "path": "services/execution-forward/types.ts",
+      "finding": "EDP, recheck, and paper-plan records explicitly carry tradingPermission=false; they are candidate/shadow observations, not a frozen execution decision source."
+    },
+    {
+      "path": "services/execution-forward-v1.ts",
+      "finding": "Forward snapshots are emitted with tradingPermission=false and unavailable scorer status; no immutable EAP_GRANTED decision is produced."
+    },
+    {
+      "path": "services/execution-forward-persistence.ts",
+      "finding": "Persistence rejects production permission enablement and stores append-only shadow records; it is not a production permission ledger."
+    },
+    {
+      "path": "services/execution-forward-watcher.ts",
+      "finding": "Watcher captures EDP/recheck observations but has no explicit execution-permission observer or immutable EAP decision key."
+    },
+    {
+      "path": "services/structure-radar/research/task-007d-eap.ts",
+      "finding": "The Task-007D observer accepts an externally supplied immutable decision and fail-closes absent/malformed input; it does not connect to a real production source."
+    }
+  ],
+  "drive_evidence": [
+    {
+      "file_id": "16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp",
+      "title": "MODEL_REGISTRY.json",
+      "modified_time": "2026-09-13T10:14:26.002Z",
+      "current_revision_id": "0B-0oAJIjSHwhZHVJWjF1TnNDbmRRYkpmT1JjZXg0Vi80ZWo0PQ",
+      "finding": "Canonical registry exists and distinguishes the production baseline from research candidates; no immutable EAP_GRANTED permission ledger/source is defined."
+    },
+    {
+      "file_id": "10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV",
+      "title": "CHANGELOG.md",
+      "modified_time": "2026-09-13T10:14:30.986Z",
+      "current_revision_id": "0B-0oAJIjSHwhVnZXdmRabWN3QmtSQlFCcHZJUjlJNU94bHQ0PQ",
+      "finding": "Canonical research history documents candidate execution protocols and paper-only behavior; it does not expose an auditable production permission decision stream."
+    },
+    {
+      "file_id": "18oMIBSprBIAHO9-FY8WQzD907VM1XiU9",
+      "title": "LIVE_CASES.jsonl",
+      "modified_time": "2026-09-12T15:16:46.694Z",
+      "current_revision_id": "0B-0oAJIjSHwOWhySENWeVVLclJ4cjVzdFVvQjNFR2htbmhVPQ",
+      "finding": "Canonical live cases were resolved by stable ID; no new permission-ledger append was made in this round."
+    },
+    {
+      "file_id": "1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4",
+      "title": "LIVE_OUTCOMES.jsonl",
+      "modified_time": "2026-09-13T04:05:43.466Z",
+      "current_revision_id": "0B-0oAJIjSHwR21HUkdnN2pWQXFzOTgzNitISUFBd3M1K0xRPQ",
+      "finding": "Canonical outcomes were resolved by stable ID; no permission decision source or new outcome append was made in this round."
+    }
+  ],
+  "collector": {
+    "persistent_shadow_collector_started": false,
+    "reason": "Real permission semantics/source are not auditable; starting a collector would create an ungrounded candidate stream rather than observe real EAP."
+  },
+  "conclusion": "No production execution-permission source is auditable in the repository or canonical Drive model. Existing LIVE_FORWARD records remain EAP_NOT_OBSERVED. Any future source must be read-only wired to an immutable ledger and separately validated as CANDIDATE_EAP/SHADOW_EAP before Hypothesis -> OOS -> Forward."
+}

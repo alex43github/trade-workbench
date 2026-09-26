@@ -5,6 +5,7 @@
 ## 结论
 
 `EAP_ZERO_ROOT_CAUSE=OBSERVER_NOT_CONNECTED`。
+`PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`。
 
 当前 scanner 生产链路确实产生 detection 和 state transition，也会在部分状态上生成 expert `executionPlan`，但没有把“实际 execution permission decision”作为事件输出、稳定 payload 或可按 Task-007 `event_id` 连接的持久化记录。因此不能证明 177 个事件曾被 permission logic 明确拒绝，也不能从 `PLATFORM_RECLAIM`、`CONFIRMED`、score、Bark 或 plan 推导 EAP。
 
@@ -28,6 +29,14 @@
 - `EAP_CONFIRMED_ABSENT`: 0。没有可证明“permission logic 已执行且明确返回 DENIED”的记录。
 - `EAP_NOT_OBSERVED`: 177。检测和 outcome 存在，但当时没有 permission observer/immutable decision log。
 - `REPLAY_EAP`: 0。未对 LIVE_FORWARD 事件做历史重建；任何未来 replay 都必须保持独立 source。
+
+## Repository and canonical Drive audit
+
+本轮对整个 repository 搜索 `execution permission`、`execution_permission`、`permission ledger`、`EAP_GRANTED`、`eap_status`、`permission_state`、`execute_now`、`short_allowed` 和 `tradingPermission`。发现的 execution-forward 记录全部明确 `tradingPermission=false` 或 scorer unavailable，属于 `CANDIDATE_EAP`/`SHADOW_EAP` 研究记录，不是生产 permission decision。
+
+同时重新读取 canonical `03_MODEL_REGISTRY/MODEL_REGISTRY.json`（Drive file ID `16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp`）和 `CHANGELOG.md`（Drive file ID `10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV`）。它们定义生产 baseline 与 candidate/research architecture，但没有 immutable `EAP_GRANTED` ledger source 或可按 live event identity 连接的 permission stream。`LIVE_CASES.jsonl` 和 `LIVE_OUTCOMES.jsonl` 也未产生本轮 permission append。
+
+因此没有启动 persistent shadow collector，没有构造 synthetic LIVE EAP，也没有把 candidate/shadow observation 计入 LIVE_FORWARD denominator。完整 machine-readable evidence 见 `change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json`。
 
 ## 后续边界
 

@@ -6,7 +6,7 @@ PROMOTION_DECISION=DO_NOT_PROMOTE
 BRANCH=codex/astps-fast-detach-handoff-20260926
 PR=https://github.com/alex43github/trade-workbench/pull/15
 BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
-REPAIR_COMMIT=8e13298
+REPAIR_COMMIT=SECOND_FINAL_AUDIT_REPAIR_COMMIT_PENDING
 HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 FORWARD_EPOCH_ID=epoch-20260924T185000
 
@@ -21,6 +21,8 @@ This revision addresses the latest PR #15 Final Audit CHANGES REQUIRED comments 
 3. LIVE_FORWARD EAP counts and 6H denominators use only immutable `EAP_GRANTED` ledger event IDs. Legacy snapshot EAP fields are ignored. EAP delay uses the immutable transition timestamp.
 4. EDP-only summary now reports event counts separately from outcome-row counts and exposes family/mechanism as `UNAVAILABLE_FROZEN_FIELD` when absent instead of guessing.
 5. `PRE_CHUNK002_PREREG.md/json` was committed before chunk002 access. The source was then hashed and audited; all six frozen Primary hypotheses are `INSUFFICIENT` because the source schema lacks every required unified-event field.
+6. `calculateEapSeparatedMetrics()` now uses two inclusive closed-bar windows: the immutable EDP timestamp starts the EDP window, and the immutable EAP timestamp starts the EAP window. The EDP MFE/MAE therefore includes EDP→EAP path movement, while EAP MFE/MAE excludes it; a large-pre-EAP/small-post-EAP regression proves the separation.
+7. Canonical Drive resolution now points to the exact `03_MODEL_REGISTRY` parent, `MODEL_REGISTRY.json`, and `CHANGELOG.md` IDs. The registry is present, not absent. Read-only writeback reconciliation is captured in the machine-readable pending manifest.
 
 ## Gate status
 
@@ -32,7 +34,7 @@ This revision addresses the latest PR #15 Final Audit CHANGES REQUIRED comments 
 | prereg freeze completed | commit `8e13298`, prereg SHA `5f701142...7d35c84` | PASS |
 | chunk002 temporal OOS completed | schema audit only; valid same-pipeline OOS false | BLOCKED_DATA_SCHEMA |
 | Historical vs Live comparison completed | denominator-separated report with explicit data gaps | PASS_WITH_DATA_GAPS |
-| Drive writeback completed or formally reconciled | canonical parents/IDs re-resolved; MODEL_REGISTRY exact name absent | FORMALLY_RECONCILED |
+| Drive writeback completed or formally reconciled | canonical parent and exact file IDs/revisions re-resolved; read-only pending manifest records exact payloads | FORMALLY_RECONCILED |
 | final reports regenerated | this report, research, promotion, manifest, and Review Packet | PASS |
 
 ## 177-event EDP-only descriptive audit
@@ -54,16 +56,16 @@ Frozen-at-EDP strata: timeframe `15m=62, 1h=98, 4h=17`; setup `PLATFORM_RECLAIM=
 
 - VPS process and source search found no explicit `EAP_GRANTED`/execution-permission observer in the production scanner path and no task007c persistent collector process. No production code was changed to manufacture one.
 - Existing Forward EAP audit remains `EAP_OBSERVED=0`, `EAP_CONFIRMED_ABSENT=0`, `EAP_NOT_OBSERVED=177`.
-- `chunk002` source was read only after prereg commit, but its schema is incompatible with the frozen unified-event required fields. The six results are recorded as `INSUFFICIENT`, not as valid OOS support/failure.
-- Drive canonical reconciliation found `LIVE_CASES.jsonl` and `LIVE_OUTCOMES.jsonl` by stable IDs and confirmed the exact-name `MODEL_REGISTRY.json` is absent. No replacement or unsafe overwrite was made.
+- `chunk002` source was read only after prereg commit. The frozen generator was run once in an isolated `/tmp` root with `chunk_index=2`: it produced 50 rows with source SHA valid, zero duplicate IDs, and zero feature leakage, but the output schema is `fast-detach-v2-task-001`, not `fast-detach-v2-unified-event-2`. The exact missing unified sections/fields and the `DATA_BLOCKED` disposition are recorded in `CHUNK002_UNIFIED_GENERATION_ATTEMPT.json`; the six results remain `INSUFFICIENT`, not valid OOS support/failure.
+- Drive canonical reconciliation found `LIVE_CASES.jsonl`, `LIVE_OUTCOMES.jsonl`, the exact `MODEL_REGISTRY.json`, and `CHANGELOG.md` by stable IDs and revisions. No replacement or unsafe overwrite was made. `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true` remains explicit after repository-wide and canonical-model audit.
 - Fast-Detach Python regression is unavailable in this checkout; it is reported as unavailable, never PASS.
 
 ## Verification
 
-- Focused TASK-007/007B/007C/007D: `38/38 PASS`, `0 FAIL`, `0 SKIP`.
+- Focused TASK-007/007B/007C/007D: `39/39 PASS`, `0 FAIL`, `0 SKIP`.
 - Radar regression (`npm run radar:test`): `88 total`, `87 PASS`, `0 FAIL`, `1 environment skip` (loopback listener prohibited by the execution environment).
 - Repository build: `PASS`.
-- Repository full suite (`npm test`): `1095 total`, `987 PASS`, `107 FAIL`, `1 SKIP`; failures are existing live-exchange/Bybit/trade/UI scope outside this research-only repair. The build phase passed.
+- Repository full suite (`npm test`): exit `1`, `1096 total`, `988 PASS`, `107 FAIL`, `1 SKIP`; the additional passing test is the new EDP/EAP window regression. Failures are existing live-exchange/Bybit/trade/UI scope outside this research-only repair. The build phase passed.
 - Typecheck (`npx tsc --noEmit`): `FAIL` on pre-existing `app/` and `lib/` errors; no TASK-007/007B/007C/007D errors were reported.
 - Fast-Detach Python regression: `UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY`; not treated as PASS.
 - JSON artifact validation: all six newly generated machine-readable audit/prereg/manifests parse successfully.
@@ -80,6 +82,7 @@ HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b
 HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_FROZEN_UNCHANGED=true
 CHUNK002_ACCESSED=true
+PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true
 PRODUCTION_MODEL_CHANGED=false
 PRODUCTION_CODE_CHANGED=false
 PRODUCTION_SERVICE_RESTARTED=false

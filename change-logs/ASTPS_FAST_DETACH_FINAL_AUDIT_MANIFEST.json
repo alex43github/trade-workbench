@@ -1,6 +1,6 @@
 {
-  "manifest_version": "astps-fast-detach-pr15-final-audit-repair-1",
-  "status": "CHANGES_REQUIRED_INCOMPLETE",
+  "manifest_version": "astps-fast-detach-pr15-second-final-audit-repair-1",
+  "status": "CHANGES_REQUIRED_PENDING_REVIEW",
   "ready_for_final_audit": false,
   "promotion_decision": "DO_NOT_PROMOTE",
   "final_reports_regenerated": true,
@@ -8,7 +8,7 @@
   "branch": "codex/astps-fast-detach-handoff-20260926",
   "pull_request": "https://github.com/alex43github/trade-workbench/pull/15",
   "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
-  "repair_commit": "8e13298",
+  "repair_commit": "SECOND_FINAL_AUDIT_REPAIR_COMMIT_PENDING",
   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_frozen_unchanged": true,
@@ -20,6 +20,15 @@
     "mature_outcome_counts": {"15m": 177, "30m": 177, "1h": 177, "3h": 177, "6h": 177, "12h": 177, "24h": 2, "48h": 0},
     "family_status": "UNAVAILABLE_FROZEN_FIELD",
     "mechanism_status": "UNAVAILABLE_FROZEN_FIELD"
+  },
+  "eap_metric_windows": {
+    "edp_window_start": "immutable_edp_timestamp",
+    "eap_window_start": "immutable_eap_timestamp",
+    "mfe_from_edp_includes_edp_to_eap_path": true,
+    "mae_from_edp_includes_edp_to_eap_path": true,
+    "mfe_from_eap_excludes_pre_eap_path": true,
+    "mae_from_eap_excludes_pre_eap_path": true,
+    "regression_test": "EDP and EAP excursion windows remain disjoint at the EAP boundary"
   },
   "eap": {
     "real_observer_connected": false,
@@ -37,15 +46,36 @@
     "prereg_commit": "8e13298",
     "same_pipeline_unified_schema": false,
     "temporal_oos_completed": false,
-    "hypothesis_results": "INSUFFICIENT_FOR_ALL_SIX"
+    "hypothesis_results": "INSUFFICIENT_FOR_ALL_SIX",
+    "generation_attempt": {
+      "status": "DATA_BLOCKED",
+      "output_path": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002/chunks/chunk_002_2026-04-12_2026-04-16.jsonl",
+      "output_sha256": "6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e",
+      "output_schema_version": "fast-detach-v2-task-001",
+      "required_schema_version": "fast-detach-v2-unified-event-2",
+      "output_event_count": 50,
+      "duplicate_event_ids": 0,
+      "feature_leakage_count": 0,
+      "exact_missing_details_artifact": "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json"
+    }
   },
   "drive": {
-    "canonical_reconciliation": "FORMALLY_RECONCILED",
+    "canonical_reconciliation": "FORMALLY_RECONCILED_EXACT_IDS_AND_REVISIONS",
     "writeback": "NOT_PERFORMED",
+    "model_registry_parent_id": "1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM",
+    "model_registry_id": "16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp",
+    "changelog_id": "10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV",
     "live_cases_id": "18oMIBSprBIAHO9-FY8WQzD907VM1XiU9",
     "live_outcomes_id": "1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4",
-    "model_registry_exact_name_found": false,
+    "model_registry_exact_name_found": true,
     "model_current_used_as_replacement": false
+  },
+  "permission_source_audit": {
+    "artifact": "change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json",
+    "REAL_LIVE_EAP_SOURCE_FOUND": false,
+    "PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE": true,
+    "persistent_shadow_collector_started": false,
+    "candidate_shadow_counted_as_live": false
   },
   "data_invariants": {
     "FEATURE_LEAKAGE_COUNT": 0,
@@ -67,10 +97,10 @@
     "ORDER_PATH_CHANGED": false
   },
   "tests": {
-    "focused": "38 total / 38 pass / 0 fail / 0 skip",
+    "focused": "39 total / 39 pass / 0 fail / 0 skip",
     "related_regression": "88 total / 87 pass / 0 fail / 1 environment skip",
     "repository_build": "PASS",
-    "repository_full_suite": "1095 total / 987 pass / 107 fail / 1 skip",
+    "repository_full_suite": "exit 1; 1096 total / 988 pass / 107 fail / 1 skip; build phase PASS",
     "typecheck": "FAIL on pre-existing app/lib errors; no TASK-007 scope errors",
     "fast_detach_python_regression": "UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY"
   },
@@ -79,8 +109,10 @@
     "PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE",
     "PROSPECTIVE_EAP_COHORT_ZERO",
     "CHUNK002_SOURCE_NOT_SAME_PIPELINE_UNIFIED_SCHEMA",
-    "MODEL_REGISTRY_JSON_EXACT_NAME_ABSENT",
-    "NO_SAFE_CANONICAL_DRIVE_APPEND_PAYLOAD_AUTHORIZED",
+    "PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE",
+    "NO_DRIVE_WRITEBACK_PERFORMED_READ_ONLY_RECONCILIATION",
+    "NO_SAFE_CANONICAL_PRODUCTION_MUTATION_AUTHORIZED",
+    "CHUNK002_GENERATION_OUTPUT_NOT_UNIFIED_EVENT_SCHEMA",
     "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE"
   ],
   "artifacts": [
@@ -94,9 +126,13 @@
     "change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json",
     "change-logs/CHUNK002_SOURCE_MANIFEST.json",
     "change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json",
+    "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json",
+    "change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json",
+    "change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json",
     "change-logs/PRE_CHUNK002_PREREG.md",
     "change-logs/PRE_CHUNK002_PREREG.json",
     "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
-    "change-logs/CODEX_REVIEW_PACKET_LATEST.patch"
+    "change-logs/CODEX_REVIEW_PACKET_LATEST.patch",
+    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-second-final-audit-repair.md"
   ]
 }

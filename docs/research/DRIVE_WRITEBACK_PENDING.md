@@ -1,35 +1,39 @@
-# ASTPS FAST-DETACH — DRIVE CANONICAL WRITEBACK RECONCILIATION
+# ASTPS FAST-DETACH — DRIVE CANONICAL WRITEBACK PENDING
 
-STATUS=FORMALLY_RECONCILED
+STATUS=NOT_WRITTEN_FORMALLY_RECONCILED
 CANONICAL_WRITEBACK_RECONCILED=true
-READ_AT=2026-09-26T14:10:00+08:00
+READ_AT=2026-09-26T17:00:00+08:00
 WRITEBACK_OPERATION=NOT_PERFORMED
+MODEL_REGISTRY_EXACT_NAME_FOUND=true
+DRIVE_WRITEBACK_PENDING_MANIFEST=change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json
 
-The canonical parents were re-resolved after the prior search miss. Existing files are identified by stable Drive IDs below; no pseudo-replacement was created and no canonical file was overwritten from this branch.
+The canonical parent and exact files were re-resolved by stable Drive IDs. The connector reads below are read-only. No pseudo-replacement was created, no canonical file was overwritten, and no Drive writeback was attempted in this round.
 
 ## Canonical parent resolution
 
-| Logical parent | Drive folder ID |
-|---|---|
-| research state / workbench | `1dY641toqjs9m9wndqHTRq52xzoX4SpLo` |
-| candidate / regression | `1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp` |
-| live research ledgers | `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq` |
+| Logical parent | Drive folder ID | Parent ID | Modified time |
+|---|---|---|---|
+| `03_MODEL_REGISTRY` | `1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM` | `1I4r4qWp7I_BCCKftSm1kVqA5jLN6Wi68` | `2026-09-12T06:33:08.471Z` |
+| live research ledgers | `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq` | — | — |
 
-## Stable file resolution
+## Exact canonical file resolution
 
-- `LIVE_CASES.jsonl`: `18oMIBSprBIAHO9-FY8WQzD907VM1XiU9`, parent `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq`, read successfully.
-- `LIVE_OUTCOMES.jsonl`: `1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4`, parent `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq`, read successfully.
-- `MODEL_REGISTRY.json`: exact-name search and canonical-parent listing found no file. `MODEL_CURRENT.json` (`1bZd7...`, under the research-state parent) exists but is not treated as a registry replacement.
-- `RESEARCH_STATE.md`: `1sNlS9V0Rmz_w_BkB7cQNMBCsHelhmIyc`.
-- `WORKBENCH_SPEC.md`: `1m6IbzlvUFrxTTW9vMP5wx4vW4nP6tqoY`.
-- `LIVE_GROWTH_LOG.md`: `1atVncflV2A6cN5y7u9pbPSJpqwzF1oPZ`.
-- `LIVE_HYPOTHESES.md`: `1v3o7qDkrlpUN3XoBf_IwTK0ZBdo6nfH_`.
-- `CURRENT_CANDIDATE_MODEL.md`: `1LoHtmTqhDL6jY4D6XzH5jU-SCcZOyQu1`.
-- `REGRESSION_RESULTS.md`: `1cs5zaqLwTpfLLecUXtbwJ8zqhJIAxeIh`.
-- `RESEARCH_QUEUE.md`: `19w_CkM9QwngpELURGYpi37CYf9pRCGxF`.
+| Canonical path | Drive file ID | Modified time | Current revision ID | Size |
+|---|---|---|---|---:|
+| `03_MODEL_REGISTRY/MODEL_REGISTRY.json` | `16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp` | `2026-09-13T10:14:26.002Z` | `0B-0oAJIjSHwhZHVJWjF1TnNDbmRRYkpmT1JjZXg0Vi80ZWo0PQ` | 9793 |
+| `03_MODEL_REGISTRY/CHANGELOG.md` | `10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV` | `2026-09-13T10:14:30.986Z` | `0B-0oAJIjSHwhVnZXdmRabWN3QmtSQlFCcHZJUjlJNU94bHQ0PQ` | 21937 |
+| `LIVE_CASES.jsonl` | `18oMIBSprBIAHO9-FY8WQzD907VM1XiU9` | `2026-09-12T15:16:46.694Z` | `0B-0oAJIjSHwOWhySENWeVVLclJ4cjVzdFVvQjNFR2htbmhVPQ` | 14523 |
+| `LIVE_OUTCOMES.jsonl` | `1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4` | `2026-09-13T04:05:43.466Z` | `0B-0oAJIjSHwR21HUkdnN2pWQXFzOTgzNitISUFBd3M1K0xRPQ` | 6207 |
 
-## Reconciliation decision
+Additional resolved research files remain unchanged: `RESEARCH_STATE.md`, `WORKBENCH_SPEC.md`, `LIVE_GROWTH_LOG.md`, `LIVE_HYPOTHESES.md`, `CURRENT_CANDIDATE_MODEL.md`, `REGRESSION_RESULTS.md`, and `RESEARCH_QUEUE.md`. Their stable IDs are preserved in the prior reconciliation record and were not written.
 
-The required canonical ledger files are now resolved by parent and stable ID. This PR does not have a safe append payload for those production research ledgers, and `MODEL_REGISTRY.json` remains genuinely absent. Therefore the correct writeback state is a formal reconciliation, not a fabricated replacement or an unsafe overwrite. Local GitHub review artifacts remain authoritative for this PR revision; any future canonical append must use the resolved IDs and an explicit write-control/review step.
+## Writeback disposition
 
-True blockers remain: missing exact `MODEL_REGISTRY.json`, no authorized canonical append payload in this repair, and no permission to represent local reports as Drive synchronization.
+The complete machine-readable pending entries are in [`DRIVE_PENDING_WRITEBACK_MANIFEST.json`](../../change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json). It records, per canonical file, the exact current revision, exact intended patch/append payload, Git source commit placeholder to be filled at the substantive commit, and the reason the payload was not written.
+
+- `MODEL_REGISTRY.json` is present at the exact canonical path. Its intended patch is an explicit empty JSON Patch: this research-only repair must not mutate the production registry.
+- `CHANGELOG.md` has an exact pending append block, but no Drive append was performed.
+- `LIVE_CASES.jsonl` and `LIVE_OUTCOMES.jsonl` have empty append payloads because this round produced no new real permission decision, LIVE case, or natural outcome. Appending an audit row would pollute canonical ledgers.
+- No replacement file was created and no `MODEL_CURRENT.json` was used as a substitute.
+
+The current local Git reports, source audit, generation-attempt audit, and pending manifest are the reviewable source of truth for this PR. A future Drive writeback requires explicit write authority and revision-guarded application of the exact pending payloads.
