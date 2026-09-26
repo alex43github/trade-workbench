@@ -31,6 +31,7 @@ function snapshot(eventId, overrides = {}) {
     timeframe: "15m",
     setup: "PLATFORM_RECLAIM",
   };
+  const firstDetectedAtUtc = overrides.first_detected_at_utc ?? "2026-09-24T10:15:02.000Z";
   return {
     ...overrides,
     identity: {
@@ -38,8 +39,11 @@ function snapshot(eventId, overrides = {}) {
       ...overrides.identity,
     },
     anchor_price: 100,
-    first_detected_at_utc: "2026-09-24T10:15:02.000Z",
+    first_detected_at_utc: firstDetectedAtUtc,
     discovery_channel: "structure-radar.scanner.onSignal",
+    ...(overrides.execution_context === undefined
+      ? { execution_context: { edp_utc: firstDetectedAtUtc, edp_price: 100 } }
+      : {}),
   };
 }
 
@@ -158,7 +162,7 @@ test("EDP_TO_EAP_MIN uses immutable EDP timestamp when EAP decision is on a late
   const metrics = calculateEapSeparatedMetrics({
     snapshot: snapshot("event-1", {
       first_detected_at_utc: "2026-09-24T10:10:00.000Z",
-      execution_context: { edp_utc: "2026-09-24T10:10:00.000Z" },
+      execution_context: { edp_utc: "2026-09-24T10:10:00.000Z", edp_price: 100 },
     }),
     decision: permissionDecision({
       eap_time_utc: "2026-09-24T10:35:00.000Z",
@@ -174,7 +178,7 @@ test("EDP and EAP excursion windows remain disjoint at the EAP boundary", () => 
   const metrics = calculateEapSeparatedMetrics({
     snapshot: snapshot("event-1", {
       first_detected_at_utc: "2026-09-24T10:00:00.000Z",
-      execution_context: { edp_utc: "2026-09-24T10:00:00.000Z" },
+      execution_context: { edp_utc: "2026-09-24T10:00:00.000Z", edp_price: 100 },
     }),
     decision: permissionDecision({
       eap_time_utc: "2026-09-24T10:20:00.000Z",
@@ -192,6 +196,48 @@ test("EDP and EAP excursion windows remain disjoint at the EAP boundary", () => 
   assert.ok(Math.abs(metrics.MAE_FROM_EDP - -10) < 1e-12);
   assert.ok(Math.abs(metrics.MFE_FROM_EAP - 2) < 1e-12);
   assert.ok(Math.abs(metrics.MAE_FROM_EAP - -1) < 1e-12);
+});
+
+test("EDP excursion metrics use immutable EDP price and fail closed without it", () => {
+  const metrics = calculateEapSeparatedMetrics({
+    snapshot: snapshot("event-1", {
+      anchor_price: 100,
+      first_detected_at_utc: "2026-09-24T10:00:00.000Z",
+      execution_context: { edp_utc: "2026-09-24T10:00:00.000Z", edp_price: 90 },
+    }),
+    decision: permissionDecision({
+      eap_time_utc: "2026-09-24T10:20:00.000Z",
+      eap_price: 100,
+      decision_bar_close_utc: "2026-09-24T10:15:00.000Z",
+      causal_evidence: { timestamps_utc: ["2026-09-24T10:14:59.999Z"], state: "CONFIRMED" },
+    }),
+    bars: [
+      { open_time_utc: "2026-09-24T10:00:00.000Z", close: 90, high: 120, low: 80 },
+      { open_time_utc: "2026-09-24T10:20:00.000Z", close: 101, high: 102, low: 99 },
+    ],
+  });
+
+  assert.ok(Math.abs(metrics.PRICE_EDP_TO_EAP_PCT - ((100 / 90) - 1) * 100) < 1e-12);
+  assert.ok(Math.abs(metrics.MFE_FROM_EDP - ((120 / 90) - 1) * 100) < 1e-12);
+  assert.ok(Math.abs(metrics.MAE_FROM_EDP - ((80 / 90) - 1) * 100) < 1e-12);
+  assert.ok(Math.abs(metrics.MFE_FROM_EAP - 2) < 1e-12);
+  assert.ok(Math.abs(metrics.MAE_FROM_EAP - -1) < 1e-12);
+
+  assert.throws(
+    () => calculateEapSeparatedMetrics({
+      snapshot: snapshot("event-1", {
+        first_detected_at_utc: "2026-09-24T10:00:00.000Z",
+        execution_context: { edp_utc: "2026-09-24T10:00:00.000Z" },
+      }),
+      decision: permissionDecision({
+        eap_time_utc: "2026-09-24T10:20:00.000Z",
+        decision_bar_close_utc: "2026-09-24T10:15:00.000Z",
+        causal_evidence: { timestamps_utc: ["2026-09-24T10:14:59.999Z"], state: "CONFIRMED" },
+      }),
+      bars: [],
+    }),
+    /immutable EDP price/i,
+  );
 });
 
 test("sample quality exposes discovery and EAP denominators separately", () => {

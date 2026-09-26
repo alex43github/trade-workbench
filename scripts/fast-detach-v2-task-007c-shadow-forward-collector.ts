@@ -556,10 +556,20 @@ export async function runTask007CShadowCollector(
           const bars = cache.get(signal.symbol, signal.timeframe);
           const latest = bars.find((bar) => bar.time === signal.detectedAt);
           if (!latest) throw new Error(`scanner signal has no decision bar: ${signal.id}`);
+          const snapshotIdentityInfo = buildTask007CIdentity(
+            signal,
+            forwardEpochId,
+            detectedAtUtc,
+            "EAP_NOT_OBSERVED",
+            latest.close,
+          );
+          if (snapshotIdentityInfo.identity.event_id !== identityInfo.identity.event_id) {
+            throw new Error(`EDP price capture changed event identity: ${signal.id}`);
+          }
           const decisionMs = closeTimeMs(signal.detectedAt, signal.timeframe);
           const causal = await causalForSignal(signal, decisionMs);
           const snapshot = createLiveSnapshot({
-            identity: identityInfo.identity,
+            identity: snapshotIdentityInfo.identity,
             first_detected_at_utc: detectedAtUtc,
             anchor_price: latest.close,
             direction: null,
@@ -569,7 +579,7 @@ export async function runTask007CShadowCollector(
             run_id: epochRunId,
             model_version: environment.TASK007C_MODEL_VERSION?.trim() || "structure-radar-detectors-v0.1",
             scanner_context: { scanner_signal_id: signal.id, collector_started_at_utc: collectorStartUtc },
-            execution_context: identityInfo.execution_context,
+            execution_context: snapshotIdentityInfo.execution_context,
             causal,
             data_quality: causal.data_quality,
           });

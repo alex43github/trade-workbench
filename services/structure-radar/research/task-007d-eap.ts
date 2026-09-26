@@ -45,6 +45,12 @@ type SnapshotLike = Pick<LiveEventSnapshot, "identity" | "anchor_price"> | JsonO
  * substitute for the EDP timestamp.
  */
 export const EDP_TIMESTAMP_CONTRACT = "immutable snapshot.execution_context.edp_utc ?? snapshot.first_detected_at_utc" as const;
+/**
+ * The price baseline must be captured at the same immutable EDP observation as
+ * the timestamp. `anchor_price` is a decision-bar field and is never an
+ * implicit fallback for EDP-price metrics.
+ */
+export const EDP_PRICE_CONTRACT = "immutable snapshot.execution_context.edp_price captured at immutable EDP timestamp" as const;
 
 function parseUtc(value: unknown, label: string) {
   const timestamp = typeof value === "string" ? Date.parse(value) : Number.NaN;
@@ -99,6 +105,17 @@ export function immutableEdpTimestamp(snapshot: SnapshotLike) {
     throw new Error(`immutable EDP timestamp is missing (${EDP_TIMESTAMP_CONTRACT})`);
   }
   return edpUtc;
+}
+
+export function immutableEdpPrice(snapshot: SnapshotLike) {
+  const candidate = snapshot && typeof snapshot === "object" ? snapshot as JsonObject : {};
+  const execution = candidate.execution_context;
+  const context = execution && typeof execution === "object" ? execution as JsonObject : {};
+  const edpPrice = context.edp_price;
+  if (typeof edpPrice !== "number" || !Number.isFinite(edpPrice) || edpPrice <= 0) {
+    throw new Error(`immutable EDP price is missing or invalid (${EDP_PRICE_CONTRACT})`);
+  }
+  return edpPrice;
 }
 
 export function validateEapDecision(decision: EapDecision, snapshot: SnapshotLike) {
@@ -188,7 +205,7 @@ export function calculateEapSeparatedMetrics({
   bars: readonly { open_time_utc: string; close: number; high: number; low: number }[];
 }) {
   validateEapDecision(decision, snapshot);
-  const edpPrice = Number(snapshot.anchor_price);
+  const edpPrice = immutableEdpPrice(snapshot);
   const eapPrice = decision.eap_price;
   const edpMs = parseUtc(immutableEdpTimestamp(snapshot), "immutable_edp_timestamp");
   const eapMs = parseUtc(decision.eap_time_utc, "eap_time_utc");

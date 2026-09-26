@@ -123,13 +123,20 @@ export function buildTask007CIdentity(
   forwardEpochId: string,
   detectedAtUtc: string,
   eapStatus: "NOT_ESTABLISHED" | "EAP_NOT_OBSERVED" = "NOT_ESTABLISHED",
+  edpPrice?: number,
 ): {
   identity: LiveEventIdentity & { event_id: string };
   scanner_signal_id: string;
-  execution_context: { edp_utc: string; eap_utc: null; eap_status: "NOT_ESTABLISHED" | "EAP_NOT_OBSERVED" };
+  execution_context: {
+    edp_utc: string;
+    edp_price?: number;
+    eap_utc: null;
+    eap_status: "NOT_ESTABLISHED" | "EAP_NOT_OBSERVED";
+  };
 } {
   if (!forwardEpochId.trim()) throw new Error("forward epoch id is required");
   if (!Number.isFinite(Date.parse(detectedAtUtc))) throw new Error("detectedAtUtc must be an ISO timestamp");
+  if (edpPrice !== undefined && (!Number.isFinite(edpPrice) || edpPrice <= 0)) throw new Error("edpPrice must be positive when provided");
   const decisionBarCloseMs = signal.detectedAt * 1_000 + TIMEFRAME_SECONDS[signal.timeframe] * 1_000 - 1;
   const identityBase = {
     source: "LIVE_FORWARD" as const,
@@ -150,7 +157,12 @@ export function buildTask007CIdentity(
   return {
     identity,
     scanner_signal_id: signal.id,
-    execution_context: { edp_utc: detectedAtUtc, eap_utc: null, eap_status: eapStatus },
+    execution_context: {
+      edp_utc: detectedAtUtc,
+      ...(edpPrice === undefined ? {} : { edp_price: edpPrice }),
+      eap_utc: null,
+      eap_status: eapStatus,
+    },
   };
 }
 

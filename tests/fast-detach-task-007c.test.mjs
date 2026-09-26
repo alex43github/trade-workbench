@@ -46,6 +46,25 @@ test("cohortEventIds separates pre-existing baseline from prospective snapshots"
   });
 });
 
+test("buildTask007CIdentity freezes EDP price with the EDP timestamp", () => {
+  const result = buildTask007CIdentity({
+    id: "signal-1",
+    symbol: "BTCUSDT",
+    timeframe: "15m",
+    setup: "PLATFORM_RECLAIM",
+    anchorHash: "anchor-1",
+    detectedAt: 1_758_726_900,
+    state: "CANDIDATE",
+    stateVersion: 1,
+    expiresAfterBars: 4,
+    lastProcessedBarTime: 1_758_726_900,
+    geometry: { tolerance: 0.1, platformLower: 100, invalidationPrice: 99 },
+  }, "epoch-test", "2026-09-24T19:00:00.000Z", "EAP_NOT_OBSERVED", 101.25);
+
+  assert.equal(result.execution_context.edp_utc, "2026-09-24T19:00:00.000Z");
+  assert.equal(result.execution_context.edp_price, 101.25);
+});
+
 test("buildCohortSummary is deterministic, LOW_SAMPLE, and excludes non-mature horizons", () => {
   const summary = buildCohortSummary({
     summary_at_utc: "2026-09-25T01:00:00.000Z",
@@ -281,6 +300,7 @@ test("collector uses the RadarScanner raw-event path and freezes one snapshot pl
     assert.equal(transitions[0].transition_type, "IGNITION");
     assert.equal(snapshots[0].identity.source, "LIVE_FORWARD");
     assert.equal(snapshots[0].execution_context.eap_utc, null);
+    assert.equal(snapshots[0].execution_context.edp_price, snapshots[0].anchor_price);
     assert.equal(result.NEW_LIVE_EVENTS, 1);
     assert.equal(result.TOTAL_LIVE_EVENTS, 1);
     assert.equal((await repository.readEpoch()).epoch_sha256, epoch.epoch_sha256);
