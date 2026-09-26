@@ -1,14 +1,18 @@
 {
-  "version": "pr15-sixth-final-artifact-blob-set-1",
-  "validated_against_published_audit_commit": "e89bbe1d485af2c3a0963455856ed901638ff69c",
+  "version": "pr15-sixth-final-artifact-blob-set-2",
+  "code_commit": "60da0184152dd22a775619cf46efe82b4be7864e",
+  "validation_finished_at": "2026-09-26T14:55:00Z",
+  "audit_artifact_commit": "5a33b9b3669138766d9db3391802f181722c7f04",
+  "published_audit_commit": "5a33b9b3669138766d9db3391802f181722c7f04",
+  "published_at": "2026-09-26T14:55:00Z",
   "files": [
     {
       "path": "change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json",
-      "git_blob_sha": "add2d1c811e4e9d6a2e7b8e24522b36733b53d39"
+      "git_blob_sha": "440ffe743fd4184969611a41f165283ce9485e0e"
     },
     {
       "path": "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
-      "git_blob_sha": "d6777aaa9869685b0e2cf1a979180c52ad73aebb"
+      "git_blob_sha": "173a34d100cb831d55f4845fba22d75e09c02da3"
     },
     {
       "path": "change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md",
@@ -17,10 +21,6 @@
     {
       "path": "docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md",
       "git_blob_sha": "a93c51590cf9981654e9bc1cbd433fc7cac202f6"
-    },
-    {
-      "path": "docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md",
-      "git_blob_sha": "53419314595e1613f91cf698e60d7988c835f7dd"
     }
   ]
 }

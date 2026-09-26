@@ -1,597 +1,85 @@
-diff --git a/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
-index 548b776..5ee466f 100644
---- a/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
-+++ b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
-@@ -20,6 +20,10 @@ CHUNK002_REEVALUATED_THIS_REPAIR=false
-
- ## Completed in this repair
-
-+- Sixth-audit materialization readiness: bounded-memory SQLite streaming converter; strict source/RAM/disk/OHLC/time preflight; sibling staging, cleanup, completion sentinel, and atomic publish. VPS zstd 1.5.5 plus frozen Task-002B parser integration passed.
-+- Same-pipeline dependency graph now pins Task-006 orchestration, Task-001/002B/003/004/005, schemas, cache contracts, and isolated command. The original 98-test Task-006 suite remains blocked by the missing frozen `test_task_006.py`, with exact evidence in `TASK006_FROZEN_PYTHON_REGRESSION_AUDIT.json`.
-+- RESEARCH_QUEUE.json pending patch and dry-run now use the same byte-identical RFC-6902 payload and SHA; Drive remains read-only.
-+
- - Immutable EDP timestamp contract and later-bar EAP latency regression.
- - Fail-closed EAP status classifier.
- - Immutable EAP_GRANTED-only LIVE_FORWARD denominator and transition-time delay.
 diff --git a/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
-index d597da4..add2d1c 100644
+index add2d1c..440ffe7 100644
 --- a/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
 +++ b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
-@@ -1,6 +1,6 @@
- {
--  "manifest_version": "astps-fast-detach-pr15-fifth-final-audit-repair-1",
--  "status": "CHANGES_REQUIRED_PENDING_REVIEW",
-+  "manifest_version": "astps-fast-detach-pr15-sixth-final-audit-repair-1",
-+  "status": "CHANGES_REQUIRED_PENDING_SEVENTH_FINAL_AUDIT",
-   "ready_for_final_audit": false,
-   "promotion_decision": "DO_NOT_PROMOTE",
-   "final_reports_regenerated": true,
-@@ -12,17 +12,32 @@
+@@ -12,7 +12,7 @@
    "repair_commit_timestamp": "2026-09-26T21:29:42+08:00",
    "prior_audit_evidence_commit": "e36308f1079638dd1194f8a39e0fc574f760b051",
    "prior_audit_evidence_commit_timestamp": "2026-09-26T16:45:19+08:00",
--  "audit_artifact_commit": "27a1a70049ef3990b3feb86eeedfe23036285164",
-+  "audit_artifact_commit": "PENDING_SIXTH_AUDIT_ARTIFACT_COMMIT",
+-  "audit_artifact_commit": "PENDING_SIXTH_AUDIT_ARTIFACT_COMMIT",
++  "audit_artifact_commit": "5a33b9b3669138766d9db3391802f181722c7f04",
    "audit_artifact_commit_timestamp": "2026-09-26T21:29:42+08:00",
    "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
    "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
-   "historical_frozen_unchanged": true,
-   "forward_epoch_id": "epoch-20260924T185000",
--  "source_counts": {"HISTORICAL_REPLAY": 50, "LIVE_FORWARD_DISCOVERY": 177, "LIVE_FORWARD_EAP": 0, "REPLAY_EAP": 0, "UNIFIED_RESEARCH_VIEW": 227},
-+  "source_counts": {
-+    "HISTORICAL_REPLAY": 50,
-+    "LIVE_FORWARD_DISCOVERY": 177,
-+    "LIVE_FORWARD_EAP": 0,
-+    "REPLAY_EAP": 0,
-+    "UNIFIED_RESEARCH_VIEW": 227
-+  },
-   "edp_only_audit": {
-     "N": 177,
-     "source_summary_sha256": "d99c88bdb4fbea5c978c6129de0e1135b84640457a9ad32223444880cb3bdaa8",
--    "mature_outcome_counts": {"15m": 177, "30m": 177, "1h": 177, "3h": 177, "6h": 177, "12h": 177, "24h": 2, "48h": 0},
-+    "mature_outcome_counts": {
-+      "15m": 177,
-+      "30m": 177,
-+      "1h": 177,
-+      "3h": 177,
-+      "6h": 177,
-+      "12h": 177,
-+      "24h": 2,
-+      "48h": 0
-+    },
-     "family_status": "UNAVAILABLE_FROZEN_FIELD",
-     "mechanism_status": "UNAVAILABLE_FROZEN_FIELD"
-   },
-@@ -171,6 +186,22 @@
-     "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
-     "change-logs/CODEX_REVIEW_PACKET_LATEST.patch",
-     "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-third-final-audit-repair.md",
--    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-fifth-final-audit-repair.md"
--  ]
-+    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-fifth-final-audit-repair.md",
-+    "change-logs/CHUNK002_SAME_PIPELINE_DEPENDENCY_GRAPH.json",
-+    "change-logs/TASK006_FROZEN_PYTHON_REGRESSION_AUDIT.json",
-+    "tests/fast-detach-5m-materialization-frozen-task002b.py"
-+  ],
-+  "code_commit": "PENDING_SIXTH_CODE_COMMIT",
-+  "validation_finished_at": "2026-09-26T22:00:00+08:00",
-+  "published_audit_commit": "e89bbe1d485af2c3a0963455856ed901638ff69c",
-+  "published_at": "2026-09-26T13:43:53Z",
-+  "sixth_materialization_readiness": {
-+    "converter_contract": "change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json",
-+    "dependency_graph": "change-logs/CHUNK002_SAME_PIPELINE_DEPENDENCY_GRAPH.json",
-+    "zstd_frozen_parser_integration": "PASS",
-+    "task006_regression": "BLOCKED_TEST_TASK_006_PY_NOT_RECOVERED",
-+    "research_queue_patch_sha256": "08889285c2640fa60c825467116fa8487da72014f7c4f8937915aa3744cd2de8",
-+    "research_queue_before_sha256": "0c9046bacbc8223e9201220289412369607711ff9607c7b479eb82ed634271db",
-+    "research_queue_after_sha256": "3290bffaee19564bad56958d3917ed044615df853dc9c1ce1a83dc251b75f5fa"
-+  }
- }
-diff --git a/change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json b/change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json
-index 6d168e5..a42eefe 100644
---- a/change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json
-+++ b/change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json
-@@ -1 +1 @@
--{"contract_version":"chunk002-master-to-task002b-cache-1","status":"CONVERTER_PINNED_MASTER_NOT_MATERIALIZED","generated_at":"2026-09-26T21:26:40+08:00","master":{"library_file_id":"file_000000003094820699862210d518fffa","expected_bytes":242535083,"source_sha256":null,"staging_path":"/tmp/fast-detach-v2-chunk002-materialization/metrics_5m_all_fixed.csv.gz","source_sha_lock":"PENDING_AUTHORIZED_FILE_LIBRARY_MATERIALIZATION"},"converter":{"path":"scripts/fast-detach-v2-materialize-5m-master.py","sha256":"b9a379b7a5c940ac46d69e135a2454fd2c88989fc07ca0c3e00570843c276e52","command":"python3 scripts/fast-detach-v2-materialize-5m-master.py --input /tmp/fast-detach-v2-chunk002-materialization/metrics_5m_all_fixed.csv.gz --output-dir /tmp/fast-detach-v2-chunk002-materialization/cache --compression zstd","destination_layout":"<output>/symbols/<SYMBOL>.csv.zst","utc_rule":"open_time_utc and close_time_utc are unix epoch milliseconds in UTC","metrics_present_rule":"emit all 11 Task-002B canonical fields; absent master metric values are empty","coverage_audit":"symbol count, rows, first/last UTC, per-file SHA, duplicate open-time count, unexpected 5m-gap count, deterministic aggregate SHA"},"task002b_consumer":{"path":"/var/lib/trade-workbench/research/fast-detach/v2/task_002_5m.py","sha256":"d4e8134d93ad386db0e6ef8ef332d07cdbe71fbcffb4beadbf5cce20d6ee402c","read_proof":"read_symbol_cache() accepts .csv.zst and run_chunk_barrier_evidence() reads <cache-dir>/symbols/<SYMBOL>.csv.zst","canonical_fields":["open_time_utc","close_time_utc","open","high","low","close","volume","quote_volume","trade_count","taker_buy_base_volume","taker_buy_quote_volume"]},"generator":{"path":"/var/lib/trade-workbench/research/fast-detach/v2/generate_fast_detach_v2.py","sha256":"cb61bd34bf7f5e184ad013b0c208abfc09f9db4918ee640081479f597bd1461a","delegated_task003_or_task004_external_dependencies":"NONE_OBSERVED_IN_FROZEN_GENERATOR_IMPORT_AND_INVOCATION_AUDIT"},"oos_guard":{"CHUNK002_EVER_ACCESSED_AFTER_PREREG":true,"CHUNK002_ACCESSED_THIS_REPAIR":false,"CHUNK002_REEVALUATED_THIS_REPAIR":false,"six_hypotheses_evaluated":false}}
-+{"contract_version":"chunk002-master-to-task002b-cache-2","status":"CONVERTER_PINNED_MASTER_NOT_MATERIALIZED","master":{"library_file_id":"file_000000003094820699862210d518fffa","expected_bytes":242535083,"source_sha256":null,"source_sha_lock":"PENDING_AUTHORIZED_FILE_LIBRARY_MATERIALIZATION"},"converter":{"path":"scripts/fast-detach-v2-materialize-5m-master.py","mode":"streaming-gzip-to-sqlite-disk-partition","compression":"zstd-only","destination_layout":"<output>/symbols/<SYMBOL>.csv.zst","publication":"sibling-staging-root plus atomic rename; TASK002B_CACHE_COMPLETE.json only after manifest","failure_cleanup":"staging root is recursively removed; destination must not pre-exist","preflight":"source ID/bytes/SHA, zstd CLI, disk projection, max-memory configuration","source_row_policy":"header requires symbol plus every Task-002B canonical field; timestamp milliseconds/5m alignment; all OHLC finite positive and structurally valid; close time relation valid; all metrics present and finite; hard fail otherwise"},"task002b_consumer":{"path":"/var/lib/trade-workbench/research/fast-detach/v2/task_002_5m.py","sha256":"d4e8134d93ad386db0e6ef8ef332d07cdbe71fbcffb4beadbf5cce20d6ee402c","parser":"read_symbol_cache -> _read_zstd_csv -> zstd -d -c","integration_validation":"PASS on VPS zstd 1.5.5 using frozen parser"},"dependency_graph":"change-logs/CHUNK002_SAME_PIPELINE_DEPENDENCY_GRAPH.json","oos_guard":{"CHUNK002_EVER_ACCESSED_AFTER_PREREG":true,"CHUNK002_ACCESSED_THIS_REPAIR":false,"CHUNK002_REEVALUATED_THIS_REPAIR":false,"six_hypotheses_evaluated":false}}
+@@ -191,10 +191,10 @@
+     "change-logs/TASK006_FROZEN_PYTHON_REGRESSION_AUDIT.json",
+     "tests/fast-detach-5m-materialization-frozen-task002b.py"
+   ],
+-  "code_commit": "PENDING_SIXTH_CODE_COMMIT",
+-  "validation_finished_at": "2026-09-26T22:00:00+08:00",
+-  "published_audit_commit": "e89bbe1d485af2c3a0963455856ed901638ff69c",
+-  "published_at": "2026-09-26T13:43:53Z",
++  "code_commit": "60da0184152dd22a775619cf46efe82b4be7864e",
++  "validation_finished_at": "2026-09-26T14:55:00Z",
++  "published_audit_commit": "5a33b9b3669138766d9db3391802f181722c7f04",
++  "published_at": "2026-09-26T14:55:00Z",
+   "sixth_materialization_readiness": {
+     "converter_contract": "change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json",
+     "dependency_graph": "change-logs/CHUNK002_SAME_PIPELINE_DEPENDENCY_GRAPH.json",
 diff --git a/change-logs/CODEX_REVIEW_PACKET_LATEST.md b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
-index 8bc82de..33f9371 100644
+index 33f9371..173a34d 100644
 --- a/change-logs/CODEX_REVIEW_PACKET_LATEST.md
 +++ b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
-@@ -1,10 +1,12 @@
--# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 FIFTH FINAL AUDIT REPAIR
--
--TASK_ID=ASTPS_FAST_DETACH_PR15_FIFTH_FINAL_AUDIT_REPAIR
--STATUS=CHANGES_REQUIRED_PENDING_SIXTH_FINAL_AUDIT
--STARTED_AT=2026-09-26T21:00:00+08:00
--FINISHED_AT=2026-09-26T21:34:03+08:00
--CODE_COMMIT_SHA=27a1a70049ef3990b3feb86eeedfe23036285164
-+# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 SIXTH FINAL AUDIT REPAIR
-+
-+TASK_ID=ASTPS_FAST_DETACH_PR15_SIXTH_FINAL_AUDIT_REPAIR
-+STATUS=CHANGES_REQUIRED_PENDING_SEVENTH_FINAL_AUDIT
-+VALIDATION_FINISHED_AT=2026-09-26T22:00:00+08:00
-+CODE_COMMIT=PENDING_SIXTH_CODE_COMMIT
-+AUDIT_ARTIFACT_COMMIT=PENDING_SIXTH_AUDIT_ARTIFACT_COMMIT
-+PREVIOUS_PUBLISHED_AUDIT_COMMIT=e89bbe1d485af2c3a0963455856ed901638ff69c
-+PUBLISHED_AT=2026-09-26T13:43:53Z
+@@ -3,10 +3,11 @@
+ TASK_ID=ASTPS_FAST_DETACH_PR15_SIXTH_FINAL_AUDIT_REPAIR
+ STATUS=CHANGES_REQUIRED_PENDING_SEVENTH_FINAL_AUDIT
+ VALIDATION_FINISHED_AT=2026-09-26T22:00:00+08:00
+-CODE_COMMIT=PENDING_SIXTH_CODE_COMMIT
+-AUDIT_ARTIFACT_COMMIT=PENDING_SIXTH_AUDIT_ARTIFACT_COMMIT
++CODE_COMMIT=60da0184152dd22a775619cf46efe82b4be7864e
++AUDIT_ARTIFACT_COMMIT=5a33b9b3669138766d9db3391802f181722c7f04
+ PREVIOUS_PUBLISHED_AUDIT_COMMIT=e89bbe1d485af2c3a0963455856ed901638ff69c
+-PUBLISHED_AT=2026-09-26T13:43:53Z
++PUBLISHED_AUDIT_COMMIT=5a33b9b3669138766d9db3391802f181722c7f04
++PUBLISHED_AT=2026-09-26T14:55:00Z
  BRANCH=codex/astps-fast-detach-handoff-20260926
  PR=https://github.com/alex43github/trade-workbench/pull/15
  READY_FOR_FINAL_AUDIT=false
-@@ -12,30 +14,29 @@ PROMOTION_DECISION=DO_NOT_PROMOTE
-
- ## SUMMARY
-
--The chunk002 5m master-to-per-symbol cache contract is now executable and pinned: the converter emits the exact Task-002B symbols/<SYMBOL>.csv.zst layout and 11 canonical fields, records UTC/missing-metric rules, and emits per-file plus deterministic aggregate integrity evidence. The canonical master remains intentionally unmaterialized in this repair, so no source/destination SHA is claimed and none of the six hypotheses was reevaluated. The exact RESEARCH_QUEUE.json RFC-6902 pending patch also passed an isolated revision-guarded dry run without writing Drive.
-+The 5m converter is now bounded-memory: gzip rows stream through a disk-backed SQLite partition, never an in-memory symbol map. It fail-closes on source identity/bytes/SHA/header/field/OHLC/time/duplicate violations; performs RAM/disk/output/staging preflight; writes only to a sibling isolated staging root; and atomically publishes only after deterministic manifest plus completion sentinel. A VPS zstd 1.5.5 integration test uses the frozen Task-002B read_symbol_cache parser on generated CSV.zst files.
-
- ## CHANGED FILES
-
--- scripts/fast-detach-v2-materialize-5m-master.py — deterministic master gzip CSV to Task-002B per-symbol cache converter and manifest writer; research-only; no Production impact.
--- tests/fast-detach-5m-materialization.test.mjs — fixture contract test for schema, cache layout, coverage, and aggregate manifest; no Production impact.
--- change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json — source/destination contract, hashes, command, consumer proof, and OOS guard; audit only.
--- change-logs/RESEARCH_QUEUE_JSON_PATCH_DRY_RUN.json — exact canonical-revision RFC-6902 dry-run evidence; Drive read-only.
--- change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json, change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md, docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md — synchronized fifth-audit facts and sole test-run counts; no Production impact.
--- docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-fifth-final-audit-repair.md — implementation plan; no runtime impact.
--- change-logs/CODEX_REVIEW_PACKET_LATEST.md and change-logs/CODEX_REVIEW_PACKET_LATEST.patch — review handoff evidence; no runtime impact.
-+- scripts/fast-detach-v2-materialize-5m-master.py — bounded-memory, fail-closed converter with staging cleanup and atomic publication; research only.
-+- tests/fast-detach-5m-materialization.test.mjs — local fail-closed CLI contract.
-+- tests/fast-detach-5m-materialization-frozen-task002b.py — VPS zstd/frozen-parser integration contract.
-+- change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json — converter safety/readiness contract.
-+- change-logs/CHUNK002_SAME_PIPELINE_DEPENDENCY_GRAPH.json — full Task-006/001/002B/003/004/schema/cache command pin.
-+- change-logs/TASK006_FROZEN_PYTHON_REGRESSION_AUDIT.json — exact missing-test regression blocker.
-+- change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json and RESEARCH_QUEUE_JSON_PATCH_DRY_RUN.json — byte-identical RFC-6902 patch evidence, Drive read-only.
-+- final audit manifest, reports, status, packet, and patch — audit provenance only.
-
--No changed file alters Production model/threshold, Bark behavior, or order execution path.
-+No changed file affects Production, threshold, model, Bark, or order paths.
-
- ## TEST RESULTS
-
--- Final focused Task-007/007B/007C/007D run: PASS, 42 total / 42 pass / 0 fail / 0 skip.
--- Final materialization fixture run: PASS, 1 total / 1 pass / 0 fail / 0 skip.
--- Final related structure-radar regression run: PASS, 88 total / 88 pass / 0 fail / 0 skip.
--- JSON validation for the fifth-audit machine-readable artifacts: PASS.
--- git diff --check: PASS after the packet-artifact commit.
--- Repository-wide npm test remains exit 1: 1098 total / 1010 pass / 88 fail / 0 skip; failures are pre-existing live-exchange/Bybit/trade/UI scope and are not represented as PASS.
--- Typecheck remains unavailable as a pass: 31 pre-existing app/lib errors; no Task-007 scope errors.
--- Fast-Detach Python regression remains UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY, not PASS.
-+- Focused Task-007/007B/007C/007D: PASS, 42 total / 42 pass / 0 fail / 0 skip.
-+- Frozen VPS zstd 1.5.5 + Task-002B read_symbol_cache integration: PASS.
-+- Local materialization CLI contract: PASS, 1/1.
-+- Python syntax checks: PASS.
-+- Related structure-radar regression: PASS, 88 total / 88 pass / 0 fail / 0 skip.
-+- Task-006 98-test regression: NOT RUN; exact frozen test_task_006.py source is missing from checkout, VPS research root, and isolated workspace.
-
- ## DATA INVARIANTS
-
-@@ -49,6 +50,17 @@ HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b1
- HISTORICAL_FROZEN_UNCHANGED=true
- LIVE_FORWARD_EAP_EVENTS=0
-
-+## DRIVE PATCH DRY RUN
-+
-+CANONICAL_BEFORE_SHA=0c9046bacbc8223e9201220289412369607711ff9607c7b479eb82ed634271db
-+REVISION_GUARD=0B-0oAJIjSHwhNG1aYjBIRnhMZUxiY3FBZEcwNlNDVVRlZlZrPQ
-+PATCH_SHA256=08889285c2640fa60c825467116fa8487da72014f7c4f8937915aa3744cd2de8
-+PATCH_APPLICATION=PASS
-+JSON_PARSE=PASS
-+EXISTING_KEYS_PRESERVED=true
-+AFTER_SHA=3290bffaee19564bad56958d3917ed044615df853dc9c1ce1a83dc251b75f5fa
-+DRIVE_WRITE=false
-+
- ## PRODUCTION SIDE EFFECTS
-
- CHUNK002_EVER_ACCESSED_AFTER_PREREG=true
-@@ -64,17 +76,9 @@ DEPLOYED=false
- MERGED=false
- PERSISTENT_EAP_COLLECTOR_STARTED=false
-
--## KNOWN LIMITATIONS
--
--- Master metrics_5m_all_fixed.csv.gz has not been materialized into the authorized staging destination; source SHA, cache file SHAs, coverage counts, and aggregate destination SHA are intentionally pending.
--- Task-002B consumer proof is source-audited and fixture-tested, not exercised against the canonical 242535083-byte master.
--- No auditable runtime lineage from Production Final Action to immutable permission ledger; no prospective EAP cohort or collector.
--- chunk002 valid same-pipeline unified schema and temporal OOS are still DATA_BLOCKED.
--- Drive writeback was not performed; the queue patch was dry-run only.
--
- ## BLOCKERS
-
--["CANONICAL_5M_MASTER_NOT_MATERIALIZED","REAL_EAP_OBSERVER_NOT_CONNECTED","PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE","PROSPECTIVE_EAP_COHORT_ZERO","CHUNK002_SAME_PIPELINE_UNIFIED_SCHEMA_NOT_MATERIALIZED","NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER","DRIVE_WRITEBACK_NOT_PERFORMED","FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE"]
-+["CANONICAL_5M_MASTER_NOT_MATERIALIZED","TASK006_FROZEN_TEST_TASK_006_PY_NOT_RECOVERED","REAL_EAP_OBSERVER_NOT_CONNECTED","PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE","PROSPECTIVE_EAP_COHORT_ZERO","CHUNK002_SAME_PIPELINE_UNIFIED_SCHEMA_NOT_MATERIALIZED","NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER","DRIVE_WRITEBACK_NOT_PERFORMED"]
-
--APPROVAL_REQUIRED=ChatGPT Sixth Final Audit
--RECOMMENDED_NEXT_TASK=Reviewer-directed canonical master materialization only; retain OOS, collector, deployment, merge, promotion, and Production changes as blocked.
-+APPROVAL_REQUIRED=ChatGPT Seventh Final Audit
-+RECOMMENDED_NEXT_TASK=Reviewer-directed canonical-master materialization only; no OOS evaluation, collector, Production change, deploy, merge, or promotion.
-diff --git a/change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json b/change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json
-index 002576d..6b13fb4 100644
---- a/change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json
-+++ b/change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json
-@@ -1,12 +1 @@
--{"manifest_version":"astps-fast-detach-pr15-fourth-final-audit-drive-writeback-1","status":"NOT_WRITTEN_FORMALLY_RECONCILED","generated_at":"2026-09-26T17:11:04+08:00","generated_at_source":"local-evidence-observed-at-generation","git_source_commit":"393ca3793e85f9c6c7db7e17a40634a71f70edd1","writeback_performed":false,"canonical_parents":{"00_CURRENT":"1dY641toqjs9m9wndqHTRq52xzoX4SpLo","01_LIVE":"1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq","02_RESEARCH":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","03_MODEL_REGISTRY":"1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM"},"required_canonical_files":[
--{"canonical_path":"00_CURRENT/RESEARCH_STATE.md","drive_file_id":"1sNlS9V0Rmz_w_BkB7cQNMBCsHelhmIyc","parent_id":"1dY641toqjs9m9wndqHTRq52xzoX4SpLo","current_modified_time":"2026-09-16T10:28:10.690Z","revision_guard":"0B-0oAJIjSHwhR2xvRk9PZnpSSW5mTG1wOGFmeE5pUWU4ZTQ0PQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"PR15 FOURTH FINAL AUDIT REPAIR\nSource Git commit: 393ca3793e85f9c6c7db7e17a40634a71f70edd1\nEDP time/price are frozen from the exact detector decision bar used by event_id; delayed writes cannot select a later bar.\nLIVE_FORWARD_EAP_EVENTS=0; no auditable Production Final Action-to-ledger lineage exists.\nchunk002 OOS remains DATA_BLOCKED pending reproducible 5m materialization; no hypothesis was re-evaluated.\nREADY_FOR_FINAL_AUDIT=false; PROMOTION_DECISION=DO_NOT_PROMOTE; no production behavior changed.\n","not_written_reason":"Drive remained read-only; apply only if revision_guard matches."},
--{"canonical_path":"02_RESEARCH/REGRESSION_RESULTS.md","drive_file_id":"1cs5zaqLwTpfLLecUXtbwJ8zqhJIAxeIh","parent_id":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","current_modified_time":"2026-09-16T10:28:21.762Z","revision_guard":"0B-0oAJIjSHwhRE5yZ2hJakxJdUFrMWY3ZUtNOVlQSy9XQ2VjPQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"PR15 Fourth Final Audit — EDP decision-bar identity regression\nSource Git commit: 393ca3793e85f9c6c7db7e17a40634a71f70edd1\nRegression queues signal bar A, closes later bar B before persistence, and proves EDP UTC/price remain A. PASS.\nNo threshold/model/feature combination changed.\n","not_written_reason":"Drive remained read-only; apply only if revision_guard matches."},
--{"canonical_path":"02_RESEARCH/CURRENT_CANDIDATE_MODEL.md","drive_file_id":"1LoHtmTqhDL6jY4D6XzH5jU-SCcZOyQu1","parent_id":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","current_modified_time":"2026-09-16T10:28:33.066Z","revision_guard":"0B-0oAJIjSHwhVHN3ZzVBWEh3cFVucEVJZk1vdU9kOHZweWNRPQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"ASTPS FAST-DETACH PR15 Fourth Final Audit status\nPROMOTION_DECISION=DO_NOT_PROMOTE. No candidate threshold, feature, model, or execution rule changed. Execution-level evaluation remains blocked pending immutable Production Final Action-to-ledger lineage and prospective EAP evidence.\n","not_written_reason":"Research-status append only; Drive remained read-only."},
--{"canonical_path":"02_RESEARCH/RESEARCH_QUEUE.md","drive_file_id":"19w_CkM9QwngpELURGYpi37CYf9pRCGxF","parent_id":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","current_modified_time":"2026-09-16T10:28:43.791Z","revision_guard":"0B-0oAJIjSHwhUXNJUHg1TEVqYkZyT1RYNlBvUFRoN1FRT0FvPQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"FAST-DETACH PR15 follow-up gate\n1. Materialize File Library file_000000003094820699862210d518fffa, lock bytes/SHA, and verify frozen Task-001/002B/003/004 consumption.\n2. Do not evaluate chunk002 hypotheses until that lock exists.\n3. Do not start EAP collection before immutable Production Final Action-to-ledger lineage.\n","not_written_reason":"Drive remained read-only; reviewer-directed queue addition only."},
--{"canonical_path":"02_RESEARCH/RESEARCH_QUEUE.json","drive_file_id":"1uSR58EXgsGnbdrbqI_du785qIpCdSu78","parent_id":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","current_modified_time":"2026-09-16T10:28:59.290Z","revision_guard":"0B-0oAJIjSHwhNG1aYjBIRnhMZUxiY3FBZEcwNlNDVVRlZlZrPQ","operation":"JSON_PATCH_PENDING","exact_intended_json_patch":[{"op":"add","path":"/astps_fast_detach_pr15","value":{"status":"CHANGES_REQUIRED_PENDING_REVIEW","source_git_commit":"393ca3793e85f9c6c7db7e17a40634a71f70edd1","ready_for_final_audit":false,"promotion_decision":"DO_NOT_PROMOTE","next_action":"Materialize canonical 5m File Library source with SHA lock before chunk002 OOS.","eap_collector":"BLOCKED_PENDING_IMMUTABLE_PRODUCTION_FINAL_ACTION_PERMISSION_LEDGER_LINEAGE"}}],"not_written_reason":"Fetched canonical JSON has no astps_fast_detach_pr15 member; deterministic RFC-6902 patch is revision-guarded but Drive is read-only."},
--{"canonical_path":"00_CURRENT/MODEL_CURRENT.md","drive_file_id":"1pC40sbP9oj82At8G6aBjZcGzY2BfTnaa","parent_id":"1dY641toqjs9m9wndqHTRq52xzoX4SpLo","current_modified_time":"2026-09-12T16:17:09.988Z","revision_guard":"0B-0oAJIjSHwhcktKbmV2SSt4SWloNmtpSk9qR284OFFwcXNvPQ","operation":"NO_WRITE_PRODUCTION_BASELINE","exact_intended_patch_or_append_payload":[],"not_written_reason":"Production baseline must not change."},
--{"canonical_path":"03_MODEL_REGISTRY/MODEL_REGISTRY.json","drive_file_id":"16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp","parent_id":"1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM","current_modified_time":"2026-09-13T10:14:26.002Z","revision_guard":"0B-0oAJIjSHwhZHVJWjF1TnNDbmRRYkpmT1JjZXg0Vi80ZWo0PQ","operation":"NO_WRITE_PRODUCTION_REGISTRY","exact_intended_patch_or_append_payload":[],"not_written_reason":"No production registry mutation is authorized."},
--{"canonical_path":"03_MODEL_REGISTRY/CHANGELOG.md","drive_file_id":"10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV","parent_id":"1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM","current_modified_time":"2026-09-13T10:14:30.986Z","revision_guard":"0B-0oAJIjSHwhVnZXdmRabWN3QmtSQlFCcHZJUjlJNU94bHQ0PQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"PR15 FOURTH FINAL AUDIT REPAIR\nSource Git commit: 393ca3793e85f9c6c7db7e17a40634a71f70edd1\nEDP is bound to the original detector decision bar with delayed-write regression coverage.\nREADY_FOR_FINAL_AUDIT=false; DO_NOT_PROMOTE; no Production model/threshold/order/Bark change.\n","not_written_reason":"Drive remained read-only; apply only if revision_guard matches."},
--{"canonical_path":"01_LIVE/LIVE_CASES.jsonl","drive_file_id":"18oMIBSprBIAHO9-FY8WQzD907VM1XiU9","parent_id":"1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq","current_modified_time":"2026-09-12T15:16:46.694Z","revision_guard":"0B-0oAJIjSHwOWhySENWeVVLclJ4cjVzdFVvQjNFR2htbmhVPQ","operation":"NO_APPEND","exact_intended_patch_or_append_payload":[],"not_written_reason":"No real permission decision/live case was observed."},
--{"canonical_path":"01_LIVE/LIVE_OUTCOMES.jsonl","drive_file_id":"1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4","parent_id":"1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq","current_modified_time":"2026-09-13T04:05:43.466Z","revision_guard":"0B-0oAJIjSHwR21HUkdnN2pWQXFzOTgzNitISUFBd3M1K0xRPQ","operation":"NO_APPEND","exact_intended_patch_or_append_payload":[],"not_written_reason":"No new natural outcome row was produced."}
--],"not_applicable_canonical_files":[{"canonical_path":"02_RESEARCH/REJECTED_RULES.md","drive_file_id":"14Paa-eG1vHNbcmN0u_aZ_ldG8B1H-dWR","operation":"NO_WRITE_NOT_APPLICABLE","not_written_reason":"No trading rule was rejected this round."}]}
-+{"manifest_version":"astps-fast-detach-pr15-fourth-final-audit-drive-writeback-1","status":"NOT_WRITTEN_FORMALLY_RECONCILED","generated_at":"2026-09-26T17:11:04+08:00","generated_at_source":"local-evidence-observed-at-generation","git_source_commit":"e89bbe1d485af2c3a0963455856ed901638ff69c","writeback_performed":false,"canonical_parents":{"00_CURRENT":"1dY641toqjs9m9wndqHTRq52xzoX4SpLo","01_LIVE":"1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq","02_RESEARCH":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","03_MODEL_REGISTRY":"1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM"},"required_canonical_files":[{"canonical_path":"00_CURRENT/RESEARCH_STATE.md","drive_file_id":"1sNlS9V0Rmz_w_BkB7cQNMBCsHelhmIyc","parent_id":"1dY641toqjs9m9wndqHTRq52xzoX4SpLo","current_modified_time":"2026-09-16T10:28:10.690Z","revision_guard":"0B-0oAJIjSHwhR2xvRk9PZnpSSW5mTG1wOGFmeE5pUWU4ZTQ0PQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"PR15 FOURTH FINAL AUDIT REPAIR\nSource Git commit: 393ca3793e85f9c6c7db7e17a40634a71f70edd1\nEDP time/price are frozen from the exact detector decision bar used by event_id; delayed writes cannot select a later bar.\nLIVE_FORWARD_EAP_EVENTS=0; no auditable Production Final Action-to-ledger lineage exists.\nchunk002 OOS remains DATA_BLOCKED pending reproducible 5m materialization; no hypothesis was re-evaluated.\nREADY_FOR_FINAL_AUDIT=false; PROMOTION_DECISION=DO_NOT_PROMOTE; no production behavior changed.\n","not_written_reason":"Drive remained read-only; apply only if revision_guard matches."},{"canonical_path":"02_RESEARCH/REGRESSION_RESULTS.md","drive_file_id":"1cs5zaqLwTpfLLecUXtbwJ8zqhJIAxeIh","parent_id":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","current_modified_time":"2026-09-16T10:28:21.762Z","revision_guard":"0B-0oAJIjSHwhRE5yZ2hJakxJdUFrMWY3ZUtNOVlQSy9XQ2VjPQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"PR15 Fourth Final Audit — EDP decision-bar identity regression\nSource Git commit: 393ca3793e85f9c6c7db7e17a40634a71f70edd1\nRegression queues signal bar A, closes later bar B before persistence, and proves EDP UTC/price remain A. PASS.\nNo threshold/model/feature combination changed.\n","not_written_reason":"Drive remained read-only; apply only if revision_guard matches."},{"canonical_path":"02_RESEARCH/CURRENT_CANDIDATE_MODEL.md","drive_file_id":"1LoHtmTqhDL6jY4D6XzH5jU-SCcZOyQu1","parent_id":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","current_modified_time":"2026-09-16T10:28:33.066Z","revision_guard":"0B-0oAJIjSHwhVHN3ZzVBWEh3cFVucEVJZk1vdU9kOHZweWNRPQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"ASTPS FAST-DETACH PR15 Fourth Final Audit status\nPROMOTION_DECISION=DO_NOT_PROMOTE. No candidate threshold, feature, model, or execution rule changed. Execution-level evaluation remains blocked pending immutable Production Final Action-to-ledger lineage and prospective EAP evidence.\n","not_written_reason":"Research-status append only; Drive remained read-only."},{"canonical_path":"02_RESEARCH/RESEARCH_QUEUE.md","drive_file_id":"19w_CkM9QwngpELURGYpi37CYf9pRCGxF","parent_id":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","current_modified_time":"2026-09-16T10:28:43.791Z","revision_guard":"0B-0oAJIjSHwhUXNJUHg1TEVqYkZyT1RYNlBvUFRoN1FRT0FvPQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"FAST-DETACH PR15 follow-up gate\n1. Materialize File Library file_000000003094820699862210d518fffa, lock bytes/SHA, and verify frozen Task-001/002B/003/004 consumption.\n2. Do not evaluate chunk002 hypotheses until that lock exists.\n3. Do not start EAP collection before immutable Production Final Action-to-ledger lineage.\n","not_written_reason":"Drive remained read-only; reviewer-directed queue addition only."},{"canonical_path":"02_RESEARCH/RESEARCH_QUEUE.json","drive_file_id":"1uSR58EXgsGnbdrbqI_du785qIpCdSu78","parent_id":"1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp","current_modified_time":"2026-09-16T10:28:59.290Z","revision_guard":"0B-0oAJIjSHwhNG1aYjBIRnhMZUxiY3FBZEcwNlNDVVRlZlZrPQ","operation":"JSON_PATCH_PENDING","exact_intended_json_patch":[{"op":"add","path":"/astps_fast_detach_pr15","value":{"status":"CHANGES_REQUIRED_PENDING_SEVENTH_FINAL_AUDIT","source_git_commit":"e89bbe1d485af2c3a0963455856ed901638ff69c","ready_for_final_audit":false,"promotion_decision":"DO_NOT_PROMOTE","next_action":"Materialize canonical 5m File Library source only after source SHA lock and frozen same-pipeline dependency graph validation.","eap_collector":"BLOCKED_PENDING_IMMUTABLE_PRODUCTION_FINAL_ACTION_PERMISSION_LEDGER_LINEAGE","chunk002_hypotheses_rerun":false}}],"not_written_reason":"Exact RFC-6902 patch was dry-run against this revision guard; Drive remained read-only.","patch_sha256":"08889285c2640fa60c825467116fa8487da72014f7c4f8937915aa3744cd2de8"},{"canonical_path":"00_CURRENT/MODEL_CURRENT.md","drive_file_id":"1pC40sbP9oj82At8G6aBjZcGzY2BfTnaa","parent_id":"1dY641toqjs9m9wndqHTRq52xzoX4SpLo","current_modified_time":"2026-09-12T16:17:09.988Z","revision_guard":"0B-0oAJIjSHwhcktKbmV2SSt4SWloNmtpSk9qR284OFFwcXNvPQ","operation":"NO_WRITE_PRODUCTION_BASELINE","exact_intended_patch_or_append_payload":[],"not_written_reason":"Production baseline must not change."},{"canonical_path":"03_MODEL_REGISTRY/MODEL_REGISTRY.json","drive_file_id":"16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp","parent_id":"1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM","current_modified_time":"2026-09-13T10:14:26.002Z","revision_guard":"0B-0oAJIjSHwhZHVJWjF1TnNDbmRRYkpmT1JjZXg0Vi80ZWo0PQ","operation":"NO_WRITE_PRODUCTION_REGISTRY","exact_intended_patch_or_append_payload":[],"not_written_reason":"No production registry mutation is authorized."},{"canonical_path":"03_MODEL_REGISTRY/CHANGELOG.md","drive_file_id":"10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV","parent_id":"1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM","current_modified_time":"2026-09-13T10:14:30.986Z","revision_guard":"0B-0oAJIjSHwhVnZXdmRabWN3QmtSQlFCcHZJUjlJNU94bHQ0PQ","operation":"APPEND_TEXT_PENDING","exact_intended_append_payload":"PR15 FOURTH FINAL AUDIT REPAIR\nSource Git commit: 393ca3793e85f9c6c7db7e17a40634a71f70edd1\nEDP is bound to the original detector decision bar with delayed-write regression coverage.\nREADY_FOR_FINAL_AUDIT=false; DO_NOT_PROMOTE; no Production model/threshold/order/Bark change.\n","not_written_reason":"Drive remained read-only; apply only if revision_guard matches."},{"canonical_path":"01_LIVE/LIVE_CASES.jsonl","drive_file_id":"18oMIBSprBIAHO9-FY8WQzD907VM1XiU9","parent_id":"1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq","current_modified_time":"2026-09-12T15:16:46.694Z","revision_guard":"0B-0oAJIjSHwOWhySENWeVVLclJ4cjVzdFVvQjNFR2htbmhVPQ","operation":"NO_APPEND","exact_intended_patch_or_append_payload":[],"not_written_reason":"No real permission decision/live case was observed."},{"canonical_path":"01_LIVE/LIVE_OUTCOMES.jsonl","drive_file_id":"1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4","parent_id":"1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq","current_modified_time":"2026-09-13T04:05:43.466Z","revision_guard":"0B-0oAJIjSHwR21HUkdnN2pWQXFzOTgzNitISUFBd3M1K0xRPQ","operation":"NO_APPEND","exact_intended_patch_or_append_payload":[],"not_written_reason":"No new natural outcome row was produced."}],"not_applicable_canonical_files":[{"canonical_path":"02_RESEARCH/REJECTED_RULES.md","drive_file_id":"14Paa-eG1vHNbcmN0u_aZ_ldG8B1H-dWR","operation":"NO_WRITE_NOT_APPLICABLE","not_written_reason":"No trading rule was rejected this round."}]}
-diff --git a/change-logs/RESEARCH_QUEUE_JSON_PATCH_DRY_RUN.json b/change-logs/RESEARCH_QUEUE_JSON_PATCH_DRY_RUN.json
-index 49fbc2f..558ceb1 100644
---- a/change-logs/RESEARCH_QUEUE_JSON_PATCH_DRY_RUN.json
-+++ b/change-logs/RESEARCH_QUEUE_JSON_PATCH_DRY_RUN.json
-@@ -1 +1 @@
--{"dry_run_version":"research-queue-rfc6902-1","drive_file_id":"1uSR58EXgsGnbdrbqI_du785qIpCdSu78","revision_guard":"0B-0oAJIjSHwhNG1aYjBIRnhMZUxiY3FBZEcwNlNDVVRlZlZrPQ","before_sha256":"0c9046bacbc8223e9201220289412369607711ff9607c7b479eb82ed634271db","after_sha256":"a209d3b91e72b0bb53c0fabc51b442b7f36289409f96e3b2c50cdcd76854fb06","patch":[{"op":"add","path":"/astps_fast_detach_pr15","value":{"status":"CHANGES_REQUIRED_PENDING_REVIEW","ready_for_final_audit":false,"promotion_decision":"DO_NOT_PROMOTE"}}],"patch_application":"PASS","json_parse":"PASS","existing_keys_preserved":true,"drive_write_performed":false}
-+{"dry_run_version":"research-queue-rfc6902-2","drive_file_id":"1uSR58EXgsGnbdrbqI_du785qIpCdSu78","revision_guard":"0B-0oAJIjSHwhNG1aYjBIRnhMZUxiY3FBZEcwNlNDVVRlZlZrPQ","before_sha256":"0c9046bacbc8223e9201220289412369607711ff9607c7b479eb82ed634271db","after_sha256":"3290bffaee19564bad56958d3917ed044615df853dc9c1ce1a83dc251b75f5fa","patch_sha256":"08889285c2640fa60c825467116fa8487da72014f7c4f8937915aa3744cd2de8","patch":[{"op":"add","path":"/astps_fast_detach_pr15","value":{"status":"CHANGES_REQUIRED_PENDING_SEVENTH_FINAL_AUDIT","source_git_commit":"e89bbe1d485af2c3a0963455856ed901638ff69c","ready_for_final_audit":false,"promotion_decision":"DO_NOT_PROMOTE","next_action":"Materialize canonical 5m File Library source only after source SHA lock and frozen same-pipeline dependency graph validation.","eap_collector":"BLOCKED_PENDING_IMMUTABLE_PRODUCTION_FINAL_ACTION_PERMISSION_LEDGER_LINEAGE","chunk002_hypotheses_rerun":false}}],"patch_application":"PASS","json_parse":"PASS","existing_keys_preserved":true,"drive_write_performed":false}
-diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
-index 28572e2..a93c515 100644
---- a/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
-+++ b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
-@@ -19,6 +19,9 @@ This revision addresses the latest PR #15 FIFTH FINAL AUDIT CHANGES REQUIRED com
-
- ## Implemented repairs
-
-+11. Sixth-audit materialization readiness replaces the in-memory master grouping with disk-backed streaming partitioning. It validates canonical-source identity/SHA/schema and data integrity before staging, then atomically publishes complete zstd caches only after deterministic manifest/sentinel generation. The frozen Task-002B parser successfully read a real generated `.csv.zst` in isolated VPS validation.
-+12. The same-pipeline dependency graph now explicitly includes Task-006 orchestration, Task-003 and Task-004 dynamic imports, expected unified schema, cache contracts, and the isolated command. The 98-test Task-006 suite cannot run because its frozen `test_task_006.py` artifact is absent from every audited source root; this is recorded as a blocker, not PASS.
-+
- 1. `EDP_TO_EAP_MIN` uses the immutable EDP timestamp contract `execution_context.edp_utc`; the legacy `first_detected_at_utc` fallback is limited to discovery-only summaries, and the EAP decision bar is never used as the start time. A later-bar test proves the full interval.
- 2. EAP classification is fail-closed: `GRANTED -> EAP_OBSERVED`, explicit `DENIED -> EAP_CONFIRMED_ABSENT`, all unknown/pending/error/malformed/no-decision states -> `EAP_NOT_OBSERVED`.
- 3. LIVE_FORWARD EAP counts and 6H denominators use only immutable `EAP_GRANTED` ledger event IDs. Legacy snapshot EAP fields are ignored. EAP delay uses the immutable transition timestamp.
-diff --git a/scripts/fast-detach-v2-materialize-5m-master.py b/scripts/fast-detach-v2-materialize-5m-master.py
-index a88637b..93f44a1 100644
---- a/scripts/fast-detach-v2-materialize-5m-master.py
-+++ b/scripts/fast-detach-v2-materialize-5m-master.py
-@@ -1,5 +1,6 @@
- #!/usr/bin/env python3
--"""Convert a frozen gzip CSV master into the Task-002B per-symbol cache layout."""
-+"""Fail-closed, bounded-memory master-to-Task-002B cache materializer."""
-+
- from __future__ import annotations
-
- import argparse
-@@ -7,71 +8,232 @@ import csv
- import gzip
- import hashlib
- import json
-+import math
-+import os
-+import shutil
-+import sqlite3
- import subprocess
- import tempfile
--from collections import defaultdict
- from pathlib import Path
-
--FIELDS = ("open_time_utc", "close_time_utc", "open", "high", "low", "close", "volume", "quote_volume", "trade_count", "taker_buy_base_volume", "taker_buy_quote_volume")
-+
-+FIELDS = (
-+    "open_time_utc", "close_time_utc", "open", "high", "low", "close",
-+    "volume", "quote_volume", "trade_count", "taker_buy_base_volume",
-+    "taker_buy_quote_volume",
-+)
- INTERVAL_MS = 300_000
-+SCHEMA_VERSION = "fast-detach-v2-master-to-task002b-cache-2"
-+
-+
-+class MaterializationError(RuntimeError):
-+    """A source or publication contract failed before a cache became visible."""
-+
-+
-+def sha256_file(path: Path) -> str:
-+    digest = hashlib.sha256()
-+    with path.open("rb") as handle:
-+        for block in iter(lambda: handle.read(1024 * 1024), b""):
-+            digest.update(block)
-+    return digest.hexdigest()
-+
-+
-+def canonical_json(value: object) -> bytes:
-+    return (json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
-+
-+
-+def require_zstd() -> str:
-+    executable = shutil.which("zstd")
-+    if not executable:
-+        raise MaterializationError("ZSTD_CLI_REQUIRED")
-+    subprocess.run([executable, "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-+    return executable
-+
-+
-+def available_memory_bytes() -> int:
-+    """Return an OS-reported available-memory figure, or fail closed."""
-+    meminfo = Path("/proc/meminfo")
-+    if not meminfo.is_file():
-+        raise MaterializationError("AVAILABLE_RAM_UNAVAILABLE")
-+    values = {}
-+    for line in meminfo.read_text(encoding="utf-8").splitlines():
-+        key, value = line.split(":", 1)
-+        values[key] = int(value.strip().split()[0]) * 1024
-+    available = values.get("MemAvailable")
-+    if available is None:
-+        raise MaterializationError("AVAILABLE_RAM_UNAVAILABLE")
-+    return available
-+
-+
-+def preflight(source: Path, destination: Path, expected_bytes: int, minimum_free: int, max_memory_mib: int) -> dict[str, int]:
-+    if not source.is_file():
-+        raise MaterializationError(f"SOURCE_NOT_FOUND:{source}")
-+    if source.stat().st_size != expected_bytes:
-+        raise MaterializationError(f"SOURCE_BYTES_MISMATCH:{source.stat().st_size}!={expected_bytes}")
-+    if max_memory_mib < 64:
-+        raise MaterializationError("MAX_MEMORY_MIB_TOO_LOW")
-+    parent = destination.parent
-+    parent.mkdir(parents=True, exist_ok=True)
-+    available_ram = available_memory_bytes()
-+    memory_bound = max_memory_mib * 1024 * 1024
-+    if available_ram < memory_bound:
-+        raise MaterializationError(f"RAM_PREFLIGHT_FAILED:available={available_ram}:bound={memory_bound}")
-+    free = shutil.disk_usage(parent).free
-+    estimated_staging = expected_bytes * 2
-+    estimated_output = expected_bytes
-+    projected = estimated_staging + estimated_output + minimum_free
-+    if free < projected:
-+        raise MaterializationError(f"DISK_PREFLIGHT_FAILED:free={free}:required={projected}")
-+    if destination.exists():
-+        raise MaterializationError(f"DESTINATION_ALREADY_EXISTS:{destination}")
-+    return {"available_ram_bytes": available_ram, "peak_memory_bound_bytes": memory_bound, "free_disk_bytes": free, "estimated_staging_bytes": estimated_staging, "estimated_output_cache_bytes": estimated_output, "projected_required_bytes": projected}
-
--def sha(path: Path) -> str:
--    return hashlib.sha256(path.read_bytes()).hexdigest()
--
--def read_master(path: Path):
--    groups = defaultdict(dict)
--    with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
--        for source in csv.DictReader(handle):
--            symbol = (source.get("symbol") or source.get("Symbol") or "").upper().strip()
--            timestamp = source.get("open_time_utc") or source.get("open_time_ms") or source.get("openTime")
--            if not symbol or timestamp is None:
--                raise ValueError("master row requires symbol and open_time_utc")
--            open_ms = int(timestamp)
--            if open_ms in groups[symbol]:
--                raise ValueError(f"duplicate open time: {symbol}:{open_ms}")
--            groups[symbol][open_ms] = {
--                "open_time_utc": open_ms,
--                "close_time_utc": int(source.get("close_time_utc") or source.get("close_time_ms") or open_ms + INTERVAL_MS - 1),
--                **{field: source.get(field, "") for field in FIELDS[2:]},
--            }
--    return groups
--
--def write_symbol(path: Path, rows, compression: str):
--    path.parent.mkdir(parents=True, exist_ok=True)
--    with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=path.parent, delete=False) as handle:
--        writer = csv.DictWriter(handle, fieldnames=FIELDS, lineterminator="\n")
--        writer.writeheader()
--        writer.writerows(rows)
--        plain = Path(handle.name)
--    if compression == "zstd":
--        subprocess.run(["zstd", "-q", "-19", "-T1", "-f", str(plain), "-o", str(path)], check=True)
--        plain.unlink()
--    else:
--        plain.replace(path)
--
--def main():
-+
-+def parse_int(value: object, *, field: str, line: int) -> int:
-+    if value is None or str(value).strip() == "":
-+        raise MaterializationError(f"REQUIRED_FIELD_MISSING:{field}:line={line}")
-+    try:
-+        return int(str(value))
-+    except ValueError as exc:
-+        raise MaterializationError(f"INVALID_INTEGER:{field}:line={line}") from exc
-+
-+
-+def parse_number(value: object, *, field: str, line: int, positive: bool) -> str:
-+    if value is None or str(value).strip() == "":
-+        raise MaterializationError(f"REQUIRED_FIELD_MISSING:{field}:line={line}")
-+    try:
-+        number = float(str(value))
-+    except ValueError as exc:
-+        raise MaterializationError(f"INVALID_NUMBER:{field}:line={line}") from exc
-+    if not math.isfinite(number) or (number <= 0 if positive else number < 0):
-+        raise MaterializationError(f"INVALID_NUMBER_RANGE:{field}:line={line}")
-+    return str(value)
-+
-+
-+def open_database(path: Path) -> sqlite3.Connection:
-+    connection = sqlite3.connect(path)
-+    connection.execute("PRAGMA journal_mode=OFF")
-+    connection.execute("PRAGMA synchronous=FULL")
-+    connection.execute("PRAGMA temp_store=FILE")
-+    connection.execute("CREATE TABLE bars (symbol TEXT NOT NULL, open_time_utc INTEGER NOT NULL, close_time_utc INTEGER NOT NULL, open TEXT NOT NULL, high TEXT NOT NULL, low TEXT NOT NULL, close TEXT NOT NULL, volume TEXT NOT NULL, quote_volume TEXT NOT NULL, trade_count INTEGER NOT NULL, taker_buy_base_volume TEXT NOT NULL, taker_buy_quote_volume TEXT NOT NULL, PRIMARY KEY(symbol, open_time_utc))")
-+    return connection
-+
-+
-+def stream_validate_and_partition(source: Path, database: sqlite3.Connection) -> tuple[int, int]:
-+    rows = 0
-+    with gzip.open(source, "rt", encoding="utf-8", newline="") as handle:
-+        reader = csv.DictReader(handle)
-+        expected = {"symbol", *FIELDS}
-+        actual = set(reader.fieldnames or ())
-+        missing = sorted(expected - actual)
-+        if missing:
-+            raise MaterializationError(f"MASTER_HEADER_MISSING:{','.join(missing)}")
-+        for line, raw in enumerate(reader, 2):
-+            symbol = str(raw.get("symbol") or "").upper().strip()
-+            if not symbol:
-+                raise MaterializationError(f"REQUIRED_FIELD_MISSING:symbol:line={line}")
-+            open_ms = parse_int(raw.get("open_time_utc"), field="open_time_utc", line=line)
-+            close_ms = parse_int(raw.get("close_time_utc"), field="close_time_utc", line=line)
-+            if open_ms < 1_000_000_000_000 or open_ms % INTERVAL_MS != 0:
-+                raise MaterializationError(f"TIMESTAMP_UNIT_OR_ALIGNMENT_INVALID:open_time_utc:line={line}")
-+            if close_ms != open_ms + INTERVAL_MS - 1:
-+                raise MaterializationError(f"OPEN_CLOSE_TIME_RELATION_INVALID:line={line}")
-+            values = {field: parse_number(raw.get(field), field=field, line=line, positive=field in {"open", "high", "low", "close"}) for field in FIELDS[2:] if field != "trade_count"}
-+            trade_count = parse_int(raw.get("trade_count"), field="trade_count", line=line)
-+            if trade_count < 0:
-+                raise MaterializationError(f"INVALID_NUMBER_RANGE:trade_count:line={line}")
-+            high, low, opened, closed = map(float, (values["high"], values["low"], values["open"], values["close"]))
-+            if high < max(opened, closed) or low > min(opened, closed) or high < low:
-+                raise MaterializationError(f"OHLC_RELATION_INVALID:line={line}")
-+            try:
-+                database.execute("INSERT INTO bars VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (symbol, open_ms, close_ms, values["open"], values["high"], values["low"], values["close"], values["volume"], values["quote_volume"], trade_count, values["taker_buy_base_volume"], values["taker_buy_quote_volume"]))
-+            except sqlite3.IntegrityError as exc:
-+                raise MaterializationError(f"DUPLICATE_SYMBOL_OPEN_TIME:{symbol}:{open_ms}") from exc
-+            rows += 1
-+    database.commit()
-+    symbols = database.execute("SELECT COUNT(DISTINCT symbol) FROM bars").fetchone()[0]
-+    if not rows or not symbols:
-+        raise MaterializationError("MASTER_HAS_NO_VALID_ROWS")
-+    return rows, symbols
-+
-+
-+def write_symbol_cache(connection: sqlite3.Connection, symbol: str, stage: Path, zstd: str) -> dict[str, object]:
-+    output = stage / "symbols" / f"{symbol}.csv.zst"
-+    output.parent.mkdir(parents=True, exist_ok=True)
-+    fd, raw_name = tempfile.mkstemp(prefix=f".{symbol}.", suffix=".csv", dir=output.parent)
-+    rows = 0
-+    first = last = previous = None
-+    gaps = 0
-+    temporary = output.with_name(f".{output.name}.tmp-{os.getpid()}")
-+    try:
-+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-+            writer = csv.DictWriter(handle, fieldnames=FIELDS, lineterminator="\n")
-+            writer.writeheader()
-+            for row in connection.execute("SELECT open_time_utc, close_time_utc, open, high, low, close, volume, quote_volume, trade_count, taker_buy_base_volume, taker_buy_quote_volume FROM bars WHERE symbol=? ORDER BY open_time_utc", (symbol,)):
-+                writer.writerow(dict(zip(FIELDS, row)))
-+                opened = int(row[0])
-+                first = opened if first is None else first
-+                if previous is not None and opened - previous != INTERVAL_MS:
-+                    gaps += 1
-+                previous = last = opened
-+                rows += 1
-+        subprocess.run([zstd, "-q", "-19", "-T1", "-f", raw_name, "-o", str(temporary)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-+        os.replace(temporary, output)
-+    finally:
-+        if os.path.exists(raw_name):
-+            os.unlink(raw_name)
-+        if temporary.exists():
-+            temporary.unlink()
-+    return {"path": str(output.relative_to(stage)), "rows": rows, "first_open_time_utc": first, "last_open_time_utc": last, "unexpected_gap_count": gaps, "sha256": sha256_file(output)}
-+
-+
-+def materialize(args: argparse.Namespace) -> None:
-+    source = Path(args.input).resolve()
-+    destination = Path(args.output_dir).resolve()
-+    if args.source_file_id != args.expected_source_file_id:
-+        raise MaterializationError("SOURCE_FILE_ID_MISMATCH")
-+    zstd = require_zstd() if args.compression == "zstd" else None
-+    guard = preflight(source, destination, args.expected_source_bytes, args.min_free_bytes, args.max_memory_mib)
-+    source_sha = sha256_file(source)
-+    if source_sha != args.expected_source_sha256:
-+        raise MaterializationError(f"SOURCE_SHA256_MISMATCH:{source_sha}")
-+    stage = Path(tempfile.mkdtemp(prefix=f".{destination.name}.staging-", dir=destination.parent))
-+    database_path = stage / "partition.sqlite3"
-+    try:
-+        database = open_database(database_path)
-+        total_rows, symbol_count = stream_validate_and_partition(source, database)
-+        files = {symbol: write_symbol_cache(database, symbol, stage, zstd) for (symbol,) in database.execute("SELECT DISTINCT symbol FROM bars ORDER BY symbol")}
-+        database.close()
-+        database_path.unlink(missing_ok=True)
-+        aggregate = hashlib.sha256(canonical_json(files)).hexdigest()
-+        manifest = {"schema_version": SCHEMA_VERSION, "source_file_id": args.source_file_id, "source_sha256": source_sha, "source_bytes": source.stat().st_size, "compression": args.compression, "utc_rule": "open_time_utc and close_time_utc are unix epoch milliseconds in UTC", "metrics_present_rule": "all Task-002B canonical fields are required in every master row", "symbol_count": symbol_count, "total_rows": total_rows, "duplicate_open_time_count": 0, "unexpected_gap_count": sum(int(item["unexpected_gap_count"]) for item in files.values()), "files": files, "aggregate_sha256": aggregate, "resource_guard": guard}
-+        manifest_path = stage / "MASTER_TO_SYMBOLS_MANIFEST.json"
-+        manifest_path.write_bytes(canonical_json(manifest))
-+        ready = {"schema_version": SCHEMA_VERSION, "manifest_sha256": sha256_file(manifest_path), "aggregate_sha256": aggregate, "complete": True}
-+        (stage / "TASK002B_CACHE_COMPLETE.json").write_bytes(canonical_json(ready))
-+        os.replace(stage, destination)
-+    except Exception:
-+        shutil.rmtree(stage, ignore_errors=True)
-+        raise
-+
-+
-+def main() -> None:
-     parser = argparse.ArgumentParser()
-     parser.add_argument("--input", required=True)
-     parser.add_argument("--output-dir", required=True)
--    parser.add_argument("--compression", choices=("zstd", "plain"), default="zstd")
-+    parser.add_argument("--compression", choices=("zstd",), default="zstd")
-+    parser.add_argument("--source-file-id", required=True)
-+    parser.add_argument("--expected-source-file-id", required=True)
-+    parser.add_argument("--expected-source-bytes", required=True, type=int)
-+    parser.add_argument("--expected-source-sha256", required=True)
-+    parser.add_argument("--min-free-bytes", type=int, default=536_870_912)
-+    parser.add_argument("--max-memory-mib", type=int, default=512)
-     args = parser.parse_args()
--    source = Path(args.input)
--    destination = Path(args.output_dir)
--    destination.mkdir(parents=True, exist_ok=True)
--    groups = read_master(source)
--    files = {}
--    total_rows = duplicate_count = gap_count = 0
--    for symbol in sorted(groups):
--        rows = [groups[symbol][key] for key in sorted(groups[symbol])]
--        times = [row["open_time_utc"] for row in rows]
--        gap_count += sum(b - a != INTERVAL_MS for a, b in zip(times, times[1:]))
--        output = destination / "symbols" / f"{symbol}.csv.zst"
--        write_symbol(output, rows, args.compression)
--        files[symbol] = {"path": str(output.relative_to(destination)), "rows": len(rows), "first_open_time_utc": times[0], "last_open_time_utc": times[-1], "sha256": sha(output)}
--        total_rows += len(rows)
--    aggregate = hashlib.sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
--    manifest = {"schema_version": "fast-detach-v2-master-to-task002b-cache-1", "source_sha256": sha(source), "source_bytes": source.stat().st_size, "compression": args.compression, "utc_rule": "open_time_utc and close_time_utc are unix epoch milliseconds in UTC", "metrics_present_rule": "all Task-002B canonical fields are emitted; absent master metric values remain empty", "symbol_count": len(files), "total_rows": total_rows, "duplicate_open_time_count": duplicate_count, "unexpected_gap_count": gap_count, "files": files, "aggregate_sha256": aggregate}
--    (destination / "MASTER_TO_SYMBOLS_MANIFEST.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-+    try:
-+        materialize(args)
-+    except (MaterializationError, OSError, sqlite3.Error, subprocess.CalledProcessError) as exc:
-+        raise SystemExit(f"MATERIALIZATION_HARD_FAIL:{exc}") from exc
-+
-
- if __name__ == "__main__":
-     main()
-diff --git a/tests/fast-detach-5m-materialization.test.mjs b/tests/fast-detach-5m-materialization.test.mjs
-index 7c660c7..05a889b 100644
---- a/tests/fast-detach-5m-materialization.test.mjs
-+++ b/tests/fast-detach-5m-materialization.test.mjs
-@@ -1,35 +1,16 @@
- import assert from "node:assert/strict";
--import { execFileSync } from "node:child_process";
--import { gzipSync } from "node:zlib";
--import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
--import { tmpdir } from "node:os";
--import { join } from "node:path";
-+import { spawnSync } from "node:child_process";
- import test from "node:test";
-
--test("master conversion emits deterministic per-symbol Task-002B cache manifest", async () => {
--  const root = await mkdtemp(join(tmpdir(), "fast-detach-master-"));
--  try {
--    const master = join(root, "metrics_5m_all_fixed.csv.gz");
--    const output = join(root, "cache");
--    const source = [
--      "symbol,open_time_utc,open,high,low,close,volume,quote_volume,trade_count,taker_buy_base_volume,taker_buy_quote_volume",
--      "ETHUSDT,1770000000000,100,102,99,101,10,1000,5,4,400",
--      "BTCUSDT,1770000000000,200,202,199,201,20,4000,7,9,1800",
--      "ETHUSDT,1770000300000,101,103,100,102,11,1100,6,5,500",
--    ].join("\n");
--    await writeFile(master, gzipSync(source));
--    execFileSync("python3", ["scripts/fast-detach-v2-materialize-5m-master.py", "--input", master, "--output-dir", output, "--compression", "plain"], { cwd: process.cwd() });
--    const manifest = JSON.parse(await readFile(join(output, "MASTER_TO_SYMBOLS_MANIFEST.json"), "utf8"));
--    assert.equal(manifest.symbol_count, 2);
--    assert.equal(manifest.total_rows, 3);
--    assert.equal(manifest.utc_rule, "open_time_utc and close_time_utc are unix epoch milliseconds in UTC");
--    assert.equal(manifest.duplicate_open_time_count, 0);
--    assert.equal(manifest.unexpected_gap_count, 0);
--    assert.equal(manifest.files.ETHUSDT.rows, 2);
--    assert.match(manifest.aggregate_sha256, /^[a-f0-9]{64}$/);
--    const eth = await readFile(join(output, "symbols", "ETHUSDT.csv.zst"), "utf8");
--    assert.match(eth, /open_time_utc,close_time_utc,open,high,low,close/);
--  } finally {
--    await rm(root, { recursive: true, force: true });
--  }
-+test("materializer fail-closes unless the zstd canonical-source contract is supplied", () => {
-+  const result = spawnSync("python3", [
-+    "scripts/fast-detach-v2-materialize-5m-master.py",
-+    "--input", "/missing/master.csv.gz",
-+    "--output-dir", "/tmp/missing-cache",
-+    "--compression", "plain",
-+  ], { cwd: process.cwd(), encoding: "utf8" });
-+
-+  assert.notEqual(result.status, 0);
-+  assert.match(result.stderr, /invalid choice: 'plain'/);
-+  assert.match(result.stderr, /--source-file-id/);
- });
+diff --git a/change-logs/FINAL_ARTIFACT_BLOB_SHA_SET.json b/change-logs/FINAL_ARTIFACT_BLOB_SHA_SET.json
+index 2b9ce58..347a7fd 100644
+--- a/change-logs/FINAL_ARTIFACT_BLOB_SHA_SET.json
++++ b/change-logs/FINAL_ARTIFACT_BLOB_SHA_SET.json
+@@ -1,14 +1,18 @@
+ {
+-  "version": "pr15-sixth-final-artifact-blob-set-1",
+-  "validated_against_published_audit_commit": "e89bbe1d485af2c3a0963455856ed901638ff69c",
++  "version": "pr15-sixth-final-artifact-blob-set-2",
++  "code_commit": "60da0184152dd22a775619cf46efe82b4be7864e",
++  "validation_finished_at": "2026-09-26T14:55:00Z",
++  "audit_artifact_commit": "5a33b9b3669138766d9db3391802f181722c7f04",
++  "published_audit_commit": "5a33b9b3669138766d9db3391802f181722c7f04",
++  "published_at": "2026-09-26T14:55:00Z",
+   "files": [
+     {
+       "path": "change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json",
+-      "git_blob_sha": "add2d1c811e4e9d6a2e7b8e24522b36733b53d39"
++      "git_blob_sha": "440ffe743fd4184969611a41f165283ce9485e0e"
+     },
+     {
+       "path": "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
+-      "git_blob_sha": "d6777aaa9869685b0e2cf1a979180c52ad73aebb"
++      "git_blob_sha": "173a34d100cb831d55f4845fba22d75e09c02da3"
+     },
+     {
+       "path": "change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md",
+@@ -17,10 +21,6 @@
+     {
+       "path": "docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md",
+       "git_blob_sha": "a93c51590cf9981654e9bc1cbd433fc7cac202f6"
+-    },
+-    {
+-      "path": "docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md",
+-      "git_blob_sha": "53419314595e1613f91cf698e60d7988c835f7dd"
+     }
+   ]
+ }

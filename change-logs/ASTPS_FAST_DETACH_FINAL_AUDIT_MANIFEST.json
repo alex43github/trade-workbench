@@ -12,7 +12,7 @@
   "repair_commit_timestamp": "2026-09-26T21:29:42+08:00",
   "prior_audit_evidence_commit": "e36308f1079638dd1194f8a39e0fc574f760b051",
   "prior_audit_evidence_commit_timestamp": "2026-09-26T16:45:19+08:00",
-  "audit_artifact_commit": "PENDING_SIXTH_AUDIT_ARTIFACT_COMMIT",
+  "audit_artifact_commit": "5a33b9b3669138766d9db3391802f181722c7f04",
   "audit_artifact_commit_timestamp": "2026-09-26T21:29:42+08:00",
   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
@@ -191,10 +191,10 @@
     "change-logs/TASK006_FROZEN_PYTHON_REGRESSION_AUDIT.json",
     "tests/fast-detach-5m-materialization-frozen-task002b.py"
   ],
-  "code_commit": "PENDING_SIXTH_CODE_COMMIT",
-  "validation_finished_at": "2026-09-26T22:00:00+08:00",
-  "published_audit_commit": "e89bbe1d485af2c3a0963455856ed901638ff69c",
-  "published_at": "2026-09-26T13:43:53Z",
+  "code_commit": "60da0184152dd22a775619cf46efe82b4be7864e",
+  "validation_finished_at": "2026-09-26T14:55:00Z",
+  "published_audit_commit": "5a33b9b3669138766d9db3391802f181722c7f04",
+  "published_at": "2026-09-26T14:55:00Z",
   "sixth_materialization_readiness": {
     "converter_contract": "change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json",
     "dependency_graph": "change-logs/CHUNK002_SAME_PIPELINE_DEPENDENCY_GRAPH.json",
