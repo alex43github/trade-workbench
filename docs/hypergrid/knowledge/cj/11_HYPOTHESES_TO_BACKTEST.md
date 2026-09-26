@@ -1,0 +1,33 @@
+# 11 · Hypotheses to Backtest
+
+所有 H-CJ 条目都是待证伪假设。`AUTHOR_CLAIM` 只表示来源支持；成功标准必须用净 PnL、风险调整收益、可退出性和 out-of-sample 数据验证。
+
+| ID | 来源 claim(s) | 机制 | 必需数据 | 测试设计 | 成功指标 | 失败标准 | 适用 regime | 混淆因素 | 目的地 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| H-CJ-001 | CJ:1930592265342525690 “Fee 跑赢 IL” | fee cashflow 是否覆盖 path-dependent IL/adverse selection/all-in cost | tick/swap、position、fee、HODL、gas、slippage | 同池同区间做路径回放，按波动/流量分层 | 净 PnL、尾部损失、退出成功率优于 HODL/对照 | 扣成本后净 PnL≤0 或尾部损失扩大 | CLMM/DLMM、流量稳定 | benchmark、价格路径、奖励估值 | G2/G6 |
+| H-CJ-002 | CJ:2094571978401423557；CJ:1934241999819038740 | 窄区间的 active fee gain 是否抵消出界/管理成本 | range、active time、volume、fees、rebalance/exit cost | 比较窄/中/宽区间和固定持有 | risk-adjusted net fee 更高且不降低生存率 | turnover 增加但净收益下降 | 震荡 vs 单边 | selection bias、gas、toxic flow | G2 |
+| H-CJ-003 | CJ:1934241999819038740 | range break 后立即退出是否优于等待/延迟退出 | tick/bin path、fee rate、exit quote、re-entry | immediate、N-block delay、fee-based exit 三组 | max drawdown/exit loss 降低且净收益不显著下降 | 退出成本大于避免的损失 | 价格跳跃/单边 | 反弹、gas spike、信息延迟 | G4/G6 |
+| H-CJ-004 | CJ:1969964672825909560；CJ:1899347899970154794 | 单边 LP 作为预设买入/卖出路径是否优于普通 limit/hold | range orders、fills、inventory、HODL/limit benchmark | 同价位比较 range order、limit、DCA、hold | fee-adjusted entry/exit cost 更优 | 单边库存、滑点或跳空损失更大 | 高波动、真实意愿资产 | survivorship、token tax、流动性 | G2/G7 |
+| H-CJ-005 | CJ:1933013337576780181 | 无脑 LP 自动再平衡是否因追涨杀跌降低净收益 | rebalances、price path、fees、gas、inventory | no-rebalance、rule-based、每步 rebalancing | 规则版优于无脑版，或明确不适用 | 无脑迁移净 PnL/IL 显著更差 | 震荡/高波动 | 规则不同、区间宽度、gas | G6 |
+| H-CJ-006 | CJ:2079420210935898272；CJ:2043146683727692020 | 算术/几何 spacing 在不同价差尺度下的成本后表现 | normalized price、spread、vol、fills、fees | 同资本/同最大层数比较两种 spacing | net capture、fill quality、inventory variance | one regime 优势消失或成本更高 | 价差均值回归/趋势 | scale、min tick、venue fee | G2/G7 |
+| H-CJ-007 | CJ:1916086010678849899；CJ:1906004982194934146 | 非线性 ladder 是否改善均价而不造成不可承受尾部损失 | level fills、allocation、trend/gap、margin | equal、linear、capped geometric；禁止无界 martingale | downside-adjusted recovery、max inventory | liquidation/资本耗尽/尾部亏损超限 | 震荡且有回撤 | path selection、leverage、correlation | G2/G4 |
+| H-CJ-008 | CJ:2080291927170400660；CJ:1933013337576780181 | volatility/inventory-aware re-centering 是否优于静态中心 | vol、inventory、center changes、all-in cost | threshold grid search + walk-forward | 净 PnL/uptime 提升且迁移次数受控 | edge 不足以支付迁移成本 | 非平稳波动 | look-ahead、parameter overfit | G6 |
+| H-CJ-009 | CJ:1913110637544448479；CJ:2081272253535436978 | funding cashflow 在成本/资金占用后是否为正 | venue funding history、spot/perp quotes、fees、borrow、margin | 同步两腿回放，含 funding reversal/latency | net APR、hedge fill rate、drawdown | funding 不足以覆盖成本或腿错配 | funding dispersion 高 | predicted vs realized funding、credit | G7 |
+| H-CJ-010 | CJ:1906238617724625229；CJ:1758731597875126778 | perp/spot basis + funding 是否优于单一 funding strategy | spot/perp order book、basis、funding、borrow、liq | basis convergence、widening、stress 三类 | net PnL/liq distance/exit success | basis widening 或强平超限 | 高流动性大资产 | collateral cross-margin、index | G7 |
+| H-CJ-011 | CJ:1911498758875189715；CJ:1980461247830323367 | 跨 DEX/CEX divergence 可在转移/MEV/税后兑现 | executable quotes、depth、gas、transfer/bridge、token behavior | quote-to-fill replay + adverse MEV | realized capture / capacity | 只有 last-price edge 或无法退出 | 新币/插针窗口 | survivorship、private flow、API | G1/G7 |
+| H-CJ-012 | CJ:1953005005335560201；CJ:1960401224773328941 | stable/lending loop 利差在 borrow/depeg/活动变化后仍为正 | supply/borrow rates、LTV、oracle、peg、reward | one/two/capped loops + depeg/rate shock | net yield、health-factor survival | liquidation/depeg 或净收益≤0 | 稳定币/活动期 | points value、account limits、protocol risk | G7/G4 |
+| H-CJ-013 | CJ:1969731767352660075；CJ:1967786496104206735 | PT/YT/spot 对冲的 implied-vs-realized yield edge 可兑现 | PT/YT prices、maturity、underlying yield、liquidity、fees | hold-to-maturity 与 early-exit 分开回放 | net fixed/relative yield、exit impact | underlying/contract/market risk 吞没 edge | 清晰 maturity、高流动性 | points、discount、oracle | G7 |
+| H-CJ-014 | CJ:2034189833032331265；CJ:1981030639077114198 | event-market sweep/短周期量化在无未来信息下有 edge | historical order book、event timestamps、settlement、fees | event-time split、walk-forward、no look-ahead | calibrated Brier/log loss + net PnL | calibration/净 PnL 不优于 baseline | 5/15m、有明确结算 | selection、latency、resolution | G7 |
+| H-CJ-015 | CJ:2094582598022664265；CJ:2092322901647372641 | 新链/早期产品 edge 会随专业参与和流动性改变衰减 | volume/TVL/participants、spread、fee、date | rolling half-life、regime change、out-of-sample | edge half-life 可估且停止规则减少亏损 | edge 不稳定或无退出容量 | launch phase only | changing rules、selection bias | G1/G7 |
+| H-CJ-016 | CJ:1931626940806598927 | private orderflow + min-output/deadline 是否减少 MEV/slippage | route、mempool/private path、pre/post price、gas、reverts | public vs private/shadow comparison | lower adverse slippage/revert rate after fees | privacy route 延迟/失败成本更大 | EVM AMM、高冲击交易 | builder coverage、chain differences | G3/G4 |
+| H-CJ-017 | CJ:2030312359747879130；CJ:2092322901647372641 | 降低 quote-to-submit 延迟主要改善滑点，而非创造 alpha | timestamped quote/fill、price drift、CPU/network metrics | latency buckets、same signal replay | slippage/fill quality vs age | 无显著改善或成本更高 | latency-sensitive perp/AMM | queue position、signal quality | G3/G7 |
+| H-CJ-018 | CJ:2094294541214117902 | 手动并行池数量存在 7–10 左右的操作负载拐点 | operator actions、alert ack、missed events、P&L | 任务数/告警密度实验 | missed-action rate 与净收益的 Pareto frontier | 超过负载后风险/遗漏上升 | manual LP only | trader skill、UI、automation | G5/G4 |
+| H-CJ-019 | CJ:1987051719541547037；CJ:1987074761948864662 | APR 3000%/1000% 是否有净收益分界信息 | fee window、vol、range uptime、cost、exit loss | threshold learned only on train, tested forward | precision/recall for positive net PnL | threshold overfit、false positives | short-lived high-vol LP | APR annualization、flow decay | G1/G6 |
+| H-CJ-020 | CJ:1930623777962139695 | “10% 区间跌穿 5%”只在特定定义/方向/基准下成立 | exact range, sqrt price, token order, HODL, fee | symbolic + numerical path tests | formula error=0 under declared assumptions | any orientation/benchmark mismatch | single-sided CLMM | decimals、fees、path | G2 |
+| H-CJ-021 | CJ:2094571978401423557；CJ:1895048082884305066 | fee compounding 是否净增而非增加成本/MEV | claim/compound events、gas、swap fee、price path | no/periodic/event-driven compounding | net PnL and risk-adjusted fee | compounding cost > incremental fee | high fee, low gas | timing, tax, price impact | G2/G6 |
+
+## 研究纪律
+
+- [INFERENCE] 所有 H-CJ 测试必须有 train/test 或 walk-forward 分割、交易成本、partial/failed fill、容量和至少一种 adversarial stress。
+- [INFERENCE] 成功只意味着假设在指定 regime 的数据上通过，不意味着跨市场或未来有效。
+- [INFERENCE] 任何通过的假设仍需进入 G4 staging，不能直接成为生产 trading rule。
