@@ -1,0 +1,290 @@
+{
+  "schema_version": "hypergrid.g0.chain_facts.v1",
+  "generated_at": "2026-09-25T15:08:11+00:00",
+  "chain_id": 999,
+  "rpc_url": "https://rpc.hyperliquid.xyz/evm",
+  "facts": [
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.chain_id",
+      "value": 999,
+      "verification_status": "VERIFIED",
+      "source_type": "OFFICIAL_DOC",
+      "source_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/how-to-use-the-hyperevm",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "Direct eth_chainId returned 0x3e7."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.rpc",
+      "value": "https://rpc.hyperliquid.xyz/evm",
+      "verification_status": "VERIFIED",
+      "source_type": "OFFICIAL_DOC",
+      "source_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "This is the official public EVM RPC used by the CLI smoke test."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.evm_json_rpc_websocket",
+      "value": "NOT_AVAILABLE_ON_OFFICIAL_EVM_RPC",
+      "verification_status": "VERIFIED",
+      "source_type": "OFFICIAL_DOC",
+      "source_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "wss://api.hyperliquid.xyz/ws is a separate Hyperliquid API, not EVM JSON-RPC."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.native_asset",
+      "value": "HYPE",
+      "verification_status": "VERIFIED",
+      "source_type": "OFFICIAL_DOC",
+      "source_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/how-to-use-the-hyperevm",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "HYPE is the native gas asset."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.native_asset_decimals",
+      "value": 18,
+      "verification_status": "VERIFIED",
+      "source_type": "OFFICIAL_DOC",
+      "source_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "This is a unit fact for HYPE, not an assumed ERC-20 metadata fallback."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.gas_model",
+      "value": "EIP1559_BASE_PLUS_PRIORITY",
+      "verification_status": "VERIFIED",
+      "source_type": "OFFICIAL_DOC",
+      "source_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/how-to-use-the-hyperevm",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "Latest RPC block exposed baseFeePerGas; eth_gasPrice returned 0x5f5e100 (0.1 gwei) in the preflight call."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.evm_version",
+      "value": "CANCUN_WITHOUT_BLOBS",
+      "verification_status": "VERIFIED",
+      "source_type": "OFFICIAL_DOC",
+      "source_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm",
+      "chain_id": 999,
+      "block_number": 46858838,
+      "observed_at": "2026-09-25T14:38:23+00:00",
+      "notes": "The observed latest block carried blobGasUsed=0x0 and excessBlobGas=0x0."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.block_time",
+      "value": null,
+      "verification_status": "UNKNOWN",
+      "source_type": "UNKNOWN",
+      "source_url": null,
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "No stable protocol block-time guarantee was used; live reads showed the block advancing during a snapshot."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "hyperevm.finality_for_trading_bot",
+      "value": null,
+      "verification_status": "UNKNOWN",
+      "source_type": "UNKNOWN",
+      "source_url": null,
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "G0 records block hashes and rejects regressions but does not claim a confirmation policy."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "whype.address",
+      "value": "0x5555555555555555555555555555555555555555",
+      "verification_status": "OBSERVED",
+      "source_type": "RPC_OBSERVATION",
+      "source_url": "https://hyperevmscan.io/address/0x5555555555555555555555555555555555555555",
+      "chain_id": 999,
+      "block_number": 46860640,
+      "observed_at": "2026-09-25T15:07:56+00:00",
+      "notes": "eth_getCode was non-empty; direct eth_call returned name Wrapped HYPE, symbol WHYPE and decimals 18."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "whype.semantics",
+      "value": "WRAPPED_NATIVE_ERC20_OBSERVED",
+      "verification_status": "OBSERVED",
+      "source_type": "VERIFIED_SOURCE",
+      "source_url": "https://hyperevmscan.io/address/0x5555555555555555555555555555555555555555",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "Explorer activity shows Deposit and Withdraw events. G0 does not call wrapping or unwrapping methods."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "prjx.factory.address",
+      "value": "0xff7b3e8c00e57ea31477c32a5b52a58eea47b072",
+      "verification_status": "VERIFIED",
+      "source_type": "VERIFIED_SOURCE",
+      "source_url": "https://hyperevmscan.io/address/0xFf7B3e8C00e57ea31477c32A5B52a58Eea47b072",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "Explorer source name is UniswapV3Factory and the ABI exposes getPool and PoolCreated."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "prjx.protocol_identity",
+      "value": null,
+      "verification_status": "UNKNOWN",
+      "source_type": "UNKNOWN",
+      "source_url": null,
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "The deployed contracts are source-verified PRJX V3-family contracts, but an authoritative PRJX project identity page was not treated as established."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "prjx.v3_interface",
+      "value": "UNISWAP_V3_FAMILY_POOL_INTERFACE",
+      "verification_status": "VERIFIED",
+      "source_type": "VERIFIED_SOURCE",
+      "source_url": "https://hyperevmscan.io/address/0x89510e6631c103746a4afb80fda30b5ee747f21c",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "Source and ABI expose token0/token1/fee/tickSpacing/slot0/liquidity and standard V3 pool events."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "prjx.documented_router_quoter_position_manager",
+      "value": "DOCUMENTED_BY_PERPME",
+      "verification_status": "OBSERVED",
+      "source_type": "EXTERNAL_REFERENCE",
+      "source_url": "https://www.perpme.fun/docs",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "PerpMe docs list PRJX factory, position manager, router, quoter and WHYPE addresses. G0 records them but does not call execution methods."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "prjx.position_manager.address",
+      "value": "0xead19ae861c29bbb2101e834922b2feee69b9091",
+      "verification_status": "OBSERVED",
+      "source_type": "EXTERNAL_REFERENCE",
+      "source_url": "https://www.perpme.fun/docs",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "Address listed in PerpMe documentation; code existence was checked read-only, but no position-manager method is called."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "prjx.router.address",
+      "value": "0x1ebdfc75ffe3ba3de61e7138a3e8706ac841af9b",
+      "verification_status": "OBSERVED",
+      "source_type": "EXTERNAL_REFERENCE",
+      "source_url": "https://www.perpme.fun/docs",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "Address listed in PerpMe documentation; code existence was checked read-only, but no router method is called."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "prjx.quoter.address",
+      "value": "0x239f11a7a3e08f2b8110d4ca9f6b95d4c8865258",
+      "verification_status": "OBSERVED",
+      "source_type": "EXTERNAL_REFERENCE",
+      "source_url": "https://www.perpme.fun/docs",
+      "chain_id": 999,
+      "block_number": null,
+      "observed_at": "2026-09-25T15:08:11+00:00",
+      "notes": "Address listed in PerpMe documentation; code existence was checked read-only, but no quote method is called."
+    },
+    {
+      "schema_version": "hypergrid.protocol_fact.v1",
+      "key": "prjx.pool.example",
+      "value": "0x89510e6631c103746a4afb80fda30b5ee747f21c",
+      "verification_status": "OBSERVED",
+      "source_type": "RPC_OBSERVATION",
+      "source_url": "https://hyperevmscan.io/address/0x89510e6631c103746a4afb80fda30b5ee747f21c",
+      "chain_id": 999,
+      "block_number": 46860640,
+      "observed_at": "2026-09-25T15:07:56+00:00",
+      "notes": "Factory getPool(PERPME, WHYPE, 10000) returned this address."
+    }
+  ],
+  "rpc_sanity": [
+    {
+      "method": "eth_chainId",
+      "params": [],
+      "result": "0x3e7",
+      "decoded": 999,
+      "status": "PASS",
+      "observed_at": "2026-09-25T15:08:11+00:00"
+    },
+    {
+      "method": "eth_blockNumber",
+      "params": [],
+      "result": "0x2cb0970",
+      "decoded": 46860656,
+      "status": "PASS",
+      "observed_at": "2026-09-25T15:08:11+00:00"
+    },
+    {
+      "method": "eth_gasPrice",
+      "params": [],
+      "result": "0x5f5e100",
+      "decoded_wei": "100000000",
+      "status": "PASS",
+      "observed_at": "2026-09-25T14:38:23+00:00"
+    },
+    {
+      "method": "eth_getBlockByNumber",
+      "params": ["latest", false],
+      "result_summary": {
+        "number": "0x2cb0256",
+        "hash": "0xef836f8f8b56caaf8dbdeca7788c473fcdbb9141cb8303330cb29f4f340021d1",
+        "timestamp": "2026-09-25T14:38:23Z",
+        "baseFeePerGas": "0x5f5e100",
+        "blobGasUsed": "0x0",
+        "excessBlobGas": "0x0"
+      },
+      "status": "PASS",
+      "observed_at": "2026-09-25T14:38:23+00:00"
+    },
+    {
+      "method": "eth_call",
+      "params": ["PRJX factory getPool(PERPME, WHYPE, 10000)"],
+      "result": "0x89510e6631c103746a4afb80fda30b5ee747f21c",
+      "status": "PASS",
+      "observed_at": "2026-09-25T15:07:56+00:00"
+    },
+    {
+      "method": "eth_getCode",
+      "params": ["PRJX factory, example pool, WHYPE, router, quoter, position manager"],
+      "result": "non-empty bytecode for each checked address",
+      "status": "PASS",
+      "observed_at": "2026-09-25T15:07:56+00:00"
+    }
+  ]
+}
