@@ -1,0 +1,130 @@
+{
+  "schema_version": "fast-detach-v2-chunk002-temporal-oos-audit-1",
+  "status": "BLOCKED_DATA_SCHEMA",
+  "oos_valid": false,
+  "chunk002_temporal_oos_completed": false,
+  "source": {
+    "path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
+    "sha256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6",
+    "schema_version": "pe-top10-ma30-atr-10x-v1",
+    "date_start_bjt": "2026-04-12",
+    "date_end_bjt": "2026-04-16",
+    "n_total": 50
+  },
+  "prereg": {
+    "path": "change-logs/PRE_CHUNK002_PREREG.json",
+    "sha256": "5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84",
+    "commit": "8e13298",
+    "read_before_prereg_freeze": false
+  },
+  "pipeline_compatibility": {
+    "required_unified_schema": "fast-detach-v2-unified-event-2",
+    "source_is_unified_event_schema": false,
+    "same_pipeline_available": false,
+    "reason": "chunk002 is a PE backtest trade-output object and does not contain the frozen unified-event path/feature/barrier fields"
+  },
+  "primary_hypotheses": [
+    {
+      "hypothesis_id": "PE_E1_RESET_REIGNITION",
+      "result": "INSUFFICIENT",
+      "N_TOTAL": 50,
+      "N_ELIGIBLE": 0,
+      "N_EXCLUDED": 50,
+      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
+      "required_field_availability": {
+        "pe.timeframes.15m.metrics.w12.delta_1": 0,
+        "pe.timeframes.15m.metrics.w12.acceleration": 0,
+        "path_labels.task001.pe_transition": 0,
+        "path_labels.task001.one_hour_handoff_time": 0
+      },
+      "support_count": 0,
+      "counterexample_count": 0
+    },
+    {
+      "hypothesis_id": "PE_E3_15M_EXTREME_INSUFFICIENT",
+      "result": "INSUFFICIENT",
+      "N_TOTAL": 50,
+      "N_ELIGIBLE": 0,
+      "N_EXCLUDED": 50,
+      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
+      "required_field_availability": {
+        "pe.timeframes.15m.metrics.w12.value": 0,
+        "pe.timeframes.1h.metrics.w12.delta_1": 0,
+        "pe.timeframes.1h.metrics.w12.acceleration": 0,
+        "path_labels.path_quality": 0,
+        "barrier_labels.refined_5m": 0
+      },
+      "support_count": 0,
+      "counterexample_count": 0
+    },
+    {
+      "hypothesis_id": "RESPONSE_FRESHNESS_DECAY",
+      "result": "INSUFFICIENT",
+      "N_TOTAL": 50,
+      "N_ELIGIBLE": 0,
+      "N_EXCLUDED": 50,
+      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
+      "required_field_availability": {
+        "path_labels.path_quality.time_to_positive_min": 0,
+        "path_labels.path_quality.ttp_5": 0,
+        "path_labels.path_quality.mae_before_5": 0,
+        "path_labels.task001.MFE_30m": 0,
+        "pe.timeframes.15m.metrics.w12.acceleration": 0
+      },
+      "support_count": 0,
+      "counterexample_count": 0
+    },
+    {
+      "hypothesis_id": "CLEAN_RESPONSE_BREADTH",
+      "result": "INSUFFICIENT",
+      "N_TOTAL": 50,
+      "N_ELIGIBLE": 0,
+      "N_EXCLUDED": 50,
+      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
+      "required_field_availability": {
+        "path_labels.path_quality": 0,
+        "barrier_labels.refined_5m.tp5_before_sl3": 0,
+        "future_evidence.task002b_5m_path.bars": 0,
+        "features.timeframes.15m": 0
+      },
+      "support_count": 0,
+      "counterexample_count": 0
+    },
+    {
+      "hypothesis_id": "ADVERSE_PATH_GATE",
+      "result": "INSUFFICIENT",
+      "N_TOTAL": 50,
+      "N_ELIGIBLE": 0,
+      "N_EXCLUDED": 50,
+      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
+      "required_field_availability": {
+        "path_labels.task001.MFE_24h": 0,
+        "path_labels.task001.MAE_1h": 0,
+        "path_labels.path_quality.max_time_underwater_min": 0,
+        "barrier_labels.refined_5m": 0
+      },
+      "support_count": 0,
+      "counterexample_count": 0
+    },
+    {
+      "hypothesis_id": "PE_MULTI_TF_SYNCHRONIZED_ACCELERATION",
+      "result": "INSUFFICIENT",
+      "N_TOTAL": 50,
+      "N_ELIGIBLE": 0,
+      "N_EXCLUDED": 50,
+      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
+      "required_field_availability": {
+        "pe.timeframes.15m.metrics.w12.delta_1": 0,
+        "pe.timeframes.1h.metrics.w12.delta_1": 0,
+        "pe.timeframes.4h.metrics.w12.delta_1": 0,
+        "pe.timeframes.*.metrics.w12.acceleration": 0
+      },
+      "support_count": 0,
+      "counterexample_count": 0
+    }
+  ],
+  "new_observations_counted_as_oos": 0,
+  "threshold_retuned": false,
+  "production_changed": false,
+  "blocker": "A valid temporal OOS requires the frozen unified-event pipeline output; raw PE backtest trade rows cannot be relabeled as the six-hypothesis OOS sample."
+}

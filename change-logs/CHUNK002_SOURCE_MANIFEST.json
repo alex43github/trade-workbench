@@ -1,0 +1,15 @@
+{
+  "schema_version": "fast-detach-v2-chunk002-source-manifest-1",
+  "source_path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
+  "source_sha256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6",
+  "source_schema_version": "recorded_from_source_after_prereg_freeze",
+  "source_date_start_bjt": "2026-04-12",
+  "source_date_end_bjt": "2026-04-16",
+  "pre_chunk002_prereg_path": "change-logs/PRE_CHUNK002_PREREG.json",
+  "pre_chunk002_prereg_sha256": "5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84",
+  "prereg_commit": "8e13298",
+  "read_order_verified": true,
+  "chunk002_accessed_after_prereg_commit": true,
+  "threshold_retuned": false,
+  "production_changed": false
+}

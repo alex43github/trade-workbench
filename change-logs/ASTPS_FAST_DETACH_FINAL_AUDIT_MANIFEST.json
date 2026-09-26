@@ -1,96 +1,101 @@
 {
-  "manifest_version": "astps-fast-detach-final-audit-1",
-  "status": "AUDIT_READY_DO_NOT_PROMOTE",
-  "ready_for_final_audit": true,
+  "manifest_version": "astps-fast-detach-pr15-final-audit-repair-1",
+  "status": "CHANGES_REQUIRED_INCOMPLETE",
+  "ready_for_final_audit": false,
+  "promotion_decision": "DO_NOT_PROMOTE",
+  "final_reports_regenerated": true,
+  "ready_gate_truthful_value": false,
   "branch": "codex/astps-fast-detach-handoff-20260926",
   "pull_request": "https://github.com/alex43github/trade-workbench/pull/15",
   "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
-  "implementation_commit": "6e0350e",
-  "audit_commits": ["9d5f9e0", "7c9caa7"],
+  "repair_commit": "8e13298",
   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_frozen_unchanged": true,
   "forward_epoch_id": "epoch-20260924T185000",
-  "source_counts": {
-    "HISTORICAL_REPLAY": 50,
-    "LIVE_FORWARD": 177,
-    "UNIFIED_RESEARCH_VIEW": 227
-  },
-  "forward_epoch_rows": {
-    "snapshots": 177,
-    "transitions": 185,
-    "outcomes": 1064,
-    "outcome_6h_mature": 177,
-    "outcome_12h_mature": 177,
-    "outcome_24h_mature": 2,
-    "outcome_48h_mature": 0
+  "source_counts": {"HISTORICAL_REPLAY": 50, "LIVE_FORWARD_DISCOVERY": 177, "LIVE_FORWARD_EAP": 0, "REPLAY_EAP": 0, "UNIFIED_RESEARCH_VIEW": 227},
+  "edp_only_audit": {
+    "N": 177,
+    "source_summary_sha256": "d99c88bdb4fbea5c978c6129de0e1135b84640457a9ad32223444880cb3bdaa8",
+    "mature_outcome_counts": {"15m": 177, "30m": 177, "1h": 177, "3h": 177, "6h": 177, "12h": 177, "24h": 2, "48h": 0},
+    "family_status": "UNAVAILABLE_FROZEN_FIELD",
+    "mechanism_status": "UNAVAILABLE_FROZEN_FIELD"
   },
   "eap": {
-    "observer_connected": false,
-    "zero_root_cause": "OBSERVER_NOT_CONNECTED",
-    "observed": 0,
-    "confirmed_absent": 0,
-    "not_observed": 177,
+    "real_observer_connected": false,
+    "immutable_eap_granted_event_n": 0,
+    "historical_live_not_observed_n": 177,
     "sample_quality_6h": "LOW_SAMPLE",
-    "historical_replay_eap_backfilled": 0
+    "denominator_source": "IMMUTABLE_EAP_GRANTED_LEDGER_EVENT_IDS"
+  },
+  "chunk002": {
+    "accessed_after_prereg_commit": true,
+    "source_path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
+    "source_sha256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6",
+    "prereg_path": "change-logs/PRE_CHUNK002_PREREG.json",
+    "prereg_sha256": "5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84",
+    "prereg_commit": "8e13298",
+    "same_pipeline_unified_schema": false,
+    "temporal_oos_completed": false,
+    "hypothesis_results": "INSUFFICIENT_FOR_ALL_SIX"
+  },
+  "drive": {
+    "canonical_reconciliation": "FORMALLY_RECONCILED",
+    "writeback": "NOT_PERFORMED",
+    "live_cases_id": "18oMIBSprBIAHO9-FY8WQzD907VM1XiU9",
+    "live_outcomes_id": "1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4",
+    "model_registry_exact_name_found": false,
+    "model_current_used_as_replacement": false
   },
   "data_invariants": {
     "FEATURE_LEAKAGE_COUNT": 0,
     "DUPLICATE_EVENT_IDS": 0,
     "DUPLICATE_OUTCOME_KEYS": 0,
     "SNAPSHOT_MUTATION_COUNT": 0,
-    "OUTCOME_MUTATION_COUNT": 0
+    "OUTCOME_MUTATION_COUNT": 0,
+    "HISTORICAL_FROZEN_UNCHANGED": true
   },
   "production_side_effects": {
-    "CHUNK002_ACCESSED": false,
+    "CHUNK002_ACCESSED": true,
     "PRODUCTION_MODEL_CHANGED": false,
     "PRODUCTION_CODE_CHANGED": false,
     "PRODUCTION_SERVICE_RESTARTED": false,
     "DEPLOYED": false,
     "MERGED": false,
-    "PRODUCTION_MAIN_PID_BEFORE": "1412125",
-    "PRODUCTION_MAIN_PID_AFTER": "1412125"
-  },
-  "tests": {
-    "focused_task007_total": 35,
-    "focused_task007_pass": 35,
-    "focused_task007_fail": 0,
-    "radar_total": 88,
-    "radar_pass": 87,
-    "radar_fail": 0,
-    "radar_environment_skip": 1,
-    "repository_build": "PASS",
-    "repository_full_suite": "1092 total / 984 pass / 107 fail / 1 skip",
-    "typecheck": "FAIL on pre-existing app/lib errors; no TASK-007 errors",
-    "fast_detach_python_regression": "NOT_AVAILABLE"
-  },
-  "drive": {
-    "canonical_read": true,
-    "writeback": "PENDING",
-    "unresolved_canonical_files": ["MODEL_REGISTRY.json", "LIVE_CASES.jsonl", "LIVE_OUTCOMES.jsonl"]
-  },
-  "promotion": {
-    "PROMOTION_DECISION": "DO_NOT_PROMOTE",
-    "PROMOTION_CANDIDATE": false,
     "THRESHOLD_CHANGED": false,
-    "MODEL_CHANGED": false,
     "BARK_CHANGED": false,
     "ORDER_PATH_CHANGED": false
   },
+  "tests": {
+    "focused": "38 total / 38 pass / 0 fail / 0 skip",
+    "related_regression": "88 total / 87 pass / 0 fail / 1 environment skip",
+    "repository_build": "PASS",
+    "repository_full_suite": "1095 total / 987 pass / 107 fail / 1 skip",
+    "typecheck": "FAIL on pre-existing app/lib errors; no TASK-007 scope errors",
+    "fast_detach_python_regression": "UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY"
+  },
   "blockers": [
-    "OBSERVER_NOT_CONNECTED",
-    "EAP_LOW_SAMPLE",
-    "CHUNK002_NOT_ACCESSED_PENDING_PREREGISTRATION_GATE",
-    "DRIVE_WRITEBACK_PENDING",
-    "FAST_DETACH_PYTHON_REGRESSION_NOT_AVAILABLE",
-    "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"
+    "REAL_EAP_OBSERVER_NOT_CONNECTED",
+    "PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE",
+    "PROSPECTIVE_EAP_COHORT_ZERO",
+    "CHUNK002_SOURCE_NOT_SAME_PIPELINE_UNIFIED_SCHEMA",
+    "MODEL_REGISTRY_JSON_EXACT_NAME_ABSENT",
+    "NO_SAFE_CANONICAL_DRIVE_APPEND_PAYLOAD_AUTHORIZED",
+    "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE"
   ],
   "artifacts": [
     "docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md",
     "docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md",
     "docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md",
+    "docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md",
+    "docs/research/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.md",
     "docs/research/DRIVE_WRITEBACK_PENDING.md",
-    "change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json",
+    "change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json",
+    "change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json",
+    "change-logs/CHUNK002_SOURCE_MANIFEST.json",
+    "change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json",
+    "change-logs/PRE_CHUNK002_PREREG.md",
+    "change-logs/PRE_CHUNK002_PREREG.json",
     "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
     "change-logs/CODEX_REVIEW_PACKET_LATEST.patch"
   ]

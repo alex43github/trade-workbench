@@ -143,6 +143,7 @@ export function buildEdpOnlyForwardSummary({
     sample_quality: sampleQuality,
     portfolio_interpretation: "DIAGNOSTIC_OVERLAPPING_EVENT_PF_ONLY",
     eap_mature_6h_n: eapMatureSixHourRows.length,
+    eap_denominator_source: "IMMUTABLE_EAP_GRANTED_LEDGER_EVENT_IDS",
     eap_metrics: eapMatureSixHourRows.length ? "DESCRIPTIVE_OBSERVED_EAP_6H" : "NOT_CALCULATED_FOR_EAP_NOT_OBSERVED",
   };
 }

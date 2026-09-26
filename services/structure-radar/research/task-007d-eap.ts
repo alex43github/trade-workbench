@@ -106,9 +106,11 @@ export function validateEapDecision(decision: EapDecision, snapshot: SnapshotLik
   const eapMs = parseUtc(decision.eap_time_utc, "eap_time_utc");
   const decisionBarMs = parseUtc(decision.decision_bar_close_utc, "decision_bar_close_utc");
   const snapshotDecisionMs = parseUtc(snapshotDecisionBar(snapshot), "snapshot.decision_bar_close_utc");
+  const immutableEdpMs = parseUtc(immutableEdpTimestamp(snapshot), "immutable_edp_timestamp");
   if (decisionBarMs < snapshotDecisionMs) throw new Error("EAP decision bar precedes EDP decision bar");
   if (eapMs < decisionBarMs) throw new Error("EAP time precedes EAP decision bar");
   if (eapMs < snapshotDecisionMs) throw new Error("EAP time precedes EDP decision bar");
+  if (eapMs < immutableEdpMs) throw new Error("EAP time precedes immutable EDP timestamp");
   if (!Number.isFinite(decision.eap_price) || decision.eap_price <= 0) throw new Error("EAP price must be positive");
   for (const field of ["permission_type", "permission_version", "source_decision_id", "source_cycle_id"]) {
     if (!String(decision[field as keyof EapDecision] ?? "").trim()) throw new Error(`EAP ${field} is required`);

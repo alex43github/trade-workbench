@@ -205,6 +205,9 @@ test("EDP-only summary is descriptive and retains all mature discovery outcomes"
   assert.equal(result.horizons["6h"].hit_rates["+5%"], 0.95);
   assert.equal(result.portfolio_interpretation, "DIAGNOSTIC_OVERLAPPING_EVENT_PF_ONLY");
   assert.equal(result.sample_quality.DISCOVERY_SAMPLE_QUALITY_6H, "READY_FOR_DESCRIPTIVE_SUMMARY");
+  assert.equal(result.stratified_by_timeframe["15m"].event_n, 10);
+  assert.equal(result.frozen_stratification_field_status.family, "UNAVAILABLE_FROZEN_FIELD");
+  assert.equal(result.stratified_by_family.__UNAVAILABLE_FROZEN_FIELD__.event_n, 20);
 });
 
 test("EDP-only summary derives EAP 6H maturity from observed EAP event ids", () => {

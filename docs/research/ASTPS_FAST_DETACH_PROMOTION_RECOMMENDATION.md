@@ -1,13 +1,13 @@
-# ASTPS FAST-DETACH — PROMOTION RECOMMENDATION
+# ASTPS FAST-DETACH — PR #15 PROMOTION RECOMMENDATION
 
 PROMOTION_DECISION=DO_NOT_PROMOTE
 PROMOTION_CANDIDATE=false
+READY_FOR_FINAL_AUDIT=false
 PRODUCTION_CHANGE=false
 THRESHOLD_CHANGE=false
 MODEL_CHANGE=false
 BARK_CHANGE=false
 ORDER_PATH_CHANGE=false
-READY_FOR_FINAL_AUDIT=true
 
 ## Decision
 
@@ -15,16 +15,17 @@ Do not promote any Fast-Detach rule, threshold, feature combination, EAP gate, o
 
 ## Reasons
 
-1. The live permission observer is not connected. All 177 existing live events are correctly `EAP_NOT_OBSERVED`, not `EAP_CONFIRMED_ABSENT` and not retroactive `REPLAY_EAP`.
-2. EAP sample quality is `LOW_SAMPLE` with observed EAP N=0. EDP-only outcomes cannot be substituted for EAP-conditioned evidence.
-3. `chunk_002` was not accessed. No temporal OOS result exists for this audit.
-4. The existing Drive research state rejects automatic execution shortcuts and contains no authorization for a numeric threshold promotion.
-5. The immutable snapshot, event identity, historical SHA, append-only outcome, and source-separation invariants are the acceptance boundary, not a promotion signal.
+1. No real explicit execution-permission observer is connected; all 177 existing live events correctly remain `EAP_NOT_OBSERVED`.
+2. No prospective EAP cohort or stable persistent collector evidence exists; EAP sample quality is `LOW_SAMPLE` with immutable EAP-granted N=0.
+3. The prereg freeze was completed before chunk002 access, but the available chunk002 object is not the frozen unified-event schema. The six required results are `INSUFFICIENT`, not valid temporal OOS evidence.
+4. Historical Replay vs LIVE_FORWARD comparison is descriptive and explicitly marks detection/execution/capital data gaps.
+5. Drive paths were formally reconciled; `MODEL_REGISTRY.json` is genuinely absent and was not replaced with `MODEL_CURRENT.json`.
+6. No threshold/model/Bark/order change is authorized or present.
 
 ## Required gates before reconsideration
 
-- Connect a real, explicit, immutable permission observer keyed by `event_id`; preserve the no-source classification for all prior events.
-- Collect at least 20–30 independent prospective EAP cases with mature closed-bar outcomes and no snapshot backfill.
-- Freeze preregistration before any temporal OOS evaluation; only then authorize a separate `chunk_002` task.
-- Keep historical replay and live-forward denominators separate and rerun all invariant audits.
-- Obtain an explicit review approval before any production wiring, threshold change, Bark behavior, or order-path action.
+- Connect a real immutable permission observer without changing the production decision behavior.
+- Run a stable shadow collector and form at least 20–30 independent prospective `EAP_OBSERVED` cases with mature 6H outcomes.
+- Produce a same-pipeline unified chunk002 artifact under a new reviewed data task, then evaluate only the frozen six hypotheses.
+- Reconcile or explicitly authorize canonical Drive ledger append using the resolved stable IDs.
+- Regenerate final reports and rerun all focused/regression tests before setting `READY_FOR_FINAL_AUDIT=true`.

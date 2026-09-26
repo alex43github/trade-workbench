@@ -1,51 +1,38 @@
 # ASTPS FAST-DETACH — CODEX AUTONOMOUS STATUS
 
-TASK_ID=ASTPS_FAST_DETACH_FINAL_AUDIT
-PHASE=10/10_FINAL_AUDIT
-STATUS=AUDIT_READY_DO_NOT_PROMOTE
-READY_FOR_FINAL_AUDIT=true
-PHASE1_007D_REVIEW_BASELINE=PASS
-STARTED_AT=2026-09-26T12:00:00+08:00
-FINISHED_AT=2026-09-26T13:35:00+08:00
-BASE_BRANCH=origin/main
-BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
-BRANCH=codex/astps-fast-detach-handoff-20260926
-IMPLEMENTATION_COMMIT_SHA=6e0350e
-AUDIT_COMMITS=9d5f9e0,7c9caa7
-FINAL_ARTIFACTS_COMMIT=3ad722f
+TASK_ID=ASTPS_FAST_DETACH_PR15_FINAL_AUDIT_REPAIR
+PHASE=FINAL_AUDIT_REPAIR
+STATUS=CHANGES_REQUIRED_INCOMPLETE
+READY_FOR_FINAL_AUDIT=false
 PROMOTION_DECISION=DO_NOT_PROMOTE
-PHASE2_PERSISTENCE_AUDIT=PASS
-PERSISTENT_FORWARD_EPOCH_READY=true
-PERSISTENT_COPY_SHA_MATCH=true
-SOURCE_TMP_PRESERVED=true
-FORWARD_EPOCH_ID=epoch-20260924T185000
-PERSISTENT_SNAPSHOT_ROWS=177
-PERSISTENT_TRANSITION_ROWS=185
-PERSISTENT_OUTCOME_ROWS=1064
-PERSISTENT_UNIFIED_VIEW_ROWS=227
-PRODUCTION_PID_BEFORE=1412125
-PRODUCTION_PID_AFTER=1412125
+BRANCH=codex/astps-fast-detach-handoff-20260926
+PR=https://github.com/alex43github/trade-workbench/pull/15
+BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
+REPAIR_COMMIT=8e13298
+HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
+PRE_CHUNK002_PREREG_SHA=5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84
+CHUNK002_SHA=f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6
+CHUNK002_ACCESSED=true
 
-## Summary
+## Completed in this repair
 
-Rebuilt the TASK-007/007B/007C/007D research surface on real `origin/main` ancestry and repaired the two Phase 1 P0 issues from the handoff:
+- Immutable EDP timestamp contract and later-bar EAP latency regression.
+- Fail-closed EAP status classifier.
+- Immutable EAP_GRANTED-only LIVE_FORWARD denominator and transition-time delay.
+- 177-event EDP-only metrics through 12H and frozen-field stratification audit.
+- Prereg freeze before chunk002 read; schema audit records six INSUFFICIENT results.
+- Historical vs LIVE_FORWARD denominator-separated comparison.
+- Google Drive canonical parent/file-ID reconciliation without pseudo replacement.
 
-- EAP decision bars now accept a later closed bar when `EDP decision bar <= EAP decision bar <= EAP time`; an earlier bar is rejected.
-- Causal EAP evidence is bounded by the selected EAP decision-bar close and future evidence is rejected.
-- EAP 6H sample quality is derived from observed immutable EAP transition event IDs plus mature 6H outcomes; Discovery and EAP denominators remain separate.
-- The existing no-EAP cohort remains `EAP N=0 / LOW_SAMPLE`; no snapshot or event identity is rewritten.
+## Still blocking the final-audit stop gate
 
-## Verification
+- `REAL_EAP_OBSERVER_CONNECTED=false`: no explicit permission source exists in VPS production code/process evidence.
+- `PERSISTENT_SHADOW_COLLECTOR_STABLE=false`: no task007c collector process is running; no observer is available to form a cohort.
+- `PROSPECTIVE_EAP_COHORT_FORMED=false`: immutable EAP_GRANTED N=0.
+- `CHUNK002_TEMPORAL_OOS_COMPLETED=false`: available source is incompatible with frozen unified-event schema.
+- `DRIVE_WRITEBACK_COMPLETED=false`; `DRIVE_WRITEBACK_FORMALLY_RECONCILED=true`. Reconciliation is formal only because exact `MODEL_REGISTRY.json` is absent and no safe canonical append payload is authorized.
 
-- Focused TASK-007/007B/007C/007D: 35 passed, 0 failed, 0 skipped.
-- Radar regression: 88 total, 87 passed, 0 failed, 1 environment-limited skip.
-- Repository `npm test`: build passed; full historical suite ended 1092 total, 984 passed, 107 failed, 1 skipped. Failures are outside this research-only scope in existing live-exchange/Bybit/trade/UI suites.
-- Typecheck: non-zero only for pre-existing `app/`, `lib/radar/`, `lib/telegram/`, and `lib/trade/` errors; no TASK-007/007B/007C/007D type errors remain.
-- Fast-Detach Python regression: not available in this branch; no substitute or synthetic pass was created.
-- `git diff --check`: PASS.
-- `git merge-base origin/main HEAD`: `b68c44d4fd3689e8e9909d53cbc137afa219122b`.
-
-## Data and production boundaries
+## Invariants
 
 FEATURE_LEAKAGE_COUNT=0
 DUPLICATE_EVENT_IDS=0
@@ -55,35 +42,17 @@ OUTCOME_MUTATION_COUNT=0
 HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_FROZEN_UNCHANGED=true
-CHUNK002_ACCESSED=false
 PRODUCTION_MODEL_CHANGED=false
 PRODUCTION_CODE_CHANGED=false
 PRODUCTION_SERVICE_RESTARTED=false
-THRESHOLD_CHANGED=false
-BARK_CHANGED=false
-ORDER_PATH_CHANGED=false
-DEPLOYED=false
 
-## Phase 2 read-only VPS evidence
+## Verification
 
-- Persistent epoch file inventory contains the expected audit, manifest, snapshot, transition, outcome, and unified-view files under `/var/lib/trade-workbench/research/forward-shadow/epochs/epoch-20260924T185000/`.
-- `PERSISTENT_COPY_MANIFEST.json` reports matching source/destination SHA-256 values for the canonical seven copied ledger files, `source_preserved=true`, `event_count=177`, and `outcome_count=1064`.
-- Read-only `sha256sum` and row counts match the manifest: snapshot 177, transitions 185, outcomes 1064, unified view 227.
-- The immutable historical path was read once for SHA verification and returned `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
-- Production MainPID was read before/after the audit as `1412125` / `1412125`; no service operation was issued.
+FOCUSED_TESTS=38/38 PASS
+RADAR_REGRESSION=88 total / 87 pass / 0 fail / 1 environment skip
+BUILD=PASS
+FULL_NPM_TEST=1095 total / 987 pass / 107 fail / 1 skip
+TYPECHECK=FAIL pre-existing app/lib errors; task scope clean
+FAST_DETACH_PYTHON_REGRESSION=UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY
 
-No VPS ledger was modified. Phase 2 read-only audit verified the historical SHA and persistent-copy manifest; no outcome, snapshot, or unified-view write occurred.
-
-## Approval gate
-
-Phases 1–10 are documented for final audit. Phase 3 and Phase 7 remain explicitly blocked by the absent EAP source/zero EAP sample; Phase 8 was intentionally not started and `chunk_002` was not accessed. No merge, deployment, restart, promotion, threshold/model/Bark/order change, or historical evidence rewrite occurred.
-
-Final local artifacts:
-
-- `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md`
-- `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md`
-- `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md`
-- `docs/research/DRIVE_WRITEBACK_PENDING.md`
-- `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json`
-
-The final decision is `PROMOTION_DECISION=DO_NOT_PROMOTE`.
+The branch remains at the approval gate. No merge, deploy, restart, promotion, threshold change, model change, Bark change, order-path change, or snapshot/event rewrite occurred.
