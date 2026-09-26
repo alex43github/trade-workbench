@@ -1,0 +1,222 @@
+diff --git a/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
+index a312245..548b776 100644
+--- a/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
++++ b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
+@@ -1,6 +1,6 @@
+ # ASTPS FAST-DETACH — CODEX AUTONOMOUS STATUS
+
+-TASK_ID=ASTPS_FAST_DETACH_PR15_FOURTH_FINAL_AUDIT_REPAIR
++TASK_ID=ASTPS_FAST_DETACH_PR15_FIFTH_FINAL_AUDIT_REPAIR
+ PHASE=FINAL_AUDIT_REPAIR
+ STATUS=CHANGES_REQUIRED_INCOMPLETE
+ READY_FOR_FINAL_AUDIT=false
+@@ -8,8 +8,8 @@ PROMOTION_DECISION=DO_NOT_PROMOTE
+ BRANCH=codex/astps-fast-detach-handoff-20260926
+ PR=https://github.com/alex43github/trade-workbench/pull/15
+ BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
+-CODE_REPAIR_COMMIT=393ca3793e85f9c6c7db7e17a40634a71f70edd1
+-CODE_REPAIR_COMMIT_TIMESTAMP=2026-09-26T17:10:47+08:00
++CODE_REPAIR_COMMIT=27a1a70049ef3990b3feb86eeedfe23036285164
++CODE_REPAIR_COMMIT_TIMESTAMP=2026-09-26T21:29:42+08:00
+ PRIOR_AUDIT_EVIDENCE_COMMIT=e36308f1079638dd1194f8a39e0fc574f760b051
+ HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
+ PRE_CHUNK002_PREREG_SHA=5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84
+@@ -32,6 +32,8 @@ CHUNK002_REEVALUATED_THIS_REPAIR=false
+ - One isolated frozen-generator chunk002 attempt; task-001-shaped output was produced, but required unified-event schema compatibility is `DATA_BLOCKED`. Canonical 5m master exists in ChatGPT File Library but was not materialized into the authorized runtime.
+ - EDP identity now locks edp_utc/edp_price to the exact detector decision bar; delayed-write regression prevents later-bar drift.
+ - Corrected Drive hierarchy and exact pending research writebacks are recorded. CHUNK002_RETRY_MATERIALIZATION_MANIFEST pins File Library ID, observed size, destination, frozen hashes, and unchanged-pipeline verification.
++- The canonical 5m master-to-Task-002B per-symbol cache converter is now pinned with its SHA, exact command, 11-field schema, UTC/missing-field rules, coverage/aggregate-SHA audit, and direct consumer proof. The master has not been materialized, so no source/destination SHA lock or hypothesis rerun exists.
++- The exact revision-guarded RESEARCH_QUEUE.json RFC-6902 pending patch passed an isolated dry run: parse PASS and existing keys preserved; Drive remained read-only.
+
+ ## Still blocking the final-audit stop gate
+
+diff --git a/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
+index 4e15308..d597da4 100644
+--- a/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
++++ b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
+@@ -1,5 +1,5 @@
+ {
+-  "manifest_version": "astps-fast-detach-pr15-fourth-final-audit-repair-1",
++  "manifest_version": "astps-fast-detach-pr15-fifth-final-audit-repair-1",
+   "status": "CHANGES_REQUIRED_PENDING_REVIEW",
+   "ready_for_final_audit": false,
+   "promotion_decision": "DO_NOT_PROMOTE",
+@@ -8,12 +8,12 @@
+   "branch": "codex/astps-fast-detach-handoff-20260926",
+   "pull_request": "https://github.com/alex43github/trade-workbench/pull/15",
+   "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
+-  "repair_commit": "393ca3793e85f9c6c7db7e17a40634a71f70edd1",
+-  "repair_commit_timestamp": "2026-09-26T17:10:47+08:00",
++  "repair_commit": "27a1a70049ef3990b3feb86eeedfe23036285164",
++  "repair_commit_timestamp": "2026-09-26T21:29:42+08:00",
+   "prior_audit_evidence_commit": "e36308f1079638dd1194f8a39e0fc574f760b051",
+   "prior_audit_evidence_commit_timestamp": "2026-09-26T16:45:19+08:00",
+-  "audit_artifact_commit": "13f3cb604123291c57e017102c3698ea6d3a81e6",
+-  "audit_artifact_commit_timestamp": "2026-09-26T20:43:52+08:00",
++  "audit_artifact_commit": "27a1a70049ef3990b3feb86eeedfe23036285164",
++  "audit_artifact_commit_timestamp": "2026-09-26T21:29:42+08:00",
+   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
+   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
+   "historical_frozen_unchanged": true,
+@@ -78,7 +78,7 @@
+       "metrics_5m_master_file_id": "file_000000003094820699862210d518fffa",
+       "metrics_5m_master_size_bytes": 242535083,
+       "authorized_runtime_materialized": false,
+-      "runtime_blocker": "See change-logs/CHUNK002_RETRY_MATERIALIZATION_MANIFEST.json; byte size and materialized SHA-256 must be locked before an unchanged rerun."
++      "runtime_blocker": "See change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json; the master-to-per-symbol converter is pinned, but master and destination SHA-256 locks do not exist until authorized materialization completes."
+     }
+   },
+   "drive": {
+@@ -162,12 +162,15 @@
+     "change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json",
+     "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json",
+     "change-logs/CHUNK002_RETRY_MATERIALIZATION_MANIFEST.json",
++    "change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json",
++    "change-logs/RESEARCH_QUEUE_JSON_PATCH_DRY_RUN.json",
+     "change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json",
+     "change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json",
+     "change-logs/PRE_CHUNK002_PREREG.md",
+     "change-logs/PRE_CHUNK002_PREREG.json",
+     "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
+     "change-logs/CODEX_REVIEW_PACKET_LATEST.patch",
+-    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-third-final-audit-repair.md"
++    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-third-final-audit-repair.md",
++    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-fifth-final-audit-repair.md"
+   ]
+ }
+diff --git a/change-logs/CODEX_REVIEW_PACKET_LATEST.md b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
+index 785791a..8bc82de 100644
+--- a/change-logs/CODEX_REVIEW_PACKET_LATEST.md
++++ b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
+@@ -1,11 +1,10 @@
+-# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 FOURTH FINAL AUDIT REPAIR
+-
+-TASK_ID=ASTPS_FAST_DETACH_PR15_FOURTH_FINAL_AUDIT_REPAIR
+-STATUS=CHANGES_REQUIRED_PENDING_REVIEW
+-STARTED_AT=2026-09-26T17:06:00+08:00
+-FINISHED_AT=2026-09-26T20:43:52+08:00
+-AUDIT_ARTIFACT_COMMIT=13f3cb604123291c57e017102c3698ea6d3a81e6
+-CODE_COMMIT_SHA=393ca3793e85f9c6c7db7e17a40634a71f70edd1
++# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 FIFTH FINAL AUDIT REPAIR
++
++TASK_ID=ASTPS_FAST_DETACH_PR15_FIFTH_FINAL_AUDIT_REPAIR
++STATUS=CHANGES_REQUIRED_PENDING_SIXTH_FINAL_AUDIT
++STARTED_AT=2026-09-26T21:00:00+08:00
++FINISHED_AT=2026-09-26T21:34:03+08:00
++CODE_COMMIT_SHA=27a1a70049ef3990b3feb86eeedfe23036285164
+ BRANCH=codex/astps-fast-detach-handoff-20260926
+ PR=https://github.com/alex43github/trade-workbench/pull/15
+ READY_FOR_FINAL_AUDIT=false
+@@ -13,20 +12,30 @@ PROMOTION_DECISION=DO_NOT_PROMOTE
+
+ ## SUMMARY
+
+-The collector freezes EDP UTC and price from the exact detector decision bar that defines event identity and causal feature boundary. A delayed-write regression proves a later closed bar cannot drift this pair. Audit chronology uses real commit/evidence times, Drive paths use the canonical hierarchy, mandatory research files have exact revision-guarded pending payloads, and the chunk002 retry prerequisite is pinned without rereading or evaluating chunk002.
++The chunk002 5m master-to-per-symbol cache contract is now executable and pinned: the converter emits the exact Task-002B symbols/<SYMBOL>.csv.zst layout and 11 canonical fields, records UTC/missing-metric rules, and emits per-file plus deterministic aggregate integrity evidence. The canonical master remains intentionally unmaterialized in this repair, so no source/destination SHA is claimed and none of the six hypotheses was reevaluated. The exact RESEARCH_QUEUE.json RFC-6902 pending patch also passed an isolated revision-guarded dry run without writing Drive.
+
+ ## CHANGED FILES
+
+-- Collector, identity state, and Task-007C test: decision-bar EDP capture plus delayed-write regression; shadow/research only; no production/threshold/model/Bark/order impact.
+-- Drive pending manifest: corrected canonical paths and exact revision-guarded pending payloads; audit only.
+-- Chunk002 materialization manifest: reproducible prerequisite; no materialization/run; audit only.
+-- Final audit/status/report artifacts and plan: truthful chronology and fourth-audit governance; no production impact.
++- scripts/fast-detach-v2-materialize-5m-master.py — deterministic master gzip CSV to Task-002B per-symbol cache converter and manifest writer; research-only; no Production impact.
++- tests/fast-detach-5m-materialization.test.mjs — fixture contract test for schema, cache layout, coverage, and aggregate manifest; no Production impact.
++- change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json — source/destination contract, hashes, command, consumer proof, and OOS guard; audit only.
++- change-logs/RESEARCH_QUEUE_JSON_PATCH_DRY_RUN.json — exact canonical-revision RFC-6902 dry-run evidence; Drive read-only.
++- change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json, change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md, docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md — synchronized fifth-audit facts and sole test-run counts; no Production impact.
++- docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-fifth-final-audit-repair.md — implementation plan; no runtime impact.
++- change-logs/CODEX_REVIEW_PACKET_LATEST.md and change-logs/CODEX_REVIEW_PACKET_LATEST.patch — review handoff evidence; no runtime impact.
++
++No changed file alters Production model/threshold, Bark behavior, or order execution path.
+
+ ## TEST RESULTS
+
+-- Focused Task-007/007B/007C/007D: PASS, 42 total / 42 pass / 0 fail / 0 skip.
+-- Related structure-radar regression: PASS, 88 total / 88 pass / 0 fail / 0 skip.
+-- JSON validation: PASS, 4 fourth-audit manifests parse.
++- Final focused Task-007/007B/007C/007D run: PASS, 42 total / 42 pass / 0 fail / 0 skip.
++- Final materialization fixture run: PASS, 1 total / 1 pass / 0 fail / 0 skip.
++- Final related structure-radar regression run: PASS, 88 total / 88 pass / 0 fail / 0 skip.
++- JSON validation for the fifth-audit machine-readable artifacts: PASS.
++- git diff --check: PASS after the packet-artifact commit.
++- Repository-wide npm test remains exit 1: 1098 total / 1010 pass / 88 fail / 0 skip; failures are pre-existing live-exchange/Bybit/trade/UI scope and are not represented as PASS.
++- Typecheck remains unavailable as a pass: 31 pre-existing app/lib errors; no Task-007 scope errors.
++- Fast-Detach Python regression remains UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY, not PASS.
+
+ ## DATA INVARIANTS
+
+@@ -57,14 +66,15 @@ PERSISTENT_EAP_COLLECTOR_STARTED=false
+
+ ## KNOWN LIMITATIONS
+
+-- No auditable runtime lineage from Production Final Action to immutable permission ledger.
+-- No prospective EAP cohort; no collector started.
+-- chunk002 remains DATA_BLOCKED until authorized materialization produces a byte/SHA lock and unchanged pipeline yields frozen unified schema.
+-- Drive writeback is pending, not performed.
++- Master metrics_5m_all_fixed.csv.gz has not been materialized into the authorized staging destination; source SHA, cache file SHAs, coverage counts, and aggregate destination SHA are intentionally pending.
++- Task-002B consumer proof is source-audited and fixture-tested, not exercised against the canonical 242535083-byte master.
++- No auditable runtime lineage from Production Final Action to immutable permission ledger; no prospective EAP cohort or collector.
++- chunk002 valid same-pipeline unified schema and temporal OOS are still DATA_BLOCKED.
++- Drive writeback was not performed; the queue patch was dry-run only.
+
+ ## BLOCKERS
+
+-["NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER","PROSPECTIVE_EAP_COHORT_ZERO","CHUNK002_MATERIALIZATION_NOT_COMPLETE","DRIVE_WRITEBACK_NOT_PERFORMED"]
++["CANONICAL_5M_MASTER_NOT_MATERIALIZED","REAL_EAP_OBSERVER_NOT_CONNECTED","PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE","PROSPECTIVE_EAP_COHORT_ZERO","CHUNK002_SAME_PIPELINE_UNIFIED_SCHEMA_NOT_MATERIALIZED","NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER","DRIVE_WRITEBACK_NOT_PERFORMED","FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE"]
+
+-APPROVAL_REQUIRED=ChatGPT Fifth Final Audit
+-RECOMMENDED_NEXT_TASK=Reviewer-directed materialization/lineage repair only; do not promote, deploy, merge, or start a collector.
++APPROVAL_REQUIRED=ChatGPT Sixth Final Audit
++RECOMMENDED_NEXT_TASK=Reviewer-directed canonical master materialization only; retain OOS, collector, deployment, merge, promotion, and Production changes as blocked.
+diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
+index 1a6411b..28572e2 100644
+--- a/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
++++ b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
+@@ -1,4 +1,4 @@
+-# ASTPS FAST-DETACH — PR #15 FOURTH FINAL AUDIT REPAIR ENGINEERING REPORT
++# ASTPS FAST-DETACH — PR #15 FIFTH FINAL AUDIT REPAIR ENGINEERING REPORT
+
+ STATUS=CHANGES_REQUIRED_INCOMPLETE
+ READY_FOR_FINAL_AUDIT=false
+@@ -6,8 +6,8 @@ PROMOTION_DECISION=DO_NOT_PROMOTE
+ BRANCH=codex/astps-fast-detach-handoff-20260926
+ PR=https://github.com/alex43github/trade-workbench/pull/15
+ BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
+-CODE_REPAIR_COMMIT=393ca3793e85f9c6c7db7e17a40634a71f70edd1
+-CODE_REPAIR_COMMIT_TIMESTAMP=2026-09-26T17:10:47+08:00
++CODE_REPAIR_COMMIT=27a1a70049ef3990b3feb86eeedfe23036285164
++CODE_REPAIR_COMMIT_TIMESTAMP=2026-09-26T21:29:42+08:00
+ PRIOR_AUDIT_EVIDENCE_COMMIT=e36308f1079638dd1194f8a39e0fc574f760b051
+ PRIOR_AUDIT_EVIDENCE_TIMESTAMP=2026-09-26T16:45:19+08:00
+ HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
+@@ -15,7 +15,7 @@ FORWARD_EPOCH_ID=epoch-20260924T185000
+
+ ## Review disposition
+
+-This revision addresses the latest PR #15 FOURTH FINAL AUDIT CHANGES REQUIRED comments in the existing branch. It does not create a new research line. The EDP identity pair is now bound to the original detector decision bar and regression-tested under delayed persistence; the final audit stop gate remains false.
++This revision addresses the latest PR #15 FIFTH FINAL AUDIT CHANGES REQUIRED comments in the existing branch. It does not create a new research line. The Task-002B 5m input contract is now pinned from canonical master through deterministic per-symbol cache conversion; the final audit stop gate remains false.
+
+ ## Implemented repairs
+
+@@ -27,6 +27,8 @@ This revision addresses the latest PR #15 FOURTH FINAL AUDIT CHANGES REQUIRED co
+ 6. `calculateEapSeparatedMetrics()` now uses two inclusive closed-bar windows: the immutable EDP timestamp starts the EDP window, and the immutable EAP timestamp starts the EAP window. The EDP MFE/MAE therefore includes EDP→EAP path movement, while EAP MFE/MAE excludes it; a large-pre-EAP/small-post-EAP regression proves the separation.
+ 7. Canonical Drive resolution now points to the exact `03_MODEL_REGISTRY` parent, `MODEL_REGISTRY.json`, and `CHANGELOG.md` IDs. The registry is present, not absent. Read-only writeback reconciliation is captured in the machine-readable pending manifest.
+ 8. `execution_context.edp_utc` and `edp_price` now come only from the original detector decision bar that defines event identity and causal feature boundary. A delayed-write regression supplies a later closed bar before persistence and proves it cannot alter either EDP field. `first_detected_at_utc` remains separate detector wall-clock metadata.
++9. `CHUNK002_5M_CONVERTER_CONTRACT.json` freezes the converter path/SHA, command, Task-002B 11-column cache schema, UTC/missing-metric rules, row/coverage/per-file/aggregate-SHA audit, and direct `task_002_5m.py` consumer proof. No master file was materialized, so destination files and their SHA lock remain deliberately absent and no OOS hypothesis was rerun.
++10. The exact `RESEARCH_QUEUE.json` revision-guarded RFC-6902 patch was applied to an isolated canonical-revision copy: patch and JSON parse passed, existing keys were preserved, and no Drive write occurred.
+
+ ## Gate status
+
+diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
+index 4d1434c..5341931 100644
+--- a/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
++++ b/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
+@@ -36,7 +36,7 @@ Detection Recall, Execution Precision, Detection Lead, MissedConvexity, and capi
+
+ ## chunk002 temporal OOS disposition
+
+-`PRE_CHUNK002_PREREG.md/json` was committed before reading chunk002. The frozen source prereg SHA is `5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84`; chunk002 SHA is `f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6`. The source contains 50 rows in `pe-top10-ma30-atr-10x-v1`, not the required unified-event schema. The frozen generator was then attempted once with `chunk_index=2` in isolated `/tmp`; it generated 50 task-001-shaped rows (`6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e`) but could not produce `fast-detach-v2-unified-event-2`. `04_DATA/DATA_REGISTRY.md` confirms that the canonical 5m Kline+derivatives master exists in ChatGPT File Library (`file_000000003094820699862210d518fffa`, 242,535,083 bytes), but it was not materialized into the authorized generator runtime together with the frozen Task-002B path/barrier inputs. The exact missing schema fields and runtime-only blocker are in [`CHUNK002_UNIFIED_GENERATION_ATTEMPT.json`](../../change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json) and the result is `DATA_BLOCKED`. All six Primary hypotheses therefore remain `N_TOTAL=50, N_ELIGIBLE=0, N_EXCLUDED=50, result=INSUFFICIENT`; see [`ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md`](ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md). This is not a valid temporal OOS completion, and no threshold was retuned.
++`PRE_CHUNK002_PREREG.md/json` was committed before reading chunk002. The frozen source prereg SHA is `5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84`; chunk002 SHA is `f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6`. The source contains 50 rows in `pe-top10-ma30-atr-10x-v1`, not the required unified-event schema. The frozen generator was then attempted once with `chunk_index=2` in isolated `/tmp`; it generated 50 task-001-shaped rows (`6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e`) but could not produce `fast-detach-v2-unified-event-2`. `04_DATA/DATA_REGISTRY.md` confirms that the canonical 5m Kline+derivatives master exists in ChatGPT File Library (`file_000000003094820699862210d518fffa`, 242,535,083 bytes). The new [`CHUNK002_5M_CONVERTER_CONTRACT.json`](../../change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json) now pins its deterministic master-to-Task-002B `symbols/<SYMBOL>.csv.zst` conversion, source consumer, canonical fields, coverage audit, and aggregate integrity rule. The master has not been materialized into the authorized runtime, so no source/destination SHA is claimed and no OOS hypothesis was rerun: `CHUNK002_EVER_ACCESSED_AFTER_PREREG=true`, `CHUNK002_ACCESSED_THIS_REPAIR=false`, and `CHUNK002_REEVALUATED_THIS_REPAIR=false`. The exact missing schema fields and runtime-only blocker are in [`CHUNK002_UNIFIED_GENERATION_ATTEMPT.json`](../../change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json) and the result is `DATA_BLOCKED`. All six Primary hypotheses therefore remain `N_TOTAL=50, N_ELIGIBLE=0, N_EXCLUDED=50, result=INSUFFICIENT`; see [`ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md`](ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md). This is not a valid temporal OOS completion, and no threshold was retuned.
+
+ ## EAP boundary
