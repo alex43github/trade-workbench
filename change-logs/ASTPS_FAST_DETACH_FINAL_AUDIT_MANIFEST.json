@@ -10,6 +10,7 @@
   "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
   "repair_commit": "f4793dfafd50ffd08f562893a106297522c85bb7",
   "prior_audit_evidence_commit": "b624779b82c092019bdc87509a9fc1a919e8f57e",
+  "audit_artifact_commit": "e36308f1079638dd1194f8a39e0fc574f760b051",
   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_frozen_unchanged": true,
