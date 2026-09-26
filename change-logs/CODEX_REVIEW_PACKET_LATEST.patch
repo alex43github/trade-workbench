@@ -101,58 +101,45 @@ index 0000000..88b59f9
 +}
 diff --git a/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
 new file mode 100644
-index 0000000..95ca685
+index 0000000..e26589e
 --- /dev/null
 +++ b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,58 @@
 +# ASTPS FAST-DETACH — CODEX AUTONOMOUS STATUS
 +
-+TASK_ID=ASTPS_FAST_DETACH_FINAL_AUDIT
-+PHASE=10/10_FINAL_AUDIT
-+STATUS=AUDIT_READY_DO_NOT_PROMOTE
-+READY_FOR_FINAL_AUDIT=true
-+PHASE1_007D_REVIEW_BASELINE=PASS
-+STARTED_AT=2026-09-26T12:00:00+08:00
-+FINISHED_AT=2026-09-26T13:35:00+08:00
-+BASE_BRANCH=origin/main
-+BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
-+BRANCH=codex/astps-fast-detach-handoff-20260926
-+IMPLEMENTATION_COMMIT_SHA=6e0350e
-+AUDIT_COMMITS=9d5f9e0,7c9caa7
-+FINAL_ARTIFACTS_COMMIT=3ad722f
++TASK_ID=ASTPS_FAST_DETACH_PR15_FINAL_AUDIT_REPAIR
++PHASE=FINAL_AUDIT_REPAIR
++STATUS=CHANGES_REQUIRED_INCOMPLETE
++READY_FOR_FINAL_AUDIT=false
 +PROMOTION_DECISION=DO_NOT_PROMOTE
-+PHASE2_PERSISTENCE_AUDIT=PASS
-+PERSISTENT_FORWARD_EPOCH_READY=true
-+PERSISTENT_COPY_SHA_MATCH=true
-+SOURCE_TMP_PRESERVED=true
-+FORWARD_EPOCH_ID=epoch-20260924T185000
-+PERSISTENT_SNAPSHOT_ROWS=177
-+PERSISTENT_TRANSITION_ROWS=185
-+PERSISTENT_OUTCOME_ROWS=1064
-+PERSISTENT_UNIFIED_VIEW_ROWS=227
-+PRODUCTION_PID_BEFORE=1412125
-+PRODUCTION_PID_AFTER=1412125
++BRANCH=codex/astps-fast-detach-handoff-20260926
++PR=https://github.com/alex43github/trade-workbench/pull/15
++BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
++REPAIR_COMMIT=8e13298
++HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
++PRE_CHUNK002_PREREG_SHA=5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84
++CHUNK002_SHA=f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6
++CHUNK002_ACCESSED=true
 +
-+## Summary
++## Completed in this repair
 +
-+Rebuilt the TASK-007/007B/007C/007D research surface on real `origin/main` ancestry and repaired the two Phase 1 P0 issues from the handoff:
++- Immutable EDP timestamp contract and later-bar EAP latency regression.
++- Fail-closed EAP status classifier.
++- Immutable EAP_GRANTED-only LIVE_FORWARD denominator and transition-time delay.
++- 177-event EDP-only metrics through 12H and frozen-field stratification audit.
++- Prereg freeze before chunk002 read; schema audit records six INSUFFICIENT results.
++- Historical vs LIVE_FORWARD denominator-separated comparison.
++- Google Drive canonical parent/file-ID reconciliation without pseudo replacement.
 +
-+- EAP decision bars now accept a later closed bar when `EDP decision bar <= EAP decision bar <= EAP time`; an earlier bar is rejected.
-+- Causal EAP evidence is bounded by the selected EAP decision-bar close and future evidence is rejected.
-+- EAP 6H sample quality is derived from observed immutable EAP transition event IDs plus mature 6H outcomes; Discovery and EAP denominators remain separate.
-+- The existing no-EAP cohort remains `EAP N=0 / LOW_SAMPLE`; no snapshot or event identity is rewritten.
++## Still blocking the final-audit stop gate
 +
-+## Verification
++- `REAL_EAP_OBSERVER_CONNECTED=false`: no explicit permission source exists in VPS production code/process evidence.
++- `PERSISTENT_SHADOW_COLLECTOR_STABLE=false`: no task007c collector process is running; no observer is available to form a cohort.
++- `PROSPECTIVE_EAP_COHORT_FORMED=false`: immutable EAP_GRANTED N=0.
++- `CHUNK002_TEMPORAL_OOS_COMPLETED=false`: available source is incompatible with frozen unified-event schema.
++- `DRIVE_WRITEBACK_COMPLETED=false`; `DRIVE_WRITEBACK_FORMALLY_RECONCILED=true`. Reconciliation is formal only because exact `MODEL_REGISTRY.json` is absent and no safe canonical append payload is authorized.
 +
-+- Focused TASK-007/007B/007C/007D: 35 passed, 0 failed, 0 skipped.
-+- Radar regression: 88 total, 87 passed, 0 failed, 1 environment-limited skip.
-+- Repository `npm test`: build passed; full historical suite ended 1092 total, 984 passed, 107 failed, 1 skipped. Failures are outside this research-only scope in existing live-exchange/Bybit/trade/UI suites.
-+- Typecheck: non-zero only for pre-existing `app/`, `lib/radar/`, `lib/telegram/`, and `lib/trade/` errors; no TASK-007/007B/007C/007D type errors remain.
-+- Fast-Detach Python regression: not available in this branch; no substitute or synthetic pass was created.
-+- `git diff --check`: PASS.
-+- `git merge-base origin/main HEAD`: `b68c44d4fd3689e8e9909d53cbc137afa219122b`.
-+
-+## Data and production boundaries
++## Invariants
 +
 +FEATURE_LEAKAGE_COUNT=0
 +DUPLICATE_EVENT_IDS=0
@@ -162,210 +149,580 @@ index 0000000..95ca685
 +HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_FROZEN_UNCHANGED=true
-+CHUNK002_ACCESSED=false
 +PRODUCTION_MODEL_CHANGED=false
 +PRODUCTION_CODE_CHANGED=false
 +PRODUCTION_SERVICE_RESTARTED=false
-+THRESHOLD_CHANGED=false
-+BARK_CHANGED=false
-+ORDER_PATH_CHANGED=false
-+DEPLOYED=false
 +
-+## Phase 2 read-only VPS evidence
++## Verification
 +
-+- Persistent epoch file inventory contains the expected audit, manifest, snapshot, transition, outcome, and unified-view files under `/var/lib/trade-workbench/research/forward-shadow/epochs/epoch-20260924T185000/`.
-+- `PERSISTENT_COPY_MANIFEST.json` reports matching source/destination SHA-256 values for the canonical seven copied ledger files, `source_preserved=true`, `event_count=177`, and `outcome_count=1064`.
-+- Read-only `sha256sum` and row counts match the manifest: snapshot 177, transitions 185, outcomes 1064, unified view 227.
-+- The immutable historical path was read once for SHA verification and returned `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
-+- Production MainPID was read before/after the audit as `1412125` / `1412125`; no service operation was issued.
++FOCUSED_TESTS=38/38 PASS
++RADAR_REGRESSION=88 total / 87 pass / 0 fail / 1 environment skip
++BUILD=PASS
++FULL_NPM_TEST=1095 total / 987 pass / 107 fail / 1 skip
++TYPECHECK=FAIL pre-existing app/lib errors; task scope clean
++FAST_DETACH_PYTHON_REGRESSION=UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY
 +
-+No VPS ledger was modified. Phase 2 read-only audit verified the historical SHA and persistent-copy manifest; no outcome, snapshot, or unified-view write occurred.
-+
-+## Approval gate
-+
-+Phases 1–10 are documented for final audit. Phase 3 and Phase 7 remain explicitly blocked by the absent EAP source/zero EAP sample; Phase 8 was intentionally not started and `chunk_002` was not accessed. No merge, deployment, restart, promotion, threshold/model/Bark/order change, or historical evidence rewrite occurred.
-+
-+Final local artifacts:
-+
-+- `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md`
-+- `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md`
-+- `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md`
-+- `docs/research/DRIVE_WRITEBACK_PENDING.md`
-+- `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json`
-+
-+The final decision is `PROMOTION_DECISION=DO_NOT_PROMOTE`.
++The branch remains at the approval gate. No merge, deploy, restart, promotion, threshold change, model change, Bark change, order-path change, or snapshot/event rewrite occurred.
+diff --git a/change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json b/change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json
+new file mode 100644
+index 0000000..bcc57ac
+--- /dev/null
++++ b/change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json
+@@ -0,0 +1,133 @@
++{
++  "schema_version": "fast-detach-v2-task-007d-edp-only-audit-2",
++  "basis": "EDP_ONLY_DESCRIPTIVE_LIVE_FORWARD",
++  "source_epoch_id": "epoch-20260924T185000",
++  "source_summary_path": "/var/lib/trade-workbench/research/forward-shadow/epochs/epoch-20260924T185000/audit/EDP_ONLY_FORWARD_SUMMARY.json",
++  "source_summary_sha256": "d99c88bdb4fbea5c978c6129de0e1135b84640457a9ad32223444880cb3bdaa8",
++  "N": 177,
++  "mature_outcome_counts": {"15m": 177, "30m": 177, "1h": 177, "3h": 177, "6h": 177, "12h": 177, "24h": 2, "48h": 0},
++  "stratification": {
++    "timeframe": {"15m": 62, "1h": 98, "4h": 17},
++    "setup": {"PLATFORM_RECLAIM": 8, "TRENDLINE_BREAKOUT": 169},
++    "discovery_channel": {"structure-radar.scanner.onSignal": 177},
++    "family": {"__UNAVAILABLE_FROZEN_FIELD__": 177},
++    "mechanism": {"__UNAVAILABLE_FROZEN_FIELD__": 177},
++    "family_status": "UNAVAILABLE_FROZEN_FIELD",
++    "mechanism_status": "UNAVAILABLE_FROZEN_FIELD"
++  },
++  "horizons": {
++    "15m": {
++      "N": 177,
++      "median_return_pct": 0,
++      "positive_return_rate": 0.4858757062146893,
++      "median_mfe_pct": 0.2914124396685258,
++      "median_mae_pct": -0.6267409470752217,
++      "hit_rate": {"+5%": 0.011299435028248588, "+8%": 0.011299435028248588, "+10%": 0, "+15%": 0, "+20%": 0},
++      "median_ttp_min": {"+5%": 5, "+8%": 10, "+10%": null, "+15%": null, "+20%": null},
++      "median_time_to_positive_min": 0,
++      "median_max_time_underwater_min": 5,
++      "normal_mae_n": 177,
++      "severe_failure_n": 0
++    },
++    "30m": {
++      "N": 177,
++      "median_return_pct": 0.6593665371482205,
++      "positive_return_rate": 0.847457627118644,
++      "median_mfe_pct": 1.13724879264685,
++      "median_mae_pct": -0.6267409470752217,
++      "hit_rate": {"+5%": 0.011299435028248588, "+8%": 0.011299435028248588, "+10%": 0, "+15%": 0, "+20%": 0},
++      "median_ttp_min": {"+5%": 5, "+8%": 10, "+10%": null, "+15%": null, "+20%": null},
++      "median_time_to_positive_min": 0,
++      "median_max_time_underwater_min": 5,
++      "normal_mae_n": 177,
++      "severe_failure_n": 0
++    },
++    "1h": {
++      "N": 177,
++      "median_return_pct": 0.4796929964822505,
++      "positive_return_rate": 0.6836158192090396,
++      "median_mfe_pct": 1.3011863758132458,
++      "median_mae_pct": -0.7135575942915251,
++      "hit_rate": {"+5%": 0.022598870056497175, "+8%": 0.022598870056497175, "+10%": 0.011299435028248588, "+15%": 0, "+20%": 0},
++      "median_ttp_min": {"+5%": 20, "+8%": 25, "+10%": 40, "+15%": null, "+20%": null},
++      "median_time_to_positive_min": 0,
++      "median_max_time_underwater_min": 5,
++      "normal_mae_n": 171,
++      "severe_failure_n": 6
++    },
++    "3h": {
++      "N": 177,
++      "median_return_pct": 0.20387359836901986,
++      "positive_return_rate": 0.5423728813559322,
++      "median_mfe_pct": 1.449275362318847,
++      "median_mae_pct": -1.2192513368984081,
++      "hit_rate": {"+5%": 0.04519774011299435, "+8%": 0.02824858757062147, "+10%": 0.011299435028248588, "+15%": 0, "+20%": 0},
++      "median_ttp_min": {"+5%": 62.5, "+8%": 40, "+10%": 40, "+15%": null, "+20%": null},
++      "median_time_to_positive_min": 0,
++      "median_max_time_underwater_min": 55,
++      "normal_mae_n": 157,
++      "severe_failure_n": 20
++    },
++    "6h": {
++      "N": 177,
++      "median_return_pct": 0.03841721091049077,
++      "positive_return_rate": 0.5084745762711864,
++      "median_mfe_pct": 1.6361469281612306,
++      "median_mae_pct": -1.3900589721988266,
++      "hit_rate": {"+5%": 0.096045197740113, "+8%": 0.06779661016949153, "+10%": 0.05084745762711865, "+15%": 0, "+20%": 0},
++      "median_ttp_min": {"+5%": 185, "+8%": 195, "+10%": 310, "+15%": null, "+20%": null},
++      "median_time_to_positive_min": 0,
++      "median_max_time_underwater_min": 75,
++      "normal_mae_n": 155,
++      "severe_failure_n": 22
++    },
++    "12h": {
++      "N": 177,
++      "median_return_pct": -1.01913994531444,
++      "positive_return_rate": 0.2824858757062147,
++      "median_mfe_pct": 1.9090398652442442,
++      "median_mae_pct": -2.1788023615406327,
++      "hit_rate": {"+5%": 0.1751412429378531, "+8%": 0.11864406779661017, "+10%": 0.06779661016949153, "+15%": 0.03389830508474576, "+20%": 0},
++      "median_ttp_min": {"+5%": 205, "+8%": 325, "+10%": 322.5, "+15%": 545, "+20%": null},
++      "median_time_to_positive_min": 0,
++      "median_max_time_underwater_min": 150,
++      "normal_mae_n": 126,
++      "severe_failure_n": 51
++    },
++    "24h": {
++      "N": 2,
++      "median_return_pct": 0.8467260651623454,
++      "positive_return_rate": 0.5,
++      "median_mfe_pct": 2.009897696299623,
++      "median_mae_pct": -0.610123418231312,
++      "hit_rate": {"+5%": 0, "+8%": 0, "+10%": 0, "+15%": 0, "+20%": 0},
++      "median_ttp_min": {"+5%": null, "+8%": null, "+10%": null, "+15%": null, "+20%": null},
++      "median_time_to_positive_min": 35,
++      "median_max_time_underwater_min": 345,
++      "normal_mae_n": 2,
++      "severe_failure_n": 0
++    },
++    "48h": {
++      "N": 0,
++      "median_return_pct": null,
++      "positive_return_rate": null,
++      "median_mfe_pct": null,
++      "median_mae_pct": null,
++      "hit_rate": {"+5%": null, "+8%": null, "+10%": null, "+15%": null, "+20%": null},
++      "median_ttp_min": {"+5%": null, "+8%": null, "+10%": null, "+15%": null, "+20%": null},
++      "median_time_to_positive_min": null,
++      "median_max_time_underwater_min": null,
++      "normal_mae_n": 0,
++      "severe_failure_n": 0
++    }
++  },
++  "eap": {
++    "observer_connected": false,
++    "eap_granted_ledger_event_n": 0,
++    "eap_mature_6h_n": 0,
++    "denominator_source": "IMMUTABLE_EAP_GRANTED_LEDGER_EVENT_IDS",
++    "sample_quality_6h": "LOW_SAMPLE"
++  },
++  "threshold_retuned": false,
++  "production_changed": false
++}
 diff --git a/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
 new file mode 100644
-index 0000000..2e241f3
+index 0000000..66c3080
 --- /dev/null
 +++ b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,102 @@
 +{
-+  "manifest_version": "astps-fast-detach-final-audit-1",
-+  "status": "AUDIT_READY_DO_NOT_PROMOTE",
-+  "ready_for_final_audit": true,
++  "manifest_version": "astps-fast-detach-pr15-final-audit-repair-1",
++  "status": "CHANGES_REQUIRED_INCOMPLETE",
++  "ready_for_final_audit": false,
++  "promotion_decision": "DO_NOT_PROMOTE",
++  "final_reports_regenerated": true,
++  "ready_gate_truthful_value": false,
 +  "branch": "codex/astps-fast-detach-handoff-20260926",
 +  "pull_request": "https://github.com/alex43github/trade-workbench/pull/15",
 +  "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
-+  "implementation_commit": "6e0350e",
-+  "audit_commits": ["9d5f9e0", "7c9caa7"],
++  "repair_commit": "8e13298",
 +  "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
 +  "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
 +  "historical_frozen_unchanged": true,
 +  "forward_epoch_id": "epoch-20260924T185000",
-+  "source_counts": {
-+    "HISTORICAL_REPLAY": 50,
-+    "LIVE_FORWARD": 177,
-+    "UNIFIED_RESEARCH_VIEW": 227
-+  },
-+  "forward_epoch_rows": {
-+    "snapshots": 177,
-+    "transitions": 185,
-+    "outcomes": 1064,
-+    "outcome_6h_mature": 177,
-+    "outcome_12h_mature": 177,
-+    "outcome_24h_mature": 2,
-+    "outcome_48h_mature": 0
++  "source_counts": {"HISTORICAL_REPLAY": 50, "LIVE_FORWARD_DISCOVERY": 177, "LIVE_FORWARD_EAP": 0, "REPLAY_EAP": 0, "UNIFIED_RESEARCH_VIEW": 227},
++  "edp_only_audit": {
++    "N": 177,
++    "source_summary_sha256": "d99c88bdb4fbea5c978c6129de0e1135b84640457a9ad32223444880cb3bdaa8",
++    "mature_outcome_counts": {"15m": 177, "30m": 177, "1h": 177, "3h": 177, "6h": 177, "12h": 177, "24h": 2, "48h": 0},
++    "family_status": "UNAVAILABLE_FROZEN_FIELD",
++    "mechanism_status": "UNAVAILABLE_FROZEN_FIELD"
 +  },
 +  "eap": {
-+    "observer_connected": false,
-+    "zero_root_cause": "OBSERVER_NOT_CONNECTED",
-+    "observed": 0,
-+    "confirmed_absent": 0,
-+    "not_observed": 177,
++    "real_observer_connected": false,
++    "immutable_eap_granted_event_n": 0,
++    "historical_live_not_observed_n": 177,
 +    "sample_quality_6h": "LOW_SAMPLE",
-+    "historical_replay_eap_backfilled": 0
++    "denominator_source": "IMMUTABLE_EAP_GRANTED_LEDGER_EVENT_IDS"
++  },
++  "chunk002": {
++    "accessed_after_prereg_commit": true,
++    "source_path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
++    "source_sha256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6",
++    "prereg_path": "change-logs/PRE_CHUNK002_PREREG.json",
++    "prereg_sha256": "5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84",
++    "prereg_commit": "8e13298",
++    "same_pipeline_unified_schema": false,
++    "temporal_oos_completed": false,
++    "hypothesis_results": "INSUFFICIENT_FOR_ALL_SIX"
++  },
++  "drive": {
++    "canonical_reconciliation": "FORMALLY_RECONCILED",
++    "writeback": "NOT_PERFORMED",
++    "live_cases_id": "18oMIBSprBIAHO9-FY8WQzD907VM1XiU9",
++    "live_outcomes_id": "1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4",
++    "model_registry_exact_name_found": false,
++    "model_current_used_as_replacement": false
 +  },
 +  "data_invariants": {
 +    "FEATURE_LEAKAGE_COUNT": 0,
 +    "DUPLICATE_EVENT_IDS": 0,
 +    "DUPLICATE_OUTCOME_KEYS": 0,
 +    "SNAPSHOT_MUTATION_COUNT": 0,
-+    "OUTCOME_MUTATION_COUNT": 0
++    "OUTCOME_MUTATION_COUNT": 0,
++    "HISTORICAL_FROZEN_UNCHANGED": true
 +  },
 +  "production_side_effects": {
-+    "CHUNK002_ACCESSED": false,
++    "CHUNK002_ACCESSED": true,
 +    "PRODUCTION_MODEL_CHANGED": false,
 +    "PRODUCTION_CODE_CHANGED": false,
 +    "PRODUCTION_SERVICE_RESTARTED": false,
 +    "DEPLOYED": false,
 +    "MERGED": false,
-+    "PRODUCTION_MAIN_PID_BEFORE": "1412125",
-+    "PRODUCTION_MAIN_PID_AFTER": "1412125"
-+  },
-+  "tests": {
-+    "focused_task007_total": 35,
-+    "focused_task007_pass": 35,
-+    "focused_task007_fail": 0,
-+    "radar_total": 88,
-+    "radar_pass": 87,
-+    "radar_fail": 0,
-+    "radar_environment_skip": 1,
-+    "repository_build": "PASS",
-+    "repository_full_suite": "1092 total / 984 pass / 107 fail / 1 skip",
-+    "typecheck": "FAIL on pre-existing app/lib errors; no TASK-007 errors",
-+    "fast_detach_python_regression": "NOT_AVAILABLE"
-+  },
-+  "drive": {
-+    "canonical_read": true,
-+    "writeback": "PENDING",
-+    "unresolved_canonical_files": ["MODEL_REGISTRY.json", "LIVE_CASES.jsonl", "LIVE_OUTCOMES.jsonl"]
-+  },
-+  "promotion": {
-+    "PROMOTION_DECISION": "DO_NOT_PROMOTE",
-+    "PROMOTION_CANDIDATE": false,
 +    "THRESHOLD_CHANGED": false,
-+    "MODEL_CHANGED": false,
 +    "BARK_CHANGED": false,
 +    "ORDER_PATH_CHANGED": false
 +  },
++  "tests": {
++    "focused": "38 total / 38 pass / 0 fail / 0 skip",
++    "related_regression": "88 total / 87 pass / 0 fail / 1 environment skip",
++    "repository_build": "PASS",
++    "repository_full_suite": "1095 total / 987 pass / 107 fail / 1 skip",
++    "typecheck": "FAIL on pre-existing app/lib errors; no TASK-007 scope errors",
++    "fast_detach_python_regression": "UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY"
++  },
 +  "blockers": [
-+    "OBSERVER_NOT_CONNECTED",
-+    "EAP_LOW_SAMPLE",
-+    "CHUNK002_NOT_ACCESSED_PENDING_PREREGISTRATION_GATE",
-+    "DRIVE_WRITEBACK_PENDING",
-+    "FAST_DETACH_PYTHON_REGRESSION_NOT_AVAILABLE",
-+    "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"
++    "REAL_EAP_OBSERVER_NOT_CONNECTED",
++    "PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE",
++    "PROSPECTIVE_EAP_COHORT_ZERO",
++    "CHUNK002_SOURCE_NOT_SAME_PIPELINE_UNIFIED_SCHEMA",
++    "MODEL_REGISTRY_JSON_EXACT_NAME_ABSENT",
++    "NO_SAFE_CANONICAL_DRIVE_APPEND_PAYLOAD_AUTHORIZED",
++    "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE"
 +  ],
 +  "artifacts": [
 +    "docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md",
 +    "docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md",
 +    "docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md",
++    "docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md",
++    "docs/research/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.md",
 +    "docs/research/DRIVE_WRITEBACK_PENDING.md",
-+    "change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json",
++    "change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json",
++    "change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json",
++    "change-logs/CHUNK002_SOURCE_MANIFEST.json",
++    "change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json",
++    "change-logs/PRE_CHUNK002_PREREG.md",
++    "change-logs/PRE_CHUNK002_PREREG.json",
 +    "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
 +    "change-logs/CODEX_REVIEW_PACKET_LATEST.patch"
 +  ]
 +}
+diff --git a/change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json b/change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json
+new file mode 100644
+index 0000000..b5f4175
+--- /dev/null
++++ b/change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json
+@@ -0,0 +1,75 @@
++{
++  "schema_version": "fast-detach-v2-historical-live-comparison-1",
++  "status": "COMPLETED_WITH_DATA_GAPS",
++  "source_separation": true,
++  "historical_chunk001_sha256": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
++  "live_edp_audit_sha256": "d99c88bdb4fbea5c978c6129de0e1135b84640457a9ad32223444880cb3bdaa8",
++  "denominators": {
++    "HISTORICAL_REPLAY": 50,
++    "LIVE_FORWARD_DISCOVERY": 177,
++    "LIVE_FORWARD_EAP": 0,
++    "REPLAY_EAP": 0
++  },
++  "comparison": {
++    "HISTORICAL_REPLAY": {
++      "event_n": 50,
++      "detection_recall": "NOT_ESTABLISHED_NO_GROUND_TRUTH",
++      "execution_precision": "NOT_ESTABLISHED_NO_EXECUTION_PERMISSION_LEDGER",
++      "edp_n": 50,
++      "eap_n": 0,
++      "detection_lead_min": "NOT_ESTABLISHED",
++      "missed_convexity": "NOT_ESTABLISHED",
++      "mfe_reference": {"horizon": "24h", "median_pct": 3.3387342323860203, "n": 50},
++      "mae_reference": {"horizon": "1h", "median_pct": -1.2451156081858705, "n": 50},
++      "ttp5_reference": {"median_min": 265, "n": 22},
++      "time_to_positive_reference": {"median_min": 0, "n": 49},
++      "max_time_underwater_reference": {"median_min": 495, "max_min": 1440, "n": 50},
++      "normal_mae_1h_n": 40,
++      "severe_failure_1h_n": 10,
++      "capital_efficiency": "NOT_ESTABLISHED",
++      "capital_occupancy": "NOT_ESTABLISHED"
++    },
++    "LIVE_FORWARD_DISCOVERY": {
++      "event_n": 177,
++      "detection_recall": "NOT_ESTABLISHED_NO_GROUND_TRUTH",
++      "execution_precision": "NOT_ESTABLISHED_EAP_OBSERVER_NOT_CONNECTED",
++      "edp_n": 177,
++      "eap_n": 0,
++      "detection_lead_min": "NOT_ESTABLISHED_NO_REFERENCE_DETECTION_TIME",
++      "missed_convexity": "NOT_ESTABLISHED_NO_EAP_OR_EXECUTION_REFERENCE",
++      "mfe_reference": {"horizon": "12h", "median_pct": 1.9090398652442442, "n": 177},
++      "mae_reference": {"horizon": "12h", "median_pct": -2.1788023615406327, "n": 177},
++      "ttp5_reference": {"horizon": "12h", "median_min": 205, "n": 177},
++      "time_to_positive_reference": {"horizon": "12h", "median_min": 0, "n": 177},
++      "max_time_underwater_reference": {"horizon": "12h", "median_min": 150, "n": 177},
++      "normal_mae_12h_n": 126,
++      "severe_failure_12h_n": 51,
++      "capital_efficiency": "NOT_ESTABLISHED_NO_EXECUTION_PERMISSION",
++      "capital_occupancy": "NOT_ESTABLISHED_NO_EXECUTION_PERMISSION"
++    },
++    "LIVE_FORWARD_EAP": {
++      "event_n": 0,
++      "eap_granted_ledger_event_n": 0,
++      "status": "LOW_SAMPLE",
++      "detection_recall": "NOT_ESTABLISHED",
++      "execution_precision": "NOT_ESTABLISHED",
++      "edp_to_eap": "NOT_ESTABLISHED",
++      "detection_lead_min": "NOT_ESTABLISHED",
++      "missed_convexity": "NOT_ESTABLISHED",
++      "mfe_mae_ttp": "NOT_CALCULATED_FOR_ZERO_EAP_DENOMINATOR",
++      "normal_mae": "NOT_CALCULATED",
++      "severe_failure": "NOT_CALCULATED",
++      "time_underwater": "NOT_CALCULATED",
++      "capital_efficiency": "NOT_CALCULATED"
++    },
++    "REPLAY_EAP": {
++      "event_n": 0,
++      "status": "NO_REPLAY_EAP_DENOMINATOR_IN_CURRENT_EVIDENCE",
++      "mfe_mae_ttp": "NOT_CALCULATED",
++      "capital_efficiency": "NOT_CALCULATED"
++    }
++  },
++  "interpretation": "Historical replay and live-forward discovery are descriptive and source-separated. No EAP-conditioned or execution-level claim is made. Horizon differences are explicit; missing detection ground truth and permission-ledger fields are data gaps, not zero-performance values.",
++  "threshold_retuned": false,
++  "production_changed": false
++}
+diff --git a/change-logs/CHUNK002_SOURCE_MANIFEST.json b/change-logs/CHUNK002_SOURCE_MANIFEST.json
+new file mode 100644
+index 0000000..12afa38
+--- /dev/null
++++ b/change-logs/CHUNK002_SOURCE_MANIFEST.json
+@@ -0,0 +1,15 @@
++{
++  "schema_version": "fast-detach-v2-chunk002-source-manifest-1",
++  "source_path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
++  "source_sha256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6",
++  "source_schema_version": "recorded_from_source_after_prereg_freeze",
++  "source_date_start_bjt": "2026-04-12",
++  "source_date_end_bjt": "2026-04-16",
++  "pre_chunk002_prereg_path": "change-logs/PRE_CHUNK002_PREREG.json",
++  "pre_chunk002_prereg_sha256": "5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84",
++  "prereg_commit": "8e13298",
++  "read_order_verified": true,
++  "chunk002_accessed_after_prereg_commit": true,
++  "threshold_retuned": false,
++  "production_changed": false
++}
+diff --git a/change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json b/change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json
+new file mode 100644
+index 0000000..98d0d03
+--- /dev/null
++++ b/change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json
+@@ -0,0 +1,130 @@
++{
++  "schema_version": "fast-detach-v2-chunk002-temporal-oos-audit-1",
++  "status": "BLOCKED_DATA_SCHEMA",
++  "oos_valid": false,
++  "chunk002_temporal_oos_completed": false,
++  "source": {
++    "path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
++    "sha256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6",
++    "schema_version": "pe-top10-ma30-atr-10x-v1",
++    "date_start_bjt": "2026-04-12",
++    "date_end_bjt": "2026-04-16",
++    "n_total": 50
++  },
++  "prereg": {
++    "path": "change-logs/PRE_CHUNK002_PREREG.json",
++    "sha256": "5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84",
++    "commit": "8e13298",
++    "read_before_prereg_freeze": false
++  },
++  "pipeline_compatibility": {
++    "required_unified_schema": "fast-detach-v2-unified-event-2",
++    "source_is_unified_event_schema": false,
++    "same_pipeline_available": false,
++    "reason": "chunk002 is a PE backtest trade-output object and does not contain the frozen unified-event path/feature/barrier fields"
++  },
++  "primary_hypotheses": [
++    {
++      "hypothesis_id": "PE_E1_RESET_REIGNITION",
++      "result": "INSUFFICIENT",
++      "N_TOTAL": 50,
++      "N_ELIGIBLE": 0,
++      "N_EXCLUDED": 50,
++      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
++      "required_field_availability": {
++        "pe.timeframes.15m.metrics.w12.delta_1": 0,
++        "pe.timeframes.15m.metrics.w12.acceleration": 0,
++        "path_labels.task001.pe_transition": 0,
++        "path_labels.task001.one_hour_handoff_time": 0
++      },
++      "support_count": 0,
++      "counterexample_count": 0
++    },
++    {
++      "hypothesis_id": "PE_E3_15M_EXTREME_INSUFFICIENT",
++      "result": "INSUFFICIENT",
++      "N_TOTAL": 50,
++      "N_ELIGIBLE": 0,
++      "N_EXCLUDED": 50,
++      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
++      "required_field_availability": {
++        "pe.timeframes.15m.metrics.w12.value": 0,
++        "pe.timeframes.1h.metrics.w12.delta_1": 0,
++        "pe.timeframes.1h.metrics.w12.acceleration": 0,
++        "path_labels.path_quality": 0,
++        "barrier_labels.refined_5m": 0
++      },
++      "support_count": 0,
++      "counterexample_count": 0
++    },
++    {
++      "hypothesis_id": "RESPONSE_FRESHNESS_DECAY",
++      "result": "INSUFFICIENT",
++      "N_TOTAL": 50,
++      "N_ELIGIBLE": 0,
++      "N_EXCLUDED": 50,
++      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
++      "required_field_availability": {
++        "path_labels.path_quality.time_to_positive_min": 0,
++        "path_labels.path_quality.ttp_5": 0,
++        "path_labels.path_quality.mae_before_5": 0,
++        "path_labels.task001.MFE_30m": 0,
++        "pe.timeframes.15m.metrics.w12.acceleration": 0
++      },
++      "support_count": 0,
++      "counterexample_count": 0
++    },
++    {
++      "hypothesis_id": "CLEAN_RESPONSE_BREADTH",
++      "result": "INSUFFICIENT",
++      "N_TOTAL": 50,
++      "N_ELIGIBLE": 0,
++      "N_EXCLUDED": 50,
++      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
++      "required_field_availability": {
++        "path_labels.path_quality": 0,
++        "barrier_labels.refined_5m.tp5_before_sl3": 0,
++        "future_evidence.task002b_5m_path.bars": 0,
++        "features.timeframes.15m": 0
++      },
++      "support_count": 0,
++      "counterexample_count": 0
++    },
++    {
++      "hypothesis_id": "ADVERSE_PATH_GATE",
++      "result": "INSUFFICIENT",
++      "N_TOTAL": 50,
++      "N_ELIGIBLE": 0,
++      "N_EXCLUDED": 50,
++      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
++      "required_field_availability": {
++        "path_labels.task001.MFE_24h": 0,
++        "path_labels.task001.MAE_1h": 0,
++        "path_labels.path_quality.max_time_underwater_min": 0,
++        "barrier_labels.refined_5m": 0
++      },
++      "support_count": 0,
++      "counterexample_count": 0
++    },
++    {
++      "hypothesis_id": "PE_MULTI_TF_SYNCHRONIZED_ACCELERATION",
++      "result": "INSUFFICIENT",
++      "N_TOTAL": 50,
++      "N_ELIGIBLE": 0,
++      "N_EXCLUDED": 50,
++      "exclusion_reasons": {"REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA": 50},
++      "required_field_availability": {
++        "pe.timeframes.15m.metrics.w12.delta_1": 0,
++        "pe.timeframes.1h.metrics.w12.delta_1": 0,
++        "pe.timeframes.4h.metrics.w12.delta_1": 0,
++        "pe.timeframes.*.metrics.w12.acceleration": 0
++      },
++      "support_count": 0,
++      "counterexample_count": 0
++    }
++  ],
++  "new_observations_counted_as_oos": 0,
++  "threshold_retuned": false,
++  "production_changed": false,
++  "blocker": "A valid temporal OOS requires the frozen unified-event pipeline output; raw PE backtest trade rows cannot be relabeled as the six-hypothesis OOS sample."
++}
 diff --git a/change-logs/CODEX_REVIEW_PACKET_LATEST.md b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
 new file mode 100644
-index 0000000..7d6fa72
+index 0000000..7ceff78
 --- /dev/null
 +++ b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
-@@ -0,0 +1,101 @@
-+# CODEX REVIEW PACKET — ASTPS FAST-DETACH FINAL AUDIT
+@@ -0,0 +1,113 @@
++# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 FINAL AUDIT REPAIR
 +
-+TASK_ID=ASTPS_FAST_DETACH_FINAL_AUDIT
-+STATUS=AUDIT_READY_DO_NOT_PROMOTE
-+READY_FOR_FINAL_AUDIT=true
-+STARTED_AT=2026-09-26T12:00:00+08:00
-+FINISHED_AT=2026-09-26T13:35:00+08:00
-+COMMIT_SHA=6e0350e
-+AUDIT_COMMITS=9d5f9e0,7c9caa7
-+FINAL_ARTIFACTS_COMMIT=3ad722f
-+FINAL_AUDIT_MANIFEST=change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
++TASK_ID=ASTPS_FAST_DETACH_PR15_FINAL_AUDIT_REPAIR
++STATUS=CHANGES_REQUIRED_INCOMPLETE
++READY_FOR_FINAL_AUDIT=false
++STARTED_AT=2026-09-26T09:00:00+08:00
++FINISHED_AT=2026-09-26T14:14:39+08:00
++COMMIT_SHA=810a122
++PREVIOUS_REPAIR_COMMIT=8e13298
++BRANCH=codex/astps-fast-detach-handoff-20260926
++PR=https://github.com/alex43github/trade-workbench/pull/15
 +
 +SUMMARY=
-+Completed the ASTPS FAST-DETACH handoff audit on the real `origin/main` commit `b68c44d4fd3689e8e9909d53cbc137afa219122b`: repaired later-bar EAP causality, made EAP 6H denominators dynamic, reverified the persistent VPS Forward epoch, and produced final engineering/research/promotion reports. The final recommendation is `DO_NOT_PROMOTE`; no production behavior or historical/live evidence was changed.
++Repaired the PR #15 Final Audit findings in the existing ASTPS FAST-DETACH branch. The immutable EDP timestamp contract now drives EDP_TO_EAP_MIN, later-bar EAP behavior is regression-tested, EAP classification is fail-closed, and LIVE_FORWARD EAP denominators use only immutable EAP_GRANTED ledger event IDs. Added the frozen-before-read PRE_CHUNK002 preregistration and an honest schema audit of the available chunk002 object, completed the 177-event EDP-only descriptive audit and denominator-separated Historical-vs-LIVE comparison, and reconciled canonical Drive paths without fabricating a replacement. The final stop gate remains false because the real observer, stable collector/cohort, and valid same-pipeline chunk002 temporal OOS evidence are not present.
 +
 +CHANGED_FILES=
-+Every file below is in the isolated ASTPS research branch. Imported baseline files are included to make the prior 007D implementation reviewable from real ancestry; only the files marked “modified” contain Phase 1 behavior changes.
++Every file changed relative to origin/main on this review branch is listed below. Each row explicitly records purpose/core logic, production impact, and threshold/model/Bark/order impact.
 +
-+| File | Purpose / core logic | Production impact | Threshold/model/Bark/order impact |
++| File | Modification purpose / core logic | Production impact | Threshold/model/Bark/order impact |
 +|---|---|---|---|
-+| `EAP_SOURCE_AUDIT.md` | Imported 007D audit documenting the absent live EAP source and `EAP_NOT_OBSERVED` classification. | None; research evidence only. | None. |
-+| `PRODUCTION_OBSERVABILITY_GAP.json` | Imported deterministic observability-gap manifest. | None; no runtime wiring. | None. |
-+| `change-logs/REQ-20260925-fast-detach-v2-task-007d.md` | Imported prior 007D scope/result record for traceability. | None. | None. |
-+| `docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md` | Phase 1 plan, constraints, tests, and acceptance criteria. | None. | None. |
-+| `docs/superpowers/specs/2026-09-24-fast-detach-v2-task-007c-storage-plan.md` | Imported shadow storage specification. | None. | None. |
-+| `scripts/fast-detach-v2-task-007b-natural-outcome.ts` | Existing natural closed-bar outcome runner. | Shadow/research only; not deployed. | None. |
-+| `scripts/fast-detach-v2-task-007c-shadow-forward-collector.ts` | Existing shadow collector; modified only to pass observed EAP transition IDs into summaries and safely read optional research score metadata. | No production import or service wiring. | None. |
-+| `scripts/fast-detach-v2-task-007d-shadow-validation.ts` | Existing 007D validator; modified to pass immutable `EAP_GRANTED` IDs into the dynamic summary. | Shadow validation only. | None. |
-+| `services/structure-radar/research/task-007-adapters.ts` | Historical/live adapter and source-separation logic. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007-protocol.ts` | Immutable snapshot, transition, outcome, hash, and causal validation protocol. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007-repository.ts` | Append-only shadow repository and immutable ledger storage. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007b-outcomes.ts` | Mature closed-bar outcome calculations and horizon rules. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007c-shadow-state.ts` | Durable scanner shadow state and identity-preserving transitions. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007c-shadow.ts` | Modified cohort summary to derive EAP counts from observed transition IDs without mutating snapshots. | Research-only module. | None. |
++| `EAP_SOURCE_AUDIT.md` | 007D evidence describing the absent immutable live EAP source and fail-closed status. | None; audit evidence only. | None. |
++| `PRODUCTION_OBSERVABILITY_GAP.json` | Deterministic production-observability gap manifest. | None; no runtime wiring. | None. |
++| `change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md` | Current phase, gate, invariant, Drive reconciliation, and verification status. | None. | None. |
++| `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json` | Machine-readable final gate, source, invariants, tests, blockers, and artifact manifest. | None. | None. |
++| `change-logs/CODEX_REVIEW_PACKET_LATEST.md` | This auditable handoff packet; stale `READY_FOR_FINAL_AUDIT=true` was removed. | None. | None. |
++| `change-logs/CODEX_REVIEW_PACKET_LATEST.patch` | Generated full review diff for reviewer inspection. | None. | None. |
++| `change-logs/PRE_CHUNK002_PREREG.json` | Frozen exact rules, metrics, denominators, and failure criteria before chunk002 read. | None. | None; no retuning. |
++| `change-logs/PRE_CHUNK002_PREREG.md` | Human-readable copy of the frozen preregistration and SHA. | None. | None; no retuning. |
++| `change-logs/REQ-20260925-fast-detach-v2-task-007d.md` | Prior 007D scope/result traceability artifact. | None. | None. |
++| `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md` | Final implementation, gate, invariant, safety, and test report. | None. | Explicitly no threshold/model/Bark/order change. |
++| `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md` | Source-separated descriptive research interpretation and OOS disposition. | None. | No hypothesis promotion or tuning. |
++| `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md` | Explicit `DO_NOT_PROMOTE` decision and remaining gates. | Explicitly no production change. | No threshold/model/Bark/order change. |
++| `docs/research/DRIVE_WRITEBACK_PENDING.md` | Canonical Drive parent/file-ID reconciliation; no unsafe writeback. | None. | None. |
++| `docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md` | Existing 007D implementation plan retained for ancestry. | None. | None. |
++| `docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-final-audit-repair.md` | Plan for this PR #15 review repair and acceptance checks. | None. | None. |
++| `docs/superpowers/specs/2026-09-24-fast-detach-v2-task-007c-storage-plan.md` | Existing shadow storage specification retained for traceability. | None. | None. |
++| `scripts/fast-detach-v2-task-007b-natural-outcome.ts` | Shadow closed-bar outcome runner; preserves explicit-permission-only semantics. | Shadow/research only; not deployed. | None. |
++| `scripts/fast-detach-v2-task-007c-shadow-forward-collector.ts` | Shadow collector passes immutable observed EAP transition IDs and transition timestamps into summaries. | No production import, service, or runtime wiring. | None. |
++| `scripts/fast-detach-v2-task-007d-shadow-validation.ts` | Shadow validator derives EAP counts from immutable EAP_GRANTED transition IDs. | Audit/shadow only. | None. |
++| `services/structure-radar/research/task-007-adapters.ts` | Historical/live source adapters and denominator separation. | Research-only module. | None. |
++| `services/structure-radar/research/task-007-protocol.ts` | Immutable snapshot, transition, outcome, hash, and causal protocol. | Research-only module. | None. |
++| `services/structure-radar/research/task-007-repository.ts` | Append-only shadow repository and immutable ledger storage. | Shadow path only. | None. |
++| `services/structure-radar/research/task-007b-outcomes.ts` | Mature closed-bar outcome and horizon calculations. | Research-only module. | None. |
++| `services/structure-radar/research/task-007c-shadow-state.ts` | Durable shadow scanner state and identity-preserving transitions. | Shadow path only. | None. |
++| `services/structure-radar/research/task-007c-shadow.ts` | EAP cohort summary now rejects legacy snapshot fallback and uses immutable ledger IDs. | Research-only module. | None. |
 +| `services/structure-radar/research/task-007d-audit.ts` | Deterministic production-observability gap audit. | Audit only. | None. |
-+| `services/structure-radar/research/task-007d-eap.ts` | Modified EAP contract: later bar allowed, earlier bar rejected, evidence bounded by EAP bar/time. | No production observer connected. | None. |
-+| `services/structure-radar/research/task-007d-persistence.ts` | Persistent shadow-epoch copy and byte/SHA checks. | Shadow path only. | None. |
-+| `services/structure-radar/research/task-007d-summary.ts` | Modified EDP-only summary to compute `eap_mature_6h_n` from observed IDs and mature 6H outcomes. | Research summary only. | None. |
-+| `tests/fast-detach-task-007.test.mjs` | Imported protocol and identity regression tests. | Tests only. | None. |
-+| `tests/fast-detach-task-007b.test.mjs` | Imported natural-outcome regression tests. | Tests only. | None. |
-+| `tests/fast-detach-task-007c.test.mjs` | Existing collector tests plus transition-driven EAP denominator regression. | Tests only. | None. |
-+| `tests/fast-detach-task-007d.test.mjs` | Existing EAP/summary tests plus later-bar, pre-EDP, future-evidence, and dynamic-denominator tests. | Tests only. | None. |
-+| `change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md` | Phase status, verification, invariant, and boundary record. | None. | None. |
-+| `change-logs/CODEX_REVIEW_PACKET_LATEST.md` | This auditable handoff packet. | None. | None. |
-+| `change-logs/CODEX_REVIEW_PACKET_LATEST.patch` | Full pre-commit `git diff` snapshot generated for reviewer inspection. | None. | None. |
-+| `docs/research/DRIVE_WRITEBACK_PENDING.md` | Records canonical Drive reads and pending writeback without claiming synchronization. | None. | None. |
-+| `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md` | Final implementation, phase, test, invariant, and production-boundary report. | None. | None. |
-+| `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md` | Final descriptive research interpretation with historical/live separation. | None. | None. |
-+| `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md` | Explicit no-promotion decision and gates for future review. | Explicitly no production change. | Explicitly no threshold/model/Bark/order change. |
-+| `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json` | Machine-readable final audit manifest and blockers. | None. | None. |
++| `services/structure-radar/research/task-007d-eap.ts` | Frozen EDP timestamp contract, later-bar validation, fail-closed classifier, and EAP-separated metrics. | No real observer connected; no production runtime effect. | None. |
++| `services/structure-radar/research/task-007d-persistence.ts` | Persistent shadow epoch copy and byte/SHA verification. | Shadow path only. | None. |
++| `services/structure-radar/research/task-007d-summary.ts` | EDP-only metrics and frozen-at-EDP strata; EAP denominator source is explicit. | Research summary only. | No tuning. |
++| `tests/fast-detach-task-007.test.mjs` | Protocol/identity and append-only invariants. | Tests only. | None. |
++| `tests/fast-detach-task-007b.test.mjs` | Natural outcome and no-inferred-EAP regression tests. | Tests only. | None. |
++| `tests/fast-detach-task-007c.test.mjs` | Collector, transition-driven EAP denominator, and legacy fallback regression tests. | Tests only. | None. |
++| `tests/fast-detach-task-007d.test.mjs` | Later-bar EDP latency, fail-closed classification, causal boundary, and dynamic denominator tests. | Tests only. | None. |
++| `change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json` | Full 177-event 15m–48h EDP-only metrics and frozen strata. | None. | Descriptive only; threshold_retuned=false. |
++| `change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json` | Historical Replay / Live Discovery / Live EAP / Replay EAP comparison with explicit data gaps. | None. | No promotion or tuning. |
++| `change-logs/CHUNK002_SOURCE_MANIFEST.json` | Read-only chunk002 path, SHA, schema, and post-prereg access evidence. | None. | No retuning. |
++| `change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json` | Six frozen-hypothesis eligibility audit; records `INSUFFICIENT`, not valid OOS. | None. | No threshold/model change. |
++| `docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md` | Human-readable chunk002 temporal OOS/schema disposition. | None. | No hypothesis adjustment. |
++| `docs/research/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.md` | Human-readable denominator-separated comparison. | None. | No promotion or tuning. |
 +
 +TEST_RESULTS=
-+- `node --test tests/fast-detach-task-007.test.mjs tests/fast-detach-task-007b.test.mjs tests/fast-detach-task-007c.test.mjs tests/fast-detach-task-007d.test.mjs`: PASS, 35/35.
-+- `npm run radar:test`: PASS, 87/88; 1 loopback-listener test skipped by the execution environment.
-+- `npm test`: build PASS; historical full suite FAIL, 1092 total / 984 pass / 107 fail / 1 skip. Failing suites are existing live-exchange/Bybit/trade/UI scope and are unrelated to these files.
-+- `npx tsc --noEmit`: FAIL on pre-existing app/lib type errors; no errors remain in TASK-007/007B/007C/007D after the scoped compatibility fix.
-+- Fast-Detach Python regression: NOT AVAILABLE in this branch.
-+- `git diff --check`: PASS.
-+- `git status --short --untracked-files=all`: only the files listed above are present.
-+- Phase 2 VPS persistence audit: PASS. Forward epoch `epoch-20260924T185000` has 177 snapshots, 185 transitions, 1064 outcomes, and 227 unified-view rows; manifest and copied-file SHA-256 values match and `source_preserved=true`.
-+- Phase 2 historical SHA: `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
-+- Phase 2 service PID readback: `1412125` before and after; no service operation was issued.
-+- Final artifact audit: engineering report, research report, promotion recommendation, Drive writeback marker, and JSON manifest are present locally and state `READY_FOR_FINAL_AUDIT=true`.
++- Focused TASK-007/007B/007C/007D: `npx tsx --test ...`; PASS, 38 total / 38 pass / 0 fail / 0 skip.
++- Related radar regression: `npm run radar:test`; PASS, 88 total / 87 pass / 0 fail / 1 environment skip (loopback listener prohibited by this execution environment).
++- Repository build: PASS as part of `npm test`.
++- Full repository suite: `npm test`; FAIL, 1095 total / 987 pass / 107 fail / 1 skip. The failures are existing live-exchange/Bybit/trade/UI baseline scope outside the Fast-Detach research files; they are not relabeled as PASS.
++- Typecheck: `npx tsc --noEmit`; FAIL on 51 existing `app/`/`lib/` errors; no TASK-007/007B/007C/007D or PRE_CHUNK002 errors were reported.
++- JSON validation: six machine-readable prereg/audit/manifest artifacts parse successfully.
++- Fast-Detach Python regression: `UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY`; not treated as PASS.
++- `git diff --check`: PASS after final packet and patch generation.
 +
 +DATA_INVARIANTS=
 +FEATURE_LEAKAGE_COUNT=0
@@ -376,10 +733,11 @@ index 0000000..7d6fa72
 +HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_FROZEN_UNCHANGED=true
-+These invariants were verified by the focused fixtures/contracts and the Phase 2 read-only VPS audit; no VPS ledger was modified.
++Forward epoch evidence: 177 LIVE_FORWARD snapshots, 185 transitions, 1064 outcomes, 227 unified-view rows; LIVE_FORWARD EAP denominator is 0 and all 177 historical live events remain `EAP_NOT_OBSERVED`.
 +
 +PRODUCTION_SIDE_EFFECTS=
-+CHUNK002_ACCESSED=false
++CHUNK002_ACCESSED=true
++CHUNK002_ACCESS_ORDER=read only after PRE_CHUNK002_PREREG commit 8e13298
 +PRODUCTION_MODEL_CHANGED=false
 +PRODUCTION_CODE_CHANGED=false
 +PRODUCTION_SERVICE_RESTARTED=false
@@ -387,23 +745,239 @@ index 0000000..7d6fa72
 +BARK_CHANGED=false
 +ORDER_PATH_CHANGED=false
 +DEPLOYED=false
-+No `/opt` or production service was accessed. No snapshot, `first_detected_at`, `event_id`, transition, outcome, or historical artifact was rewritten.
++MERGED=false
++REAL_EAP_OBSERVER_CONNECTED=false
++PERSISTENT_SHADOW_COLLECTOR_STABLE=false
++PROSPECTIVE_EAP_COHORT_FORMED=false
++No production writes, deployment, restart, snapshot rewrite, `first_detected_at` rewrite, `event_id` rewrite, or synthetic event was performed. VPS evidence collection was read-only; `/opt` was not modified.
 +
 +KNOWN_LIMITATIONS=
-+- The canonical Drive search did not resolve `MODEL_REGISTRY.json`, `LIVE_CASES.jsonl`, or `LIVE_OUTCOMES.jsonl`; no replacement truth was invented.
-+- No Fast-Detach Python regression suite exists in the checked-out branch.
-+- Repository-wide pre-existing tests and typecheck errors remain; they are outside this research-only change and must not be silently attributed to Phase 1.
-+- No immutable production EAP observer source exists in the current scanner path; this is an external blocker, not a permission to infer EAP.
-+- The initial push attempt timed out, but the HTTP/1.1 retry succeeded and the branch is published at PR #15.
++- No explicit immutable execution-permission observer exists in the audited VPS scanner path; historical 177 LIVE_FORWARD rows must remain `EAP_NOT_OBSERVED`.
++- No stable persistent shadow collector process was running and no prospective EAP cohort exists; immutable `EAP_GRANTED` N=0, so execution-level statistics are not established.
++- The available chunk002 object is a PE backtest trade-output schema, not the frozen `fast-detach-v2-unified-event-2` schema. All six frozen hypotheses are `INSUFFICIENT` with N_ELIGIBLE=0; this is not valid temporal OOS completion.
++- Canonical Drive paths and stable IDs were reconciled. `MODEL_REGISTRY.json` exact name is absent; no `MODEL_CURRENT.json` replacement or unsafe writeback was made.
++- Fast-Detach Python regression is unavailable in this checkout.
++- Repository-wide baseline tests and typecheck errors remain outside this research-only repair.
 +
 +BLOCKERS=
-+["OBSERVER_NOT_CONNECTED", "EAP_LOW_SAMPLE", "CHUNK002_NOT_ACCESSED_PENDING_PREREGISTRATION_GATE", "DRIVE_WRITEBACK_PENDING", "FAST_DETACH_PYTHON_REGRESSION_NOT_AVAILABLE", "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"]
++["REAL_EAP_OBSERVER_NOT_CONNECTED", "PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE", "PROSPECTIVE_EAP_COHORT_ZERO", "CHUNK002_TEMPORAL_OOS_NOT_VALID_SAME_PIPELINE", "MODEL_REGISTRY_JSON_EXACT_NAME_ABSENT", "NO_SAFE_CANONICAL_DRIVE_APPEND_PAYLOAD_AUTHORIZED", "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE", "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"]
 +
 +APPROVAL_REQUIRED=
-+Review Phase 1 ancestry, later-bar causal contract, dynamic EAP denominator, and the known baseline test/typecheck failures before treating this phase as accepted. Do not merge, deploy, restart, promote, or access `chunk_002`.
++ChatGPT Reviewer must inspect this repair, the immutable EDP/EAP contract, denominator separation, preregistration-before-chunk002 evidence, descriptive 177-event audit, comparison gaps, and honest test failures. Do not merge, deploy, restart, promote, tune thresholds, change models, change Bark/order behavior, or invent EAP/cohort/OOS evidence. `READY_FOR_FINAL_AUDIT=false` remains required until every listed stop-gate item is actually evidenced.
 +
 +RECOMMENDED_NEXT_TASK=
-+Next authorized task: connect only a real explicit EAP observer source; preserve `EAP_NOT_OBSERVED` for all historical events, collect prospective cases, and do not backfill EAP or access `chunk_002` until preregistration is frozen.
++Reviewer-directed fix only: connect a real explicit immutable execution-permission observer and run the persistent shadow collector long enough to form 20–30 independent EAP_OBSERVED events with mature 6H outcomes; then produce a same-pipeline unified chunk002 temporal OOS artifact under a separately reviewed task. Do not self-invent a new research task or change the frozen rules.
+diff --git a/change-logs/PRE_CHUNK002_PREREG.json b/change-logs/PRE_CHUNK002_PREREG.json
+new file mode 100644
+index 0000000..31396a7
+--- /dev/null
++++ b/change-logs/PRE_CHUNK002_PREREG.json
+@@ -0,0 +1,155 @@
++{
++  "schema_version": "fast-detach-v2-pre-chunk002-prereg-1",
++  "status": "FROZEN_BEFORE_CHUNK002_READ",
++  "frozen_at": "2026-09-26T14:00:00+08:00",
++  "canonical_chunk001_prereg_sha256": "2f675b6f72ec9cca80d82463dd60792ed0ce234496412880ef25c14ac88140fd",
++  "historical_chunk001_sha256": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
++  "source_chunk002": {
++    "path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
++    "sha256": "RECORDED_IN_CHUNK002_SOURCE_MANIFEST_AFTER_THIS_COMMIT_BEFORE_EVALUATION"
++  },
++  "freeze_policy": "immutable after commit; changes require a new hypothesis version and a new preregistration",
++  "pipeline_contract": {
++    "unified_schema_version": "fast-detach-v2-unified-event-2",
++    "pe_formula": "path-efficiency-v1",
++    "barrier_resolution": "5m preferred",
++    "closed_bar_rules": "same as chunk_000/chunk_001 audited pipeline",
++    "outcome_boundary": "only closed bars strictly after immutable EDP/decision boundary",
++    "feature_boundary": "feature_timestamp <= immutable EDP/decision bar close",
++    "threshold_retuning": false,
++    "sample_inclusion_retuning": false
++  },
++  "denominators": {
++    "source_scope": "chunk_002 only",
++    "all_events_included": true,
++    "per_hypothesis_reporting": ["N_TOTAL", "N_ELIGIBLE", "N_EXCLUDED", "EXCLUSION_REASONS"],
++    "silent_exclusion": false,
++    "clean_response_breadth_independent_period_n_increment": 1,
++    "target_ladder_percent": [5, 8, 10, 15, 20],
++    "required_descriptive_metrics": [
++      "24h_hit_rate",
++      "median_ttp_5",
++      "median_ttp_8",
++      "median_ttp_10",
++      "median_time_to_positive",
++      "median_mae_before_5",
++      "median_mae_before_8",
++      "median_mae_before_10"
++    ],
++    "counterexamples_retained": true
++  },
++  "primary_hypotheses": [
++    {
++      "hypothesis_id": "PE_E1_RESET_REIGNITION",
++      "metric": "supporting event proportion with reset/reignition plus early response",
++      "expected_direction": "higher proportion is descriptive support; any failure examples count against generality",
++      "success_evidence": "candidate event has the fixed sequence and early response",
++      "failure_evidence": "candidate sequence with slow/failing/adverse path or success without sequence",
++      "minimum_available_samples": 5,
++      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
++      "required_fields": [
++        "pe.timeframes.15m.metrics.w12.delta_1",
++        "pe.timeframes.15m.metrics.w12.acceleration",
++        "path_labels.task001.pe_transition",
++        "path_labels.task001.one_hour_handoff_time"
++      ],
++      "status": "CANDIDATE",
++      "eligible_oos_from_chunk": 2
++    },
++    {
++      "hypothesis_id": "PE_E3_15M_EXTREME_INSUFFICIENT",
++      "metric": "p90/p95/p97.5 extreme-group mixed outcome table and extreme+1H own-state persistence split",
++      "expected_direction": "extreme-only group remains mixed and persistence split is not assumed monotonic",
++      "success_evidence": "high-distribution group contains fast and successful examples",
++      "failure_evidence": "high-distribution group contains failures/delayed/high-MAE examples",
++      "minimum_available_samples": 5,
++      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
++      "required_fields": [
++        "pe.timeframes.15m.metrics.w12.value",
++        "pe.timeframes.1h.metrics.w12.delta_1",
++        "pe.timeframes.1h.metrics.w12.acceleration",
++        "path_labels.path_quality",
++        "barrier_labels.refined_5m"
++      ],
++      "status": "CANDIDATE",
++      "eligible_oos_from_chunk": 2
++    },
++    {
++      "hypothesis_id": "RESPONSE_FRESHNESS_DECAY",
++      "metric": "fixed freshness-lag buckets vs TTP5, early MAE, MFE30 and MFE24",
++      "expected_direction": "fresh bucket has lower delay/adverse path descriptively",
++      "success_evidence": "fresh bucket has low lag and clean early path",
++      "failure_evidence": "stale bucket remains successful or fresh bucket is adverse",
++      "minimum_available_samples": 5,
++      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
++      "required_fields": [
++        "path_labels.path_quality.time_to_positive_min",
++        "path_labels.path_quality.ttp_5",
++        "path_labels.path_quality.mae_before_5",
++        "path_labels.task001.MFE_30m",
++        "pe.timeframes.15m.metrics.w12.acceleration"
++      ],
++      "status": "CANDIDATE",
++      "eligible_oos_from_chunk": 2
++    },
++    {
++      "hypothesis_id": "CLEAN_RESPONSE_BREADTH",
++      "metric": "batch-level count/rate of clean response plus sustained expansion/no early severe SL",
++      "expected_direction": "breadth is reproducible and remains a descriptive batch statistic",
++      "success_evidence": "event meets all predeclared clean breadth components",
++      "failure_evidence": "event is eventual winner but misses one component",
++      "minimum_available_samples": 5,
++      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
++      "required_fields": [
++        "path_labels.path_quality",
++        "barrier_labels.refined_5m.tp5_before_sl3",
++        "future_evidence.task002b_5m_path.bars",
++        "features.timeframes.15m"
++      ],
++      "status": "CANDIDATE",
++      "eligible_oos_from_chunk": 2
++    },
++    {
++      "hypothesis_id": "ADVERSE_PATH_GATE",
++      "metric": "eventual-winner MFE24 group split by fixed adverse-path conditions",
++      "expected_direction": "bad-path winner count is non-zero and must not be hidden by MFE24",
++      "success_evidence": "late winner has severe early path",
++      "failure_evidence": "late winner has clean early path",
++      "minimum_available_samples": 5,
++      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
++      "required_fields": [
++        "path_labels.task001.MFE_24h",
++        "path_labels.task001.MAE_1h",
++        "path_labels.path_quality.max_time_underwater_min",
++        "barrier_labels.refined_5m"
++      ],
++      "status": "CANDIDATE",
++      "eligible_oos_from_chunk": 2
++    },
++    {
++      "hypothesis_id": "PE_MULTI_TF_SYNCHRONIZED_ACCELERATION",
++      "metric": "own-state w12 delta/acceleration synchronization vs early-response outcomes",
++      "expected_direction": "synchronized group has more early-response examples descriptively",
++      "success_evidence": "all 15m/1H/4H own-state signs are positive with early response",
++      "failure_evidence": "synchronized group fails or fast response occurs without synchronization",
++      "minimum_available_samples": 5,
++      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
++      "required_fields": [
++        "pe.timeframes.15m.metrics.w12.delta_1",
++        "pe.timeframes.1h.metrics.w12.delta_1",
++        "pe.timeframes.4h.metrics.w12.delta_1",
++        "pe.timeframes.*.metrics.w12.acceleration"
++      ],
++      "status": "CANDIDATE",
++      "eligible_oos_from_chunk": 2
++    }
++  ],
++  "result_taxonomy": ["CONSISTENT", "MIXED", "CONTRADICTED", "INSUFFICIENT"],
++  "forbidden_result_labels": ["SUPPORTED", "VALIDATED", "PROVEN", "PROMOTED", "PRODUCTION_READY"],
++  "new_observations": {
++    "oos_eligible": false,
++    "destination": "NEW_OBSERVATIONS_FOR_CHUNK003.json"
++  },
++  "production_changes": false,
++  "chunk002_read_allowed_only_after_this_commit": true
++}
+diff --git a/change-logs/PRE_CHUNK002_PREREG.md b/change-logs/PRE_CHUNK002_PREREG.md
+new file mode 100644
+index 0000000..abb534e
+--- /dev/null
++++ b/change-logs/PRE_CHUNK002_PREREG.md
+@@ -0,0 +1,44 @@
++# FAST-DETACH V2 — PRE-CHUNK002 PREREGISTRATION
++
++STATUS=FROZEN_BEFORE_CHUNK002_READ
++TASK_ID=ASTPS_FAST_DETACH_PR15_FINAL_AUDIT_REPAIR
++FROZEN_AT=2026-09-26T14:00:00+08:00
++CANONICAL_CHUNK001_PREREG_SHA256=2f675b6f72ec9cca80d82463dd60792ed0ce234496412880ef25c14ac88140fd
++HISTORICAL_CHUNK001_SHA256=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
++SOURCE_CHUNK002=research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json
++SOURCE_CHUNK002_SHA256=RECORDED_IN_CHUNK002_SOURCE_MANIFEST_AFTER_THIS_COMMIT_BEFORE_EVALUATION
++PRE_CHUNK002_PREREG_SHA256=COMPUTED_AFTER_COMMIT_AND_RECORDED_IN_CHUNK002_SOURCE_MANIFEST
++
++## Freeze contract
++
++This file and the paired JSON are immutable for this OOS run. Any change to a rule, metric, threshold, window, feature combination, target, inclusion rule, or failure criterion requires a new hypothesis version and a new preregistration; it cannot be called chunk002 OOS under this freeze.
++
++The six and only six Primary hypotheses are copied from the canonical Task-006 source `CHUNK_001_PREREGISTRATION.json` (SHA above):
++
++1. `PE_E1_RESET_REIGNITION`
++2. `PE_E3_15M_EXTREME_INSUFFICIENT`
++3. `RESPONSE_FRESHNESS_DECAY`
++4. `CLEAN_RESPONSE_BREADTH`
++5. `ADVERSE_PATH_GATE`
++6. `PE_MULTI_TF_SYNCHRONIZED_ACCELERATION`
++
++Their exact `metric`, `expected_direction`, `success_evidence`, `failure_evidence`, `minimum_available_samples`, `counterexample_count_method`, and `required_fields` are frozen in `PRE_CHUNK002_PREREG.json`. Secondary hypotheses are not scored in the Primary OOS result.
++
++## Frozen data and denominator rules
++
++- Source is only `SOURCE_CHUNK002`; the file must be SHA-256 hashed after this prereg commit and before parsing/evaluation.
++- Evaluate every source event. Report `N_TOTAL`, `N_ELIGIBLE`, `N_EXCLUDED`, and explicit exclusion reasons for every Primary hypothesis; no silent exclusions.
++- Use the already audited Task-001/002B/003/004 pipeline: `fast-detach-v2-unified-event-2`, `path-efficiency-v1`, preferred closed 5m barrier path, and the same closed-bar rules as prior chunks.
++- Outcomes use only bars after the immutable decision/EDP boundary. No future feature, outcome, or post-EDP label may enter a snapshot feature or eligibility condition.
++- Target ladder is fixed at `+5%`, `+8%`, `+10%`, `+15%`, `+20%`; report 24h hit rates, median TTP5/TTP8/TTP10, median Time-to-Positive, and median MAE-before-5/8/10 where available.
++- All event IDs and counterexamples remain in the output. An outlier cannot be removed or used to redefine a cutoff.
++- `CLEAN_RESPONSE_BREADTH` is a batch/period statistic; one chunk is one independent period, not one independent period per event.
++- New observations are observation-only and go to `NEW_OBSERVATIONS_FOR_CHUNK003.json` (or the next authorized observation file); they cannot enter any Primary score.
++
++## Frozen result taxonomy and failure criteria
++
++Each Primary result is exactly one of `CONSISTENT`, `MIXED`, `CONTRADICTED`, or `INSUFFICIENT`. `SUPPORTED`, `VALIDATED`, `PROVEN`, `PROMOTED`, and `PRODUCTION_READY` are forbidden. Minimum samples are the frozen values in the JSON; if unmet, return `INSUFFICIENT` without relaxing inclusion or thresholds. Counterexamples are first-class evidence. One additional OOS chunk cannot promote a hypothesis or alter Production behavior.
++
++## Explicit boundary
++
++No threshold, model, Bark path, order path, snapshot, `first_detected_at_utc`, `event_id`, historical chunk001 artifact, or production service may be changed. `chunk002` may be read only after the commit containing this file and the paired JSON exists. The exact source SHA and prereg SHA will be recorded in the post-freeze source manifest without modifying these frozen files.
 diff --git a/change-logs/REQ-20260925-fast-detach-v2-task-007d.md b/change-logs/REQ-20260925-fast-detach-v2-task-007d.md
 new file mode 100644
 index 0000000..fa51dc0
@@ -499,74 +1073,110 @@ index 0000000..fa51dc0
 +## Stop gate
 +
 +未启动新的长跑 collector，未安装 systemd/cron，未修复 Production observability writeback，未修改 `/opt`、Bark、order chain、threshold 或 model。TASK-007E 需要另行授权，至少涉及 `services/structure-radar/main.ts` 的 event identity adapter、candidate/notification/score/outcome writer 以及对应 Sheet/ledger sink；长跑 collector 需要另行授权其目标目录、运行时长和是否允许接入真实 permission source。
+diff --git a/docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md b/docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md
+new file mode 100644
+index 0000000..31ed0d5
+--- /dev/null
++++ b/docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md
+@@ -0,0 +1,20 @@
++# FAST-DETACH V2 — chunk002 Temporal OOS Audit
++
++STATUS=BLOCKED_DATA_SCHEMA
++OOS_VALID=false
++CHUNK002_TEMPORAL_OOS_COMPLETED=false
++
++The preregistration was committed at `8e13298` before chunk002 was read. The frozen preregistration SHA is `5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84`. The source file SHA is `f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6`.
++
++chunk002 contains 50 rows in the `pe-top10-ma30-atr-10x-v1` trade-output schema. It is not a `fast-detach-v2-unified-event-2` dataset and has none of the frozen Primary-hypothesis required fields. Therefore all six results are explicitly `INSUFFICIENT`, with `N_TOTAL=50`, `N_ELIGIBLE=0`, `N_EXCLUDED=50`, and exclusion reason `REQUIRED_FIELDS_UNAVAILABLE_IN_SOURCE_SCHEMA`. No raw trade-output field was substituted for a frozen path/feature/barrier field, and no result was labeled as a valid OOS confirmation.
++
++| Primary hypothesis | Result | N_TOTAL | N_ELIGIBLE | N_EXCLUDED |
++|---|---|---:|---:|---:|
++| PE_E1_RESET_REIGNITION | INSUFFICIENT | 50 | 0 | 50 |
++| PE_E3_15M_EXTREME_INSUFFICIENT | INSUFFICIENT | 50 | 0 | 50 |
++| RESPONSE_FRESHNESS_DECAY | INSUFFICIENT | 50 | 0 | 50 |
++| CLEAN_RESPONSE_BREADTH | INSUFFICIENT | 50 | 0 | 50 |
++| ADVERSE_PATH_GATE | INSUFFICIENT | 50 | 0 | 50 |
++| PE_MULTI_TF_SYNCHRONIZED_ACCELERATION | INSUFFICIENT | 50 | 0 | 50 |
++
++This is a completed schema audit, not a completed valid temporal OOS evaluation. A valid chunk002 OOS remains blocked until an authorized, same-pipeline unified-event artifact is produced and frozen under a new reviewable task; no threshold or model change is justified.
 diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
 new file mode 100644
-index 0000000..94638a6
+index 0000000..1c241d9
 --- /dev/null
 +++ b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
-@@ -0,0 +1,88 @@
-+# ASTPS FAST-DETACH — FINAL ENGINEERING REPORT
+@@ -0,0 +1,89 @@
++# ASTPS FAST-DETACH — PR #15 FINAL AUDIT REPAIR ENGINEERING REPORT
 +
-+STATUS=AUDIT_READY_DO_NOT_PROMOTE
-+READY_FOR_FINAL_AUDIT=true
++STATUS=CHANGES_REQUIRED_INCOMPLETE
++READY_FOR_FINAL_AUDIT=false
++PROMOTION_DECISION=DO_NOT_PROMOTE
 +BRANCH=codex/astps-fast-detach-handoff-20260926
 +PR=https://github.com/alex43github/trade-workbench/pull/15
 +BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
-+IMPLEMENTATION_COMMIT=6e0350e
-+AUDIT_COMMITS=9d5f9e0,7c9caa7
++REPAIR_COMMIT=8e13298
 +HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +FORWARD_EPOCH_ID=epoch-20260924T185000
 +
-+## Scope
++## Review disposition
 +
-+This branch is a research/shadow implementation based on the real `origin/main` ancestry. It imports the existing TASK-007/007B/007C/007D surface and applies the Phase 1 handoff repairs:
++This revision addresses the latest PR #15 Final Audit CHANGES REQUIRED comments in the existing branch. It does not create a new research line. The three P0 EAP semantics are repaired and regression-tested; the final audit stop gate remains false because the external observer/cohort/collector and valid chunk002 OOS evidence do not exist.
 +
-+1. EAP decision-bar validation is ordered: `EDP_bar <= EAP_bar <= EAP_time`.
-+2. Causal EAP evidence cannot exceed the selected EAP decision-bar boundary.
-+3. EAP 6H sample quality is derived from observed immutable EAP event IDs plus mature 6H outcomes; discovery and EAP denominators remain independent.
-+4. The collector passes observed `EAP_GRANTED` transition IDs into both research-summary consumers without mutating snapshots.
++## Implemented repairs
 +
-+No production scanner, model, threshold, Bark path, order path, deployment, service restart, historical file, snapshot, `first_detected_at`, `event_id`, or `chunk_002` was changed or accessed by the code changes.
++1. `EDP_TO_EAP_MIN` uses the immutable EDP timestamp contract `execution_context.edp_utc ?? first_detected_at_utc`; the EAP decision bar is never used as the start time. A later-bar test proves the full interval.
++2. EAP classification is fail-closed: `GRANTED -> EAP_OBSERVED`, explicit `DENIED -> EAP_CONFIRMED_ABSENT`, all unknown/pending/error/malformed/no-decision states -> `EAP_NOT_OBSERVED`.
++3. LIVE_FORWARD EAP counts and 6H denominators use only immutable `EAP_GRANTED` ledger event IDs. Legacy snapshot EAP fields are ignored. EAP delay uses the immutable transition timestamp.
++4. EDP-only summary now reports event counts separately from outcome-row counts and exposes family/mechanism as `UNAVAILABLE_FROZEN_FIELD` when absent instead of guessing.
++5. `PRE_CHUNK002_PREREG.md/json` was committed before chunk002 access. The source was then hashed and audited; all six frozen Primary hypotheses are `INSUFFICIENT` because the source schema lacks every required unified-event field.
 +
-+## Phase audit disposition
++## Gate status
 +
-+| Phase | Result | Evidence / limitation |
++| Required stop-gate item | Evidence | Status |
 +|---|---|---|
-+| 1 — 007D repair | PASS | 35 focused tests; later-bar, earlier-bar, future-evidence, and dynamic-denominator tests are green. |
-+| 2 — persistent epoch | PASS | VPS read-only manifest/SHA/row-count audit; source preserved. |
-+| 3 — real EAP observer | BLOCKED_BY_EXTERNAL_SOURCE | VPS reports `EAP_OBSERVER_CONNECTED=false`; no explicit permission source exists in the scanner path. All 177 historical Forward rows remain `EAP_NOT_OBSERVED`. |
-+| 4 — production observability | PASS_WITH_GAP | Existing gap manifest and immutable status audit confirm the missing source; no decision behavior was altered. |
-+| 5 — persistent shadow collector | READY_NOT_STARTED | Shadow collector and EAP observer injection are implemented and persistence is verified; no formal long-running collector was started in this audit. |
-+| 6 — EDP-only audit | PASS | 50 historical and 177 live rows remain source-separated; EDP-only summary is descriptive. |
-+| 7 — EDP→EAP capital efficiency | BLOCKED_LOW_SAMPLE | Prospective EAP observed N=0; no EAP conclusion is valid. |
-+| 8 — chunk002 temporal OOS | NOT_ACCESSED_BY_DESIGN | No `chunk_002` access was authorized/performed; preregistration and source separation remain prerequisites. |
-+| 9 — denominators | PASS | Historical and live denominators are kept separate; EAP is not inserted into historical OOS. |
-+| 10 — live growth log | BASELINE_ONLY | No new collector run was used to claim growth; the verified epoch baseline remains 177 live events. |
++| real EAP observer connected | VPS code/process read-only audit; no explicit source/ledger | BLOCKED |
++| persistent collector running/stable | no task007c collector process; no observer to feed it | BLOCKED |
++| prospective EAP cohort formed | 0 immutable EAP_GRANTED IDs; 177 historical live rows remain NOT_OBSERVED | BLOCKED |
++| prereg freeze completed | commit `8e13298`, prereg SHA `5f701142...7d35c84` | PASS |
++| chunk002 temporal OOS completed | schema audit only; valid same-pipeline OOS false | BLOCKED_DATA_SCHEMA |
++| Historical vs Live comparison completed | denominator-separated report with explicit data gaps | PASS_WITH_DATA_GAPS |
++| Drive writeback completed or formally reconciled | canonical parents/IDs re-resolved; MODEL_REGISTRY exact name absent | FORMALLY_RECONCILED |
++| final reports regenerated | this report, research, promotion, manifest, and Review Packet | PASS |
 +
-+## VPS persistent epoch evidence
++## 177-event EDP-only descriptive audit
 +
-+Read-only VPS evidence for `/var/lib/trade-workbench/research/forward-shadow/epochs/epoch-20260924T185000/`:
++Source: `/var/lib/trade-workbench/research/forward-shadow/epochs/epoch-20260924T185000/audit/EDP_ONLY_FORWARD_SUMMARY.json`, SHA `d99c88bdb4fbea5c978c6129de0e1135b84640457a9ad32223444880cb3bdaa8`.
 +
-+- `LIVE_EVENT_SNAPSHOT.jsonl`: 177 rows.
-+- `LIVE_EVENT_TRANSITION.jsonl`: 185 rows.
-+- `LIVE_EVENT_OUTCOME.jsonl`: 1064 rows.
-+- `UNIFIED_RESEARCH_VIEW.jsonl`: 227 rows.
-+- `PERSISTENT_COPY_MANIFEST.json`: source/destination file hashes match and `source_preserved=true`.
-+- Historical `chunk_001_unified.jsonl` SHA before/after: `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
-+- Production service MainPID read-only check: `1412125` before and after.
++| Horizon | N | median return % | positive rate | median MFE % | median MAE % | +5 / +8 / +10 / +15 / +20 hit rate | median TTP (+5/+8/+10/+15/+20) | TimeToPositive | underwater median | NormalMAE / SevereFailure |
++|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|
++| 15m | 177 | 0.0000 | 0.4859 | 0.2914 | -0.6267 | 0.0113 / 0.0113 / 0 / 0 / 0 | 5 / 10 / — / — / — | 0 | 5 | 177 / 0 |
++| 30m | 177 | 0.6594 | 0.8475 | 1.1372 | -0.6267 | 0.0113 / 0.0113 / 0 / 0 / 0 | 5 / 10 / — / — / — | 0 | 5 | 177 / 0 |
++| 1h | 177 | 0.4797 | 0.6836 | 1.3012 | -0.7136 | 0.0226 / 0.0226 / 0.0113 / 0 / 0 | 20 / 25 / 40 / — / — | 0 | 5 | 171 / 6 |
++| 3h | 177 | 0.2039 | 0.5424 | 1.4493 | -1.2193 | 0.0452 / 0.0282 / 0.0113 / 0 / 0 | 62.5 / 40 / 40 / — / — | 0 | 55 | 157 / 20 |
++| 6h | 177 | 0.0384 | 0.5085 | 1.6361 | -1.3901 | 0.0960 / 0.0678 / 0.0508 / 0 / 0 | 185 / 195 / 310 / — / — | 0 | 75 | 155 / 22 |
++| 12h | 177 | -1.0191 | 0.2825 | 1.9090 | -2.1788 | 0.1751 / 0.1186 / 0.0678 / 0.0339 / 0 | 205 / 325 / 322.5 / 545 / — | 0 | 150 | 126 / 51 |
 +
-+The pre-existing remote validation reports `TASK007D_VALID=true`, `FEATURE_LEAKAGE_COUNT=0`, `DUPLICATE_EVENT_IDS=0`, `DUPLICATE_OUTCOME_KEYS=0`, `SNAPSHOT_MUTATION_COUNT=0`, and `OUTCOME_MUTATION_COUNT=0`.
++Frozen-at-EDP strata: timeframe `15m=62, 1h=98, 4h=17`; setup `PLATFORM_RECLAIM=8, TRENDLINE_BREAKOUT=169`; discovery channel `structure-radar.scanner.onSignal=177`; family and mechanism are unavailable in the immutable snapshot schema (`177` rows each under `__UNAVAILABLE_FROZEN_FIELD__`). These results are descriptive only and were not used to tune a threshold.
++
++## External evidence and blockers
++
++- VPS process and source search found no explicit `EAP_GRANTED`/execution-permission observer in the production scanner path and no task007c persistent collector process. No production code was changed to manufacture one.
++- Existing Forward EAP audit remains `EAP_OBSERVED=0`, `EAP_CONFIRMED_ABSENT=0`, `EAP_NOT_OBSERVED=177`.
++- `chunk002` source was read only after prereg commit, but its schema is incompatible with the frozen unified-event required fields. The six results are recorded as `INSUFFICIENT`, not as valid OOS support/failure.
++- Drive canonical reconciliation found `LIVE_CASES.jsonl` and `LIVE_OUTCOMES.jsonl` by stable IDs and confirmed the exact-name `MODEL_REGISTRY.json` is absent. No replacement or unsafe overwrite was made.
++- Fast-Detach Python regression is unavailable in this checkout; it is reported as unavailable, never PASS.
 +
 +## Verification
 +
-+- Focused TASK-007/007B/007C/007D: 35 passed, 0 failed, 0 skipped.
-+- Radar regression: 88 total, 87 passed, 0 failed, 1 loopback-listener environment skip.
-+- Repository build: passed.
-+- Repository-wide `npm test`: 1092 total, 984 passed, 107 failed, 1 skipped. The failures are existing live-exchange/Bybit/trade/UI suites outside this research-only scope.
-+- Typecheck: existing errors remain in `app/`, `lib/radar/`, `lib/telegram/`, and `lib/trade/`; no TASK-007/007B/007C/007D errors remain.
-+- `git diff --check`: passed.
++- Focused TASK-007/007B/007C/007D: `38/38 PASS`, `0 FAIL`, `0 SKIP`.
++- Radar regression (`npm run radar:test`): `88 total`, `87 PASS`, `0 FAIL`, `1 environment skip` (loopback listener prohibited by the execution environment).
++- Repository build: `PASS`.
++- Repository full suite (`npm test`): `1095 total`, `987 PASS`, `107 FAIL`, `1 SKIP`; failures are existing live-exchange/Bybit/trade/UI scope outside this research-only repair. The build phase passed.
++- Typecheck (`npx tsc --noEmit`): `FAIL` on pre-existing `app/` and `lib/` errors; no TASK-007/007B/007C/007D errors were reported.
++- Fast-Detach Python regression: `UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY`; not treated as PASS.
++- JSON artifact validation: all six newly generated machine-readable audit/prereg/manifests parse successfully.
++- `git diff --check`: PASS at final handoff after the packet and patch were generated.
 +
-+## Invariants
++## Safety invariants
 +
 +FEATURE_LEAKAGE_COUNT=0
 +DUPLICATE_EVENT_IDS=0
@@ -576,86 +1186,101 @@ index 0000000..94638a6
 +HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_FROZEN_UNCHANGED=true
-+CHUNK002_ACCESSED=false
++CHUNK002_ACCESSED=true
 +PRODUCTION_MODEL_CHANGED=false
 +PRODUCTION_CODE_CHANGED=false
 +PRODUCTION_SERVICE_RESTARTED=false
 +DEPLOYED=false
 +MERGED=false
 +
-+## Known blockers
-+
-+- No immutable execution-permission decision source is connected to the production scanner event path; `EAP_OBSERVED=0`, `EAP_CONFIRMED_ABSENT=0`, `EAP_NOT_OBSERVED=177`.
-+- EAP sample quality is `LOW_SAMPLE`; no EDP→EAP efficiency or promotion conclusion is allowed.
-+- Google Drive writeback remains pending; the canonical files were read but not overwritten, and unresolved canonical artifacts were not fabricated.
-+- The Fast-Detach Python regression suite is not present in the checked-out repository.
-+
-+## Next authorized work
-+
-+Connect a real explicit permission observer in a separately reviewed task, keep historical rows `EAP_NOT_OBSERVED`, collect at least 20–30 independent prospective EAP cases with mature outcomes, then freeze preregistration before any authorized `chunk_002` temporal OOS work. Do not change Production from this report.
++The final audit stop gate is intentionally false. `DO_NOT_PROMOTE` is a separate decision and does not mean this repair is complete.
 diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
 new file mode 100644
-index 0000000..95bb459
+index 0000000..f717d96
 --- /dev/null
 +++ b/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
 @@ -0,0 +1,41 @@
-+# ASTPS FAST-DETACH — FINAL RESEARCH REPORT
++# ASTPS FAST-DETACH — PR #15 FINAL RESEARCH REPORT
 +
-+STATUS=DESCRIPTIVE_AUDIT_ONLY
-+READY_FOR_FINAL_AUDIT=true
++STATUS=DESCRIPTIVE_AUDIT_COMPLETE_CHANGES_REQUIRED
++READY_FOR_FINAL_AUDIT=false
++PROMOTION_DECISION=DO_NOT_PROMOTE
 +
-+## Canonical model context
-+
-+The canonical Drive state read before the audit identifies the active production research/model state as `ASTPS V3-LR / Monster Squeeze V1.1-LR`. It explicitly keeps Price Structure as a research/context layer, rejects universal execution shortcuts, and does not authorize a numeric threshold or model promotion from the available evidence.
-+
-+## Frozen source-separated baseline
++## Source-separated baseline
 +
 +| Source | Events | Role |
 +|---|---:|---|
-+| `HISTORICAL_REPLAY` | 50 | Frozen historical research denominator. |
-+| `LIVE_FORWARD` | 177 | Existing Forward Epoch discovery records. |
-+| Unified Research View | 227 | 50 historical + 177 live, without outcome rows becoming events. |
++| `HISTORICAL_REPLAY` | 50 | Frozen chunk001 research/OOS denominator. |
++| `LIVE_FORWARD_DISCOVERY` | 177 | Existing Forward Epoch EDP discovery denominator. |
++| `LIVE_FORWARD_EAP` | 0 | Immutable `EAP_GRANTED` ledger denominator; no observer evidence. |
++| `REPLAY_EAP` | 0 | No separate replay-EAP denominator in current evidence. |
++| Unified Research View | 227 | 50 historical + 177 live events; outcomes are attached observations, not events. |
 +
-+The historical `chunk_001` SHA is unchanged at `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
++Historical chunk001 SHA remains `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
 +
-+## Outcome maturity
++## LIVE_FORWARD EDP-only outcomes
 +
-+The verified Forward shadow epoch contains 1064 append-only outcome rows:
++The verified 177-event Forward Epoch has 177 mature rows at each horizon from 15m through 12h, 2 at 24h, and 0 at 48h. The complete machine-readable output is [`ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json`](../../change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json). The six required horizon tables are reproduced in the engineering report. Family/mechanism are not present as frozen-at-EDP fields; they are reported unavailable rather than inferred from another dataset.
 +
-+- 6H mature: 177.
-+- 12H mature: 177.
-+- 24H mature: 2.
-+- 48H mature: 0.
++These are discovery/path observations. They do not represent entries, EAP grants, execution precision, or capital efficiency.
 +
-+These are EDP-only descriptive outcomes. They are not historical OOS evidence, do not change the event denominator, and do not imply an execution entry.
++## Historical Replay vs LIVE_FORWARD comparison
 +
-+## EAP evidence boundary
++The denominator-separated comparison is [`ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json`](../../change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json). Historical reference values are median MFE24 `3.338734%`, median MAE1h `-1.245116%`, median TTP5 `265 min`, median underwater `495 min`, NormalMAE1h `40`, SevereFailure1h `10`. LIVE_FORWARD EDP-only 12h reference values are median MFE `1.909040%`, median MAE `-2.178803%`, median TTP5 `205 min`, median underwater `150 min`, NormalMAE `126`, SevereFailure `51`.
 +
-+The immutable EAP audit contains 177 rows, all classified `EAP_NOT_OBSERVED` because the permission observer is not connected. There are no valid live EAP observations and no confirmed-absent decisions. `PLATFORM_RECLAIM`, scanner state, score, Bark, consultation, and execution plan are not treated as EAP.
++Detection Recall, Execution Precision, Detection Lead, MissedConvexity, and capital efficiency are explicitly `NOT_ESTABLISHED` where no ground truth or immutable permission ledger exists. No EAP denominator is backfilled from snapshot fields.
 +
-+The local Phase 1 implementation now accepts a later closed EAP decision bar only when it is no earlier than EDP and no later than EAP time. It rejects earlier bars and causal evidence beyond the EAP decision-bar boundary. It derives EAP 6H maturity only from explicit observed event IDs with mature 6H outcomes.
++## chunk002 temporal OOS disposition
++
++`PRE_CHUNK002_PREREG.md/json` was committed before reading chunk002. The frozen source prereg SHA is `5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84`; chunk002 SHA is `f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6`. The source contains 50 rows but is `pe-top10-ma30-atr-10x-v1`, not the required unified-event schema. All six Primary hypotheses therefore have `N_TOTAL=50, N_ELIGIBLE=0, N_EXCLUDED=50, result=INSUFFICIENT`; see [`ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md`](ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md). This is a schema audit, not a valid temporal OOS completion, and no threshold was retuned.
++
++## EAP boundary
++
++All prior 177 LIVE_FORWARD events remain `EAP_NOT_OBSERVED`. The explicit observer is not connected, no prospective EAP cohort exists, and no persistent collector process is running/stable. Unknown or malformed permission states now fail closed; only immutable `EAP_GRANTED` ledger IDs can enter a prospective EAP denominator.
 +
 +## Research conclusion
 +
-+The current data supports an auditable EDP discovery/outcome pipeline and validates the immutable shadow protocol. It does not support an EAP-conditioned research conclusion because observed EAP N=0. Any return/MFE/MAE result from the 177 Forward events must remain in the EDP descriptive layer.
++The repair establishes an auditable EDP discovery/outcome layer and corrects the EAP semantics. It does not establish execution-level evidence, an EAP cohort, or valid chunk002 temporal OOS. No hypothesis is promoted, no production rule is created, and `READY_FOR_FINAL_AUDIT=false` remains the only truthful stop-gate value.
+diff --git a/docs/research/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.md b/docs/research/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.md
+new file mode 100644
+index 0000000..f2ef067
+--- /dev/null
++++ b/docs/research/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.md
+@@ -0,0 +1,18 @@
++# FAST-DETACH V2 — Historical Replay vs LIVE_FORWARD Comparison
 +
-+`chunk_002` temporal OOS was intentionally not accessed. No new OOS denominator, threshold, window, metric, feature combination, or sample-inclusion rule was created from this audit.
++STATUS=COMPLETED_WITH_DATA_GAPS
++
++The comparison is denominator-separated and does not turn EDP discovery outcomes into execution outcomes.
++
++| Denominator | N | EAP permission ledger | Reference outcome layer | Status |
++|---|---:|---:|---|---|
++| HISTORICAL_REPLAY | 50 | 0 | chunk001 OOS, 24h/1h/target ladder | DESCRIPTIVE |
++| LIVE_FORWARD_DISCOVERY | 177 | 0 | EDP-only 15m–12h, 24h N=2 | DESCRIPTIVE |
++| LIVE_FORWARD_EAP | 0 | 0 | none | LOW_SAMPLE |
++| REPLAY_EAP | 0 | 0 | none in current evidence | NOT_ESTABLISHED |
++
++Historical replay reference values are median MFE24 `3.338734%`, median MAE1h `-1.245116%`, median TTP5 `265 min`, median time-underwater `495 min`, NormalMAE1h `40`, SevereFailure1h `10`. The live EDP-only reference at 12H is median MFE `1.909040%`, median MAE `-2.178802%`, median TTP5 `205 min`, median time-underwater `150 min`, NormalMAE `126`, SevereFailure `51`.
++
++Detection Recall, Execution Precision, Detection Lead, MissedConvexity, and capital efficiency remain `NOT_ESTABLISHED` where the required ground truth or immutable execution-permission ledger is absent. These are explicit data gaps, not zeroes. LIVE_FORWARD EAP remains `LOW_SAMPLE`; no EAP-conditioned metric is calculated.
++
++The machine-readable comparison is [`ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json`](../../change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json). No threshold, feature, model, Bark, or order behavior was changed.
 diff --git a/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md b/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md
 new file mode 100644
-index 0000000..229635a
+index 0000000..4bf11c6
 --- /dev/null
 +++ b/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md
-@@ -0,0 +1,30 @@
-+# ASTPS FAST-DETACH — PROMOTION RECOMMENDATION
+@@ -0,0 +1,31 @@
++# ASTPS FAST-DETACH — PR #15 PROMOTION RECOMMENDATION
 +
 +PROMOTION_DECISION=DO_NOT_PROMOTE
 +PROMOTION_CANDIDATE=false
++READY_FOR_FINAL_AUDIT=false
 +PRODUCTION_CHANGE=false
 +THRESHOLD_CHANGE=false
 +MODEL_CHANGE=false
 +BARK_CHANGE=false
 +ORDER_PATH_CHANGE=false
-+READY_FOR_FINAL_AUDIT=true
 +
 +## Decision
 +
@@ -663,45 +1288,61 @@ index 0000000..229635a
 +
 +## Reasons
 +
-+1. The live permission observer is not connected. All 177 existing live events are correctly `EAP_NOT_OBSERVED`, not `EAP_CONFIRMED_ABSENT` and not retroactive `REPLAY_EAP`.
-+2. EAP sample quality is `LOW_SAMPLE` with observed EAP N=0. EDP-only outcomes cannot be substituted for EAP-conditioned evidence.
-+3. `chunk_002` was not accessed. No temporal OOS result exists for this audit.
-+4. The existing Drive research state rejects automatic execution shortcuts and contains no authorization for a numeric threshold promotion.
-+5. The immutable snapshot, event identity, historical SHA, append-only outcome, and source-separation invariants are the acceptance boundary, not a promotion signal.
++1. No real explicit execution-permission observer is connected; all 177 existing live events correctly remain `EAP_NOT_OBSERVED`.
++2. No prospective EAP cohort or stable persistent collector evidence exists; EAP sample quality is `LOW_SAMPLE` with immutable EAP-granted N=0.
++3. The prereg freeze was completed before chunk002 access, but the available chunk002 object is not the frozen unified-event schema. The six required results are `INSUFFICIENT`, not valid temporal OOS evidence.
++4. Historical Replay vs LIVE_FORWARD comparison is descriptive and explicitly marks detection/execution/capital data gaps.
++5. Drive paths were formally reconciled; `MODEL_REGISTRY.json` is genuinely absent and was not replaced with `MODEL_CURRENT.json`.
++6. No threshold/model/Bark/order change is authorized or present.
 +
 +## Required gates before reconsideration
 +
-+- Connect a real, explicit, immutable permission observer keyed by `event_id`; preserve the no-source classification for all prior events.
-+- Collect at least 20–30 independent prospective EAP cases with mature closed-bar outcomes and no snapshot backfill.
-+- Freeze preregistration before any temporal OOS evaluation; only then authorize a separate `chunk_002` task.
-+- Keep historical replay and live-forward denominators separate and rerun all invariant audits.
-+- Obtain an explicit review approval before any production wiring, threshold change, Bark behavior, or order-path action.
++- Connect a real immutable permission observer without changing the production decision behavior.
++- Run a stable shadow collector and form at least 20–30 independent prospective `EAP_OBSERVED` cases with mature 6H outcomes.
++- Produce a same-pipeline unified chunk002 artifact under a new reviewed data task, then evaluate only the frozen six hypotheses.
++- Reconcile or explicitly authorize canonical Drive ledger append using the resolved stable IDs.
++- Regenerate final reports and rerun all focused/regression tests before setting `READY_FOR_FINAL_AUDIT=true`.
 diff --git a/docs/research/DRIVE_WRITEBACK_PENDING.md b/docs/research/DRIVE_WRITEBACK_PENDING.md
 new file mode 100644
-index 0000000..3e3c15d
+index 0000000..76054d0
 --- /dev/null
 +++ b/docs/research/DRIVE_WRITEBACK_PENDING.md
-@@ -0,0 +1,20 @@
-+# ASTPS FAST-DETACH — DRIVE WRITEBACK PENDING
+@@ -0,0 +1,35 @@
++# ASTPS FAST-DETACH — DRIVE CANONICAL WRITEBACK RECONCILIATION
 +
-+STATUS=DRIVE_WRITEBACK_PENDING
-+READ_AT=2026-09-26T13:05:00+08:00
++STATUS=FORMALLY_RECONCILED
++CANONICAL_WRITEBACK_RECONCILED=true
++READ_AT=2026-09-26T14:10:00+08:00
++WRITEBACK_OPERATION=NOT_PERFORMED
 +
-+The canonical Google Drive research files were read before PHASE 1 and PHASE 2. No canonical Drive document was overwritten from this branch, and no local report is claimed to be a Drive-synchronized source of truth.
++The canonical parents were re-resolved after the prior search miss. Existing files are identified by stable Drive IDs below; no pseudo-replacement was created and no canonical file was overwritten from this branch.
 +
-+Read canonical records included:
++## Canonical parent resolution
 +
-+- `RESEARCH_STATE.md`
-+- `WORKBENCH_SPEC.md`
-+- `LIVE_GROWTH_LOG.md`
-+- `LIVE_HYPOTHESES.md`
-+- `CURRENT_CANDIDATE_MODEL.md`
-+- `REGRESSION_RESULTS.md`
-+- `REJECTED_RULES.md`
-+- `RESEARCH_QUEUE.md`
-+- `DATA_REGISTRY.md`
++| Logical parent | Drive folder ID |
++|---|---|
++| research state / workbench | `1dY641toqjs9m9wndqHTRq52xzoX4SpLo` |
++| candidate / regression | `1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp` |
++| live research ledgers | `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq` |
 +
-+The prior canonical search did not resolve `MODEL_REGISTRY.json`, `LIVE_CASES.jsonl`, or `LIVE_OUTCOMES.jsonl`. No replacement files or fabricated Drive IDs were created. A future authorized Drive writeback must update existing canonical records by stable ID and preserve the immutable snapshot/event/outcome boundaries.
++## Stable file resolution
++
++- `LIVE_CASES.jsonl`: `18oMIBSprBIAHO9-FY8WQzD907VM1XiU9`, parent `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq`, read successfully.
++- `LIVE_OUTCOMES.jsonl`: `1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4`, parent `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq`, read successfully.
++- `MODEL_REGISTRY.json`: exact-name search and canonical-parent listing found no file. `MODEL_CURRENT.json` (`1bZd7...`, under the research-state parent) exists but is not treated as a registry replacement.
++- `RESEARCH_STATE.md`: `1sNlS9V0Rmz_w_BkB7cQNMBCsHelhmIyc`.
++- `WORKBENCH_SPEC.md`: `1m6IbzlvUFrxTTW9vMP5wx4vW4nP6tqoY`.
++- `LIVE_GROWTH_LOG.md`: `1atVncflV2A6cN5y7u9pbPSJpqwzF1oPZ`.
++- `LIVE_HYPOTHESES.md`: `1v3o7qDkrlpUN3XoBf_IwTK0ZBdo6nfH_`.
++- `CURRENT_CANDIDATE_MODEL.md`: `1LoHtmTqhDL6jY4D6XzH5jU-SCcZOyQu1`.
++- `REGRESSION_RESULTS.md`: `1cs5zaqLwTpfLLecUXtbwJ8zqhJIAxeIh`.
++- `RESEARCH_QUEUE.md`: `19w_CkM9QwngpELURGYpi37CYf9pRCGxF`.
++
++## Reconciliation decision
++
++The required canonical ledger files are now resolved by parent and stable ID. This PR does not have a safe append payload for those production research ledgers, and `MODEL_REGISTRY.json` remains genuinely absent. Therefore the correct writeback state is a formal reconciliation, not a fabricated replacement or an unsafe overwrite. Local GitHub review artifacts remain authoritative for this PR revision; any future canonical append must use the resolved IDs and an explicit write-control/review step.
++
++True blockers remain: missing exact `MODEL_REGISTRY.json`, no authorized canonical append payload in this repair, and no permission to represent local reports as Drive synchronization.
 diff --git a/docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md b/docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md
 new file mode 100644
 index 0000000..7c0e4e5
@@ -841,6 +1482,46 @@ index 0000000..7c0e4e5
 +- Focused and related tests pass without weakening or deleting existing tests.
 +- All permanent data invariants remain zero/unchanged.
 +- No Production behavior, threshold, model, Bark, order path, snapshot, event identity, or chunk002 state changes.
+diff --git a/docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-final-audit-repair.md b/docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-final-audit-repair.md
+new file mode 100644
+index 0000000..af876e8
+--- /dev/null
++++ b/docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-final-audit-repair.md
+@@ -0,0 +1,34 @@
++# ASTPS FAST-DETACH PR #15 — Final Audit Repair Plan
++
++## Goal
++
++Address the latest PR #15 Final Audit CHANGES REQUIRED review without creating a new research line. Correct the EAP semantics, produce an auditable frozen-at-EDP descriptive audit for the existing 177-event LIVE_FORWARD cohort, freeze the pre-chunk002 contract before any chunk002 read, reconcile canonical Drive paths, and regenerate the review artifacts while keeping the final-audit stop gate false until every required gate is evidenced.
++
++## Non-negotiable boundaries
++
++- Work only on the existing PR #15 branch; do not merge, deploy, restart, or change Production model, threshold, Bark, or order behavior.
++- Do not mutate snapshots, `first_detected_at_utc`, `event_id`, historical chunk001, or existing outcome records.
++- Do not infer EAP from setup/state/snapshot fields. Prospective LIVE_FORWARD EAP counts require immutable `EAP_GRANTED` permission-ledger event IDs.
++- Do not read chunk002 before committing `PRE_CHUNK002_PREREG.md` and `.json`.
++- Do not claim a real observer, persistent collector stability, prospective EAP cohort, or chunk002 OOS result without evidence.
++
++## Execution order
++
++1. Read the latest PR review and current implementation; add a TDD repair plan and failing tests for EDP timestamp latency, fail-closed EAP classification, and ledger-only LIVE_FORWARD denominators.
++2. Implement the smallest typed changes and update collector call sites; add explicit frozen EDP timestamp and frozen-field availability contracts.
++3. Add the 177-event EDP-only audit outputs using the existing remote evidence, including required horizons and stratification status. Do not use future or outcome fields as strata.
++4. Re-resolve canonical Drive parents and record a formal reconciliation without creating replacement files. Record missing `MODEL_REGISTRY.json` as a blocker if it remains absent.
++5. Commit the exact pre-chunk002 rules/metrics/denominators/failure criteria in `change-logs/PRE_CHUNK002_PREREG.md` and `.json`; only after that commit may chunk002 be hashed/read. If exact canonical Task-006 definitions remain unavailable, record the data gap and do not score chunk002.
++6. Attempt only authorized shadow-side observer/collector validation. Preserve the truthful historical `EAP_NOT_OBSERVED` state and report missing real observer/cohort evidence instead of fabricating events.
++7. Regenerate engineering/research/promotion/final-audit/review-packet artifacts with `READY_FOR_FINAL_AUDIT=false` unless all eight gates are actually evidenced.
++8. Run focused tests, related regression tests, typecheck/build checks, `git diff --check`, and `git status --short`; review the diff, commit, push the existing PR branch, update PR #15, and stop at the approval gate.
++
++## Acceptance criteria
++
++- EDP→EAP uses immutable `execution_context.edp_utc` or immutable `first_detected_at_utc`, never the later EAP decision bar; later-bar test proves the full interval.
++- Only `GRANTED` is `EAP_OBSERVED`, only explicit `DENIED` is `EAP_CONFIRMED_ABSENT`, and unknown/pending/error/malformed/no-decision is `EAP_NOT_OBSERVED` or fail-closed.
++- LIVE_FORWARD EAP denominators contain only immutable permission-ledger `EAP_GRANTED` IDs; legacy snapshot fields cannot affect them.
++- Required 177-event EDP-only metrics are present through 12H and are stratified by available frozen fields; unavailable family/mechanism fields are reported as unavailable, never guessed.
++- Prereg files are committed before any chunk002 access; exact source/definition gaps are explicit.
++- `READY_FOR_FINAL_AUDIT=false` unless all stop-gate evidence exists; `PROMOTION_DECISION=DO_NOT_PROMOTE` remains separate.
++- All data-safety invariants remain zero/unchanged and all changes are captured in the Review Packet.
 diff --git a/docs/superpowers/specs/2026-09-24-fast-detach-v2-task-007c-storage-plan.md b/docs/superpowers/specs/2026-09-24-fast-detach-v2-task-007c-storage-plan.md
 new file mode 100644
 index 0000000..b805dec
@@ -1263,10 +1944,10 @@ index 0000000..b5aecf3
 +if (process.argv[1]?.endsWith("fast-detach-v2-task-007b-natural-outcome.ts")) await runTask007BNaturalOutcome();
 diff --git a/scripts/fast-detach-v2-task-007c-shadow-forward-collector.ts b/scripts/fast-detach-v2-task-007c-shadow-forward-collector.ts
 new file mode 100644
-index 0000000..f867099
+index 0000000..b076101
 --- /dev/null
 +++ b/scripts/fast-detach-v2-task-007c-shadow-forward-collector.ts
-@@ -0,0 +1,850 @@
+@@ -0,0 +1,853 @@
 +import { appendFile, mkdir, open, readFile, unlink } from "node:fs/promises";
 +import { execFile } from "node:child_process";
 +import { unlinkSync } from "node:fs";
@@ -1883,9 +2564,9 @@ index 0000000..f867099
 +      await assertHistoricalStable();
 +      const currentSnapshots = await repository.readSnapshots();
 +      const currentTransitions = await repository.readTransitions();
-+      const eapObservedEventIds = new Set(currentTransitions
-+        .filter((transition) => transition.transition_type === "EAP_GRANTED")
-+        .map((transition) => transition.event_id));
++      const eapGrantedTransitions = currentTransitions
++        .filter((transition) => transition.transition_type === "EAP_GRANTED") as unknown as JsonObject[];
++      const eapObservedEventIds = new Set(eapGrantedTransitions.map((transition) => String(transition.event_id ?? "")));
 +      const currentBeforeOutcomes = await repository.readOutcomes();
 +      const ledgerAudit = auditLiveLedger(currentSnapshots, currentTransitions as unknown as JsonObject[], currentBeforeOutcomes as unknown as JsonObject[]);
 +      if (ledgerAudit.duplicateEventIds || ledgerAudit.duplicateTransitionKeys || ledgerAudit.duplicateOutcomeKeys) {
@@ -1912,6 +2593,7 @@ index 0000000..f867099
 +        snapshots: currentSnapshots as unknown as JsonObject[],
 +        outcomes: currentOutcomes as unknown as JsonObject[],
 +        eapObservedEventIds,
++        eapGrantedTransitions,
 +      }) as unknown as JsonObject;
 +      const summaryWrite = summary ? await writeCohortSummary(summaryPath, summary) : null;
 +      return { ...outcomeResult, summary, summary_write: summaryWrite };
@@ -2049,6 +2731,8 @@ index 0000000..f867099
 +      snapshots: snapshotsAfter as unknown as JsonObject[],
 +      outcomes: outcomesAfter as unknown as JsonObject[],
 +      eapObservedEventIds: eapGrantedEventIds,
++      eapGrantedTransitions: transitionsAfter
++        .filter((transition) => transition.transition_type === "EAP_GRANTED") as unknown as JsonObject[],
 +    }) as unknown as JsonObject;
 +  }
 +  const result = {
@@ -3400,15 +4084,16 @@ index 0000000..3a82f80
 +}
 diff --git a/services/structure-radar/research/task-007c-shadow.ts b/services/structure-radar/research/task-007c-shadow.ts
 new file mode 100644
-index 0000000..251976c
+index 0000000..7625c48
 --- /dev/null
 +++ b/services/structure-radar/research/task-007c-shadow.ts
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,196 @@
 +import { isAbsolute, relative, resolve, sep } from "node:path";
 +import { lstat, realpath } from "node:fs/promises";
 +
 +import { SUPPORTED_OUTCOME_HORIZONS } from "./task-007b-outcomes.ts";
 +import { buildSampleQuality } from "./task-007d-summary.ts";
++import { immutableEdpTimestamp } from "./task-007d-eap.ts";
 +
 +type JsonObject = Record<string, unknown>;
 +
@@ -3433,30 +4118,9 @@ index 0000000..251976c
 +  return [...new Set(values)];
 +}
 +
-+function executionContext(snapshot: JsonObject) {
-+  const nested = snapshot.execution_context;
-+  return nested && typeof nested === "object" ? nested as JsonObject : {};
-+}
-+
 +function eventId(snapshot: JsonObject) {
 +  const identity = snapshot.identity;
 +  return identity && typeof identity === "object" ? String((identity as JsonObject).event_id ?? "") : "";
-+}
-+
-+function isEap(snapshot: JsonObject) {
-+  const context = executionContext(snapshot);
-+  return typeof context.eap_utc === "string" || typeof context.eap_time_utc === "string" ||
-+    typeof snapshot.eap_time_utc === "string";
-+}
-+
-+function edpUtc(snapshot: JsonObject) {
-+  const context = executionContext(snapshot);
-+  return context.edp_utc ?? snapshot.first_detected_at_utc;
-+}
-+
-+function eapUtc(snapshot: JsonObject) {
-+  const context = executionContext(snapshot);
-+  return context.eap_utc ?? context.eap_time_utc ?? snapshot.eap_time_utc;
 +}
 +
 +export function cohortEventIds(snapshots: readonly JsonObject[], startedAtUtc: string) {
@@ -3538,17 +4202,25 @@ index 0000000..251976c
 +  snapshots,
 +  outcomes,
 +  eapObservedEventIds = [],
++  eapGrantedTransitions = [],
 +}: {
 +  summary_at_utc: string;
 +  started_at_utc: string;
 +  snapshots: readonly JsonObject[];
 +  outcomes: readonly JsonObject[];
 +  eapObservedEventIds?: Iterable<string>;
++  eapGrantedTransitions?: readonly JsonObject[];
 +}) {
 +  parseUtc(summary_at_utc, "summary_at_utc");
 +  const { prospectiveEventIds } = cohortEventIds(snapshots, started_at_utc);
 +  const prospectiveIds = new Set(prospectiveEventIds);
-+  const observedEapIds = new Set(eapObservedEventIds);
++  const grantedTransitions = new Map<string, JsonObject>();
++  for (const transition of eapGrantedTransitions) {
++    if (transition.transition_type !== "EAP_GRANTED") continue;
++    const id = String(transition.event_id ?? "");
++    if (id && !grantedTransitions.has(id)) grantedTransitions.set(id, transition);
++  }
++  const observedEapIds = new Set([...eapObservedEventIds, ...grantedTransitions.keys()]);
 +  const snapshotById = new Map(snapshots.map((snapshot) => [eventId(snapshot), snapshot]));
 +  const mature = matureOutcomeMap(outcomes, prospectiveIds);
 +  const matureOutcomeCounts = Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [
@@ -3566,22 +4238,22 @@ index 0000000..251976c
 +  };
 +  const eapDelayMinutes = prospectiveEventIds.map((id) => {
 +    const snapshot = snapshotById.get(id);
-+    if (!snapshot || !isEap(snapshot)) return null;
-+    const start = parseUtc(edpUtc(snapshot), `${id}.EDP`);
-+    const end = parseUtc(eapUtc(snapshot), `${id}.EAP`);
-+    return Math.max(0, Math.floor((end - start) / 60_000));
++    const transition = grantedTransitions.get(id);
++    if (!snapshot || !observedEapIds.has(id) || !transition) return null;
++    const start = parseUtc(immutableEdpTimestamp(snapshot), `${id}.EDP`);
++    const end = parseUtc(transition.transition_time_utc, `${id}.EAP_GRANTED.transition_time_utc`);
++    if (end < start) throw new Error(`${id}.EAP_GRANTED precedes immutable EDP timestamp`);
++    return Math.floor((end - start) / 60_000);
 +  }).filter((value): value is number => value !== null);
 +  const maeValues = metricValues("MAE_pct");
 +  const occupancyValues = metricValues("capital_occupancy_pct");
 +  const efficiencyValues = metricValues("capital_efficiency");
 +  const eapCount = prospectiveEventIds.filter((id) => {
-+    const snapshot = snapshotById.get(id);
-+    return snapshot ? observedEapIds.has(id) || isEap(snapshot) : false;
++    return observedEapIds.has(id);
 +  }).length;
 +  const eapMatureSixHourCount = sixHour.filter((outcome) => {
 +    const id = String(outcome.event_id ?? "");
-+    const snapshot = snapshotById.get(id);
-+    return snapshot ? observedEapIds.has(id) || isEap(snapshot) : false;
++    return observedEapIds.has(id);
 +  }).length;
 +  const sampleQuality = buildSampleQuality({ mature6hN: sixHour.length, eapMature6hN: eapMatureSixHourCount });
 +
@@ -3597,6 +4269,7 @@ index 0000000..251976c
 +    new_event_count: prospectiveEventIds.length,
 +    total_live_events: uniqueInOrder(snapshots.map(eventId).filter(Boolean)).length,
 +    live_events_with_eap: eapCount,
++    eap_denominator_source: "IMMUTABLE_EAP_GRANTED_LEDGER_EVENT_IDS",
 +    mature_outcome_counts: matureOutcomeCounts,
 +    median_edp_to_eap_min: median(eapDelayMinutes),
 +    plus5_hit_rate_6h: hitRate("TTP_5"),
@@ -3691,10 +4364,10 @@ index 0000000..eb6286e
 +}
 diff --git a/services/structure-radar/research/task-007d-eap.ts b/services/structure-radar/research/task-007d-eap.ts
 new file mode 100644
-index 0000000..8fe2d60
+index 0000000..7b19ffc
 --- /dev/null
 +++ b/services/structure-radar/research/task-007d-eap.ts
-@@ -0,0 +1,186 @@
+@@ -0,0 +1,210 @@
 +import {
 +  canonicalJson,
 +  createTransition,
@@ -3734,6 +4407,14 @@ index 0000000..8fe2d60
 +};
 +
 +type SnapshotLike = Pick<LiveEventSnapshot, "identity" | "anchor_price"> | JsonObject;
++
++/**
++ * Frozen EDP timestamp contract for every EDP→EAP metric:
++ * use immutable snapshot.execution_context.edp_utc when present, otherwise
++ * immutable snapshot.first_detected_at_utc. The EAP decision bar is never a
++ * substitute for the EDP timestamp.
++ */
++export const EDP_TIMESTAMP_CONTRACT = "immutable snapshot.execution_context.edp_utc ?? snapshot.first_detected_at_utc" as const;
 +
 +function parseUtc(value: unknown, label: string) {
 +  const timestamp = typeof value === "string" ? Date.parse(value) : Number.NaN;
@@ -3779,14 +4460,27 @@ index 0000000..8fe2d60
 +  return identity && typeof identity === "object" ? (identity as JsonObject).decision_bar_close_utc : undefined;
 +}
 +
++export function immutableEdpTimestamp(snapshot: SnapshotLike) {
++  const candidate = snapshot && typeof snapshot === "object" ? snapshot as JsonObject : {};
++  const execution = candidate.execution_context;
++  const context = execution && typeof execution === "object" ? execution as JsonObject : {};
++  const edpUtc = context.edp_utc ?? candidate.first_detected_at_utc;
++  if (typeof edpUtc !== "string" || !edpUtc.trim()) {
++    throw new Error(`immutable EDP timestamp is missing (${EDP_TIMESTAMP_CONTRACT})`);
++  }
++  return edpUtc;
++}
++
 +export function validateEapDecision(decision: EapDecision, snapshot: SnapshotLike) {
 +  if (!decision.event_id || decision.event_id !== snapshotEventId(snapshot)) throw new Error("EAP event identity mismatch");
 +  const eapMs = parseUtc(decision.eap_time_utc, "eap_time_utc");
 +  const decisionBarMs = parseUtc(decision.decision_bar_close_utc, "decision_bar_close_utc");
 +  const snapshotDecisionMs = parseUtc(snapshotDecisionBar(snapshot), "snapshot.decision_bar_close_utc");
++  const immutableEdpMs = parseUtc(immutableEdpTimestamp(snapshot), "immutable_edp_timestamp");
 +  if (decisionBarMs < snapshotDecisionMs) throw new Error("EAP decision bar precedes EDP decision bar");
 +  if (eapMs < decisionBarMs) throw new Error("EAP time precedes EAP decision bar");
 +  if (eapMs < snapshotDecisionMs) throw new Error("EAP time precedes EDP decision bar");
++  if (eapMs < immutableEdpMs) throw new Error("EAP time precedes immutable EDP timestamp");
 +  if (!Number.isFinite(decision.eap_price) || decision.eap_price <= 0) throw new Error("EAP price must be positive");
 +  for (const field of ["permission_type", "permission_version", "source_decision_id", "source_cycle_id"]) {
 +    if (!String(decision[field as keyof EapDecision] ?? "").trim()) throw new Error(`EAP ${field} is required`);
@@ -3823,7 +4517,9 @@ index 0000000..8fe2d60
 +}): EapStatus {
 +  if (input.replay) return "REPLAY_EAP";
 +  if (!input.permissionSourceConnected || !input.decisionLogged) return "EAP_NOT_OBSERVED";
-+  return input.decision?.status === "GRANTED" ? "EAP_OBSERVED" : "EAP_CONFIRMED_ABSENT";
++  if (input.decision?.status === "GRANTED") return "EAP_OBSERVED";
++  if (input.decision?.status === "DENIED") return "EAP_CONFIRMED_ABSENT";
++  return "EAP_NOT_OBSERVED";
 +}
 +
 +type TransitionRepository = {
@@ -3864,12 +4560,13 @@ index 0000000..8fe2d60
 +  validateEapDecision(decision, snapshot);
 +  const edpPrice = Number(snapshot.anchor_price);
 +  const eapPrice = decision.eap_price;
++  const edpMs = parseUtc(immutableEdpTimestamp(snapshot), "immutable_edp_timestamp");
 +  const eapMs = parseUtc(decision.eap_time_utc, "eap_time_utc");
 +  const eligible = bars.filter((bar) => parseUtc(bar.open_time_utc, "bar.open_time_utc") >= eapMs);
 +  const highs = eligible.map((bar) => bar.high);
 +  const lows = eligible.map((bar) => bar.low);
 +  return {
-+    EDP_TO_EAP_MIN: Math.floor((eapMs - parseUtc(decision.decision_bar_close_utc, "decision_bar_close_utc")) / 60_000),
++    EDP_TO_EAP_MIN: Math.floor((eapMs - edpMs) / 60_000),
 +    PRICE_EDP_TO_EAP_PCT: ((eapPrice / edpPrice) - 1) * 100,
 +    MFE_FROM_EDP: highs.length ? ((Math.max(...highs) / edpPrice) - 1) * 100 : null,
 +    MAE_FROM_EDP: lows.length ? ((Math.min(...lows) / edpPrice) - 1) * 100 : null,
@@ -4054,10 +4751,10 @@ index 0000000..4cc8ada
 +export { COPY_LAYOUT };
 diff --git a/services/structure-radar/research/task-007d-summary.ts b/services/structure-radar/research/task-007d-summary.ts
 new file mode 100644
-index 0000000..b39d410
+index 0000000..cca5a56
 --- /dev/null
 +++ b/services/structure-radar/research/task-007d-summary.ts
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,149 @@
 +import { SUPPORTED_OUTCOME_HORIZONS } from "./task-007b-outcomes.ts";
 +
 +type JsonObject = Record<string, unknown>;
@@ -4083,6 +4780,16 @@ index 0000000..b39d410
 +function timeframe(snapshot: JsonObject) { return String(identity(snapshot).timeframe ?? snapshot.timeframe ?? "UNKNOWN"); }
 +function setup(snapshot: JsonObject) { return String(identity(snapshot).setup ?? snapshot.setup ?? "UNKNOWN"); }
 +function discoveryChannel(snapshot: JsonObject) { return String(snapshot.discovery_channel ?? "UNKNOWN"); }
++const UNAVAILABLE_FROZEN_FIELD = "__UNAVAILABLE_FROZEN_FIELD__";
++
++function frozenDimension(snapshot: JsonObject, dimension: "family" | "mechanism") {
++  const direct = snapshot[dimension];
++  const identityValue = identity(snapshot)[dimension];
++  for (const candidate of [direct, identityValue]) {
++    if (typeof candidate === "string" && candidate.trim()) return candidate;
++  }
++  return UNAVAILABLE_FROZEN_FIELD;
++}
 +
 +function groupCount(rows: readonly JsonObject[], valueOf: (row: JsonObject) => string) {
 +  const counts: Record<string, number> = {};
@@ -4123,16 +4830,19 @@ index 0000000..b39d410
 +}
 +
 +function stratify(snapshots: readonly JsonObject[], outcomesById: Map<string, JsonObject[]>, keyOf: (snapshot: JsonObject) => string) {
-+  const groups = new Map<string, JsonObject[]>();
++  const groups = new Map<string, { eventIds: Set<string>; rows: JsonObject[] }>();
 +  for (const snapshot of snapshots) {
 +    const key = keyOf(snapshot);
-+    const rows = groups.get(key) ?? [];
-+    rows.push(...(outcomesById.get(eventId(snapshot)) ?? []));
-+    groups.set(key, rows);
++    const group = groups.get(key) ?? { eventIds: new Set<string>(), rows: [] };
++    const id = eventId(snapshot);
++    if (id) group.eventIds.add(id);
++    group.rows.push(...(outcomesById.get(id) ?? []));
++    groups.set(key, group);
 +  }
-+  return Object.fromEntries([...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, rows]) => [key, {
-+    N: rows.length,
-+    horizons: Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [horizon, horizonSummary(rows.filter((row) => row.horizon === horizon))])),
++  return Object.fromEntries([...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, group]) => [key, {
++    event_n: group.eventIds.size,
++    N: group.rows.length,
++    horizons: Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [horizon, horizonSummary(group.rows.filter((row) => row.horizon === horizon))])),
 +  }]));
 +}
 +
@@ -4181,9 +4891,16 @@ index 0000000..b39d410
 +    stratified_by_timeframe: stratify(live, outcomesById, timeframe),
 +    stratified_by_setup: stratify(live, outcomesById, setup),
 +    stratified_by_discovery_channel: stratify(live, outcomesById, discoveryChannel),
++    frozen_stratification_field_status: {
++      family: live.some((snapshot) => frozenDimension(snapshot, "family") !== UNAVAILABLE_FROZEN_FIELD) ? "AVAILABLE" : "UNAVAILABLE_FROZEN_FIELD",
++      mechanism: live.some((snapshot) => frozenDimension(snapshot, "mechanism") !== UNAVAILABLE_FROZEN_FIELD) ? "AVAILABLE" : "UNAVAILABLE_FROZEN_FIELD",
++    },
++    stratified_by_family: stratify(live, outcomesById, (snapshot) => frozenDimension(snapshot, "family")),
++    stratified_by_mechanism: stratify(live, outcomesById, (snapshot) => frozenDimension(snapshot, "mechanism")),
 +    sample_quality: sampleQuality,
 +    portfolio_interpretation: "DIAGNOSTIC_OVERLAPPING_EVENT_PF_ONLY",
 +    eap_mature_6h_n: eapMatureSixHourRows.length,
++    eap_denominator_source: "IMMUTABLE_EAP_GRANTED_LEDGER_EVENT_IDS",
 +    eap_metrics: eapMatureSixHourRows.length ? "DESCRIPTIVE_OBSERVED_EAP_6H" : "NOT_CALCULATED_FOR_EAP_NOT_OBSERVED",
 +  };
 +}
@@ -4469,10 +5186,10 @@ index 0000000..9262064
 +});
 diff --git a/tests/fast-detach-task-007c.test.mjs b/tests/fast-detach-task-007c.test.mjs
 new file mode 100644
-index 0000000..d84fec8
+index 0000000..763ca51
 --- /dev/null
 +++ b/tests/fast-detach-task-007c.test.mjs
-@@ -0,0 +1,425 @@
+@@ -0,0 +1,444 @@
 +import assert from "node:assert/strict";
 +import test from "node:test";
 +
@@ -4535,6 +5252,7 @@ index 0000000..d84fec8
 +      outcome("e3", "6h", { TTP_5: null, TTP_10: null, MFE_pct: 2, MAE_pct: -4, time_to_positive_min: null }),
 +      outcome("e1", "24h", { TTP_5: 1, MFE_pct: 99, MAE_pct: -99 }),
 +    ],
++    eapObservedEventIds: new Set(["e1"]),
 +  });
 +
 +  assert.equal(summary.sample_quality, "LOW_SAMPLE");
@@ -4555,6 +5273,18 @@ index 0000000..d84fec8
 +  assert.equal(summary.summary_at_utc, "2026-09-25T01:00:00.000Z");
 +});
 +
++test("buildCohortSummary ignores legacy snapshot EAP fields without an EAP_GRANTED ledger id", () => {
++  const summary = buildCohortSummary({
++    summary_at_utc: "2026-09-25T01:00:00.000Z",
++    started_at_utc: "2026-09-24T19:00:00.000Z",
++    snapshots: [snapshot("legacy-eap", "2026-09-24T19:01:00.000Z", { edp_utc: "2026-09-24T19:01:00.000Z", eap_utc: "2026-09-24T19:06:00.000Z" })],
++    outcomes: [outcome("legacy-eap", "6h", { MFE_pct: 4, MAE_pct: -1 })],
++  });
++  assert.equal(summary.live_events_with_eap, 0);
++  assert.equal(summary.eap_mature_6h_n, 0);
++  assert.equal(summary.median_edp_to_eap_min, null);
++});
++
 +test("buildCohortSummary derives EAP maturity from immutable observed transition ids", () => {
 +  const summary = buildCohortSummary({
 +    summary_at_utc: "2026-09-25T01:00:00.000Z",
@@ -4568,12 +5298,18 @@ index 0000000..d84fec8
 +      outcome("discovery-only-event", "6h", { MFE_pct: 2, MAE_pct: -2 }),
 +    ],
 +    eapObservedEventIds: new Set(["eap-event"]),
++    eapGrantedTransitions: [{
++      event_id: "eap-event",
++      transition_type: "EAP_GRANTED",
++      transition_time_utc: "2026-09-24T19:06:00.000Z",
++    }],
 +  });
 +
 +  assert.equal(summary.live_events_with_eap, 1);
 +  assert.equal(summary.discovery_mature_6h_n, 2);
 +  assert.equal(summary.eap_mature_6h_n, 1);
 +  assert.equal(summary.eap_sample_quality_6h, "LOW_SAMPLE");
++  assert.equal(summary.median_edp_to_eap_min, 5);
 +});
 +
 +test("approved shadow paths reject production, traversal, and chunk002 targets", () => {
@@ -4900,10 +5636,10 @@ index 0000000..d84fec8
 +});
 diff --git a/tests/fast-detach-task-007d.test.mjs b/tests/fast-detach-task-007d.test.mjs
 new file mode 100644
-index 0000000..eb78292
+index 0000000..327fdc9
 --- /dev/null
 +++ b/tests/fast-detach-task-007d.test.mjs
-@@ -0,0 +1,259 @@
+@@ -0,0 +1,298 @@
 +import assert from "node:assert/strict";
 +import test from "node:test";
 +import { mkdtemp, readFile, rm, mkdir, writeFile } from "node:fs/promises";
@@ -4970,6 +5706,13 @@ index 0000000..eb78292
 +  assert.equal(classifyEapObservation({ permissionSourceConnected: true, decisionLogged: false }), "EAP_NOT_OBSERVED");
 +  assert.equal(classifyEapObservation({ permissionSourceConnected: true, decisionLogged: true, decision: { status: "DENIED" } }), "EAP_CONFIRMED_ABSENT");
 +  assert.equal(classifyEapObservation({ permissionSourceConnected: true, decisionLogged: true, decision: { status: "GRANTED" } }), "EAP_OBSERVED");
++  for (const status of ["UNKNOWN", "PENDING", "ERROR", undefined]) {
++    assert.equal(
++      classifyEapObservation({ permissionSourceConnected: true, decisionLogged: true, decision: status === undefined ? {} : { status } }),
++      "EAP_NOT_OBSERVED",
++      `status ${String(status)} must fail closed`,
++    );
++  }
 +  assert.equal(classifyEapObservation({ replay: true, permissionSourceConnected: true, decisionLogged: true, decision: { status: "GRANTED" } }), "REPLAY_EAP");
 +});
 +
@@ -5046,11 +5789,27 @@ index 0000000..eb78292
 +      { open_time_utc: "2026-09-24T10:25:00.000Z", close: 103, high: 104, low: 100 },
 +    ],
 +  });
-+  assert.equal(metrics.EDP_TO_EAP_MIN, 5);
++  assert.equal(metrics.EDP_TO_EAP_MIN, 4);
 +  assert.ok(Math.abs(metrics.PRICE_EDP_TO_EAP_PCT - 1) < 1e-12);
 +  assert.ok(Math.abs(metrics.MFE_FROM_EDP - 4) < 1e-12);
 +  assert.ok(Math.abs(metrics.MFE_FROM_EAP - 2.97029702970297) < 1e-12);
 +  assert.ok(Math.abs(metrics.MAE_FROM_EAP - -0.9900990099009901) < 1e-12);
++});
++
++test("EDP_TO_EAP_MIN uses immutable EDP timestamp when EAP decision is on a later bar", () => {
++  const metrics = calculateEapSeparatedMetrics({
++    snapshot: snapshot("event-1", {
++      first_detected_at_utc: "2026-09-24T10:10:00.000Z",
++      execution_context: { edp_utc: "2026-09-24T10:10:00.000Z" },
++    }),
++    decision: permissionDecision({
++      eap_time_utc: "2026-09-24T10:35:00.000Z",
++      decision_bar_close_utc: "2026-09-24T10:30:00.000Z",
++      causal_evidence: { timestamps_utc: ["2026-09-24T10:29:59.999Z"], state: "CONFIRMED" },
++    }),
++    bars: [{ open_time_utc: "2026-09-24T10:35:00.000Z", close: 101, high: 102, low: 100 }],
++  });
++  assert.equal(metrics.EDP_TO_EAP_MIN, 25);
 +});
 +
 +test("sample quality exposes discovery and EAP denominators separately", () => {
@@ -5088,6 +5847,9 @@ index 0000000..eb78292
 +  assert.equal(result.horizons["6h"].hit_rates["+5%"], 0.95);
 +  assert.equal(result.portfolio_interpretation, "DIAGNOSTIC_OVERLAPPING_EVENT_PF_ONLY");
 +  assert.equal(result.sample_quality.DISCOVERY_SAMPLE_QUALITY_6H, "READY_FOR_DESCRIPTIVE_SUMMARY");
++  assert.equal(result.stratified_by_timeframe["15m"].event_n, 10);
++  assert.equal(result.frozen_stratification_field_status.family, "UNAVAILABLE_FROZEN_FIELD");
++  assert.equal(result.stratified_by_family.__UNAVAILABLE_FROZEN_FIELD__.event_n, 20);
 +});
 +
 +test("EDP-only summary derives EAP 6H maturity from observed EAP event ids", () => {
@@ -5127,6 +5889,19 @@ index 0000000..eb78292
 +  assert.equal(result.mature_outcome_counts["6h"], 1);
 +  assert.equal(result.eap_mature_6h_n, 0);
 +  assert.equal(result.sample_quality.EAP_SAMPLE_QUALITY_6H, "LOW_SAMPLE");
++});
++
++test("EDP-only LIVE_FORWARD EAP denominator ignores legacy snapshot EAP fields", () => {
++  const result = buildEdpOnlyForwardSummary({
++    snapshots: [snapshot("legacy-eap", { execution_context: { eap_utc: "2026-09-24T10:20:00.000Z" } })],
++    outcomes: [{
++      event_id: "legacy-eap",
++      horizon: "6h",
++      metrics: { return_pct: 1, MFE_pct: 2, MAE_pct: -1, TTP_5: 30 },
++    }],
++  });
++  assert.equal(result.eap_mature_6h_n, 0);
++  assert.equal(result.eap_metrics, "NOT_CALCULATED_FOR_EAP_NOT_OBSERVED");
 +});
 +
 +test("production observability gap JSON is deterministic and preserves repair boundaries", () => {
