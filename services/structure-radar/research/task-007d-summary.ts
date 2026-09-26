@@ -1,0 +1,156 @@
+import { SUPPORTED_OUTCOME_HORIZONS } from "./task-007b-outcomes.ts";
+import { validateEapDecision, type EapDecision } from "./task-007d-eap.ts";
+
+type JsonObject = Record<string, unknown>;
+const TARGETS = [5, 8, 10, 15, 20] as const;
+
+function finite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function median(values: readonly number[]) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
+function identity(snapshot: JsonObject) {
+  return snapshot.identity && typeof snapshot.identity === "object" ? snapshot.identity as JsonObject : {};
+}
+
+function eventId(snapshot: JsonObject) { return String(identity(snapshot).event_id ?? ""); }
+function symbol(snapshot: JsonObject) { return String(identity(snapshot).symbol ?? snapshot.symbol ?? "UNKNOWN"); }
+function timeframe(snapshot: JsonObject) { return String(identity(snapshot).timeframe ?? snapshot.timeframe ?? "UNKNOWN"); }
+function setup(snapshot: JsonObject) { return String(identity(snapshot).setup ?? snapshot.setup ?? "UNKNOWN"); }
+function discoveryChannel(snapshot: JsonObject) { return String(snapshot.discovery_channel ?? "UNKNOWN"); }
+
+function validObservedEapEventIds(snapshots: readonly JsonObject[], transitions: readonly JsonObject[]) {
+  const snapshotsById = new Map(snapshots.map((snapshot) => [eventId(snapshot), snapshot]));
+  const observed = new Set<string>();
+  for (const transition of transitions) {
+    if (transition.transition_type !== "EAP_GRANTED") continue;
+    const causalEvidence = transition.causal_evidence;
+    const decision = causalEvidence && typeof causalEvidence === "object"
+      ? (causalEvidence as JsonObject).eap_decision
+      : undefined;
+    if (!decision || typeof decision !== "object") continue;
+    const candidate = decision as EapDecision;
+    if (candidate.eap_source !== "LIVE_FORWARD" || candidate.event_id !== transition.event_id) continue;
+    const snapshot = snapshotsById.get(candidate.event_id);
+    if (!snapshot) continue;
+    try {
+      validateEapDecision(candidate, snapshot);
+      observed.add(candidate.event_id);
+    } catch {
+      // Invalid or causally unsafe decisions do not enter the EAP denominator.
+    }
+  }
+  return observed;
+}
+
+function groupCount(rows: readonly JsonObject[], valueOf: (row: JsonObject) => string) {
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    const value = valueOf(row);
+    counts[value] = (counts[value] ?? 0) + 1;
+  }
+  return Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function metricsOf(outcome: JsonObject) {
+  return outcome.metrics && typeof outcome.metrics === "object" ? outcome.metrics as JsonObject : {};
+}
+
+function horizonSummary(rows: readonly JsonObject[]) {
+  const metrics = rows.map(metricsOf);
+  const numbers = (key: string) => metrics.map((item) => item[key]).filter(finite);
+  const rate = (predicate: (item: JsonObject) => boolean) => rows.length ? metrics.filter(predicate).length / rows.length : null;
+  const hitRates = Object.fromEntries(TARGETS.map((target) => {
+    const key = `TTP_${target}`;
+    return [`+${target}%`, rate((item) => finite(item[key]))];
+  }));
+  const medianTtp = Object.fromEntries(TARGETS.map((target) => [`+${target}%`, median(numbers(`TTP_${target}`))]));
+  const mae = numbers("MAE_pct");
+  return {
+    mature_n: rows.length,
+    median_return: median(numbers("return_pct")),
+    median_mfe: median(numbers("MFE_pct")),
+    median_mae: median(mae),
+    positive_return_rate: rate((item) => finite(item.return_pct) && item.return_pct > 0),
+    hit_rates: hitRates,
+    median_ttp_min: medianTtp,
+    normal_mae_n: mae.filter((value) => value > -3).length,
+    severe_failure_n: mae.filter((value) => value <= -3).length,
+    median_time_to_positive_min: median(numbers("time_to_positive_min")),
+    median_max_time_underwater_min: median(numbers("max_time_underwater_min")),
+  };
+}
+
+function stratify(snapshots: readonly JsonObject[], outcomesById: Map<string, JsonObject[]>, keyOf: (snapshot: JsonObject) => string) {
+  const groups = new Map<string, JsonObject[]>();
+  for (const snapshot of snapshots) {
+    const key = keyOf(snapshot);
+    const rows = groups.get(key) ?? [];
+    rows.push(...(outcomesById.get(eventId(snapshot)) ?? []));
+    groups.set(key, rows);
+  }
+  return Object.fromEntries([...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, rows]) => [key, {
+    N: rows.length,
+    horizons: Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [horizon, horizonSummary(rows.filter((row) => row.horizon === horizon))])),
+  }]));
+}
+
+export function buildSampleQuality({ mature6hN, eapMature6hN }: { mature6hN: number; eapMature6hN: number }) {
+  return {
+    DISCOVERY_SAMPLE_QUALITY_6H: mature6hN < 20 ? "LOW_SAMPLE" : "READY_FOR_DESCRIPTIVE_SUMMARY",
+    EAP_SAMPLE_QUALITY_6H: eapMature6hN < 20 ? "LOW_SAMPLE" : "READY_FOR_DESCRIPTIVE_SUMMARY",
+  } as const;
+}
+
+export function buildEdpOnlyForwardSummary({
+  snapshots,
+  outcomes,
+  transitions = [],
+}: {
+  snapshots: readonly JsonObject[];
+  outcomes: readonly JsonObject[];
+  transitions?: readonly JsonObject[];
+}) {
+  const live = snapshots.filter((snapshot) => identity(snapshot).source === "LIVE_FORWARD");
+  const outcomesById = new Map<string, JsonObject[]>();
+  for (const outcome of outcomes) {
+    const id = String(outcome.event_id ?? "");
+    const rows = outcomesById.get(id) ?? [];
+    rows.push(outcome);
+    outcomesById.set(id, rows);
+  }
+  const sixHourRows = live.flatMap((snapshot) => (outcomesById.get(eventId(snapshot)) ?? []).filter((row) => row.horizon === "6h"));
+  const observedEapEventIds = validObservedEapEventIds(live, transitions);
+  const eapMature6hN = new Set(sixHourRows
+    .map((outcome) => String(outcome.event_id ?? ""))
+    .filter((id) => observedEapEventIds.has(id))).size;
+  const sampleQuality = buildSampleQuality({ mature6hN: sixHourRows.length, eapMature6hN });
+  const horizons = Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [
+    horizon,
+    horizonSummary(live.flatMap((snapshot) => (outcomesById.get(eventId(snapshot)) ?? []).filter((row) => row.horizon === horizon))),
+  ]));
+  return {
+    summary_version: "fast-detach-v2-task-007d-edp-only-1",
+    summary_basis: "EDP_ONLY_DESCRIPTIVE_LIVE_FORWARD",
+    N: live.length,
+    unique_symbols: [...new Set(live.map(symbol))].sort(),
+    timeframes: [...new Set(live.map(timeframe))].sort(),
+    setup_distribution: groupCount(live, setup),
+    discovery_channel_distribution: groupCount(live, discoveryChannel),
+    mature_outcome_counts: Object.fromEntries(SUPPORTED_OUTCOME_HORIZONS.map((horizon) => [horizon, horizons[horizon].mature_n])),
+    eap_mature_6h_n: eapMature6hN,
+    horizons,
+    stratified_by_timeframe: stratify(live, outcomesById, timeframe),
+    stratified_by_setup: stratify(live, outcomesById, setup),
+    stratified_by_discovery_channel: stratify(live, outcomesById, discoveryChannel),
+    sample_quality: sampleQuality,
+    portfolio_interpretation: "DIAGNOSTIC_OVERLAPPING_EVENT_PF_ONLY",
+    eap_metrics: "NOT_CALCULATED_FOR_EAP_NOT_OBSERVED",
+  };
+}
