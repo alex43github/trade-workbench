@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "source_repository": "https://github.com/suoha888/Trader-Archives",
+  "source_commit": "ea2bd6849a9f12efafce13bfd0a49996f2475a76",
+  "source_file": "cj/index.html",
+  "source_url": "https://suoha888.github.io/Trader-Archives/cj/",
+  "discovered_topics": 28,
+  "topics": [
+    {
+      "topic_id": "t-01",
+      "volume_id": "v-01",
+      "volume_title": "认知觉醒篇 · 打通做市商的底层金融心智",
+      "title": "战略战场的敏锐转移：为什么从 Perp 资金费套利转战新链 Robin？",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-01",
+      "source_ids": ["2094582598022664265", "2093977225943232670", "2095091083747451165"]
+    },
+    {
+      "topic_id": "t-02",
+      "volume_id": "v-01",
+      "volume_title": "认知觉醒篇 · 打通做市商的底层金融心智",
+      "title": "做市商的利润来源：你赚的每一分钱都来自市场的 FOMO 情绪",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-02",
+      "source_ids": ["2090359344445719016", "2095022016969785715"]
+    },
+    {
+      "topic_id": "t-03",
+      "volume_id": "v-01",
+      "volume_title": "认知觉醒篇 · 打通做市商的底层金融心智",
+      "title": "LP 容错率真相：为什么做池子远胜死拿与主动波段？",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-03",
+      "source_ids": ["2094571978401423557", "2094662841404194947"]
+    },
+    {
+      "topic_id": "t-04",
+      "volume_id": "v-01",
+      "volume_title": "认知觉醒篇 · 打通做市商的底层金融心智",
+      "title": "金融套利的永恒双轮：价差与利率差在传统金融与 Web3 的统一",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-04",
+      "source_ids": ["1907037188329730245", "1912721730692608363", "1999885378812326282"]
+    },
+    {
+      "topic_id": "t-05",
+      "volume_id": "v-02",
+      "volume_title": "数学基石篇 · 集中流动性精算与做市挂单算法",
+      "title": "进场前的唯一数学公式：Fee 跑赢无常损失的动态推演",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-05",
+      "source_ids": ["1930592265342525690"]
+    },
+    {
+      "topic_id": "t-06",
+      "volume_id": "v-02",
+      "volume_title": "数学基石篇 · 集中流动性精算与做市挂单算法",
+      "title": "几何亏损减半法则：单边 10% 区间跌穿仅亏 5% 的数学测算法则",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-06",
+      "source_ids": ["1930623777962139695"]
+    },
+    {
+      "topic_id": "t-07",
+      "volume_id": "v-02",
+      "volume_title": "数学基石篇 · 集中流动性精算与做市挂单算法",
+      "title": "短线高波 LP 的收益率生死线：APR > 3000% 才能打，< 1000% 禁区",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-07",
+      "source_ids": ["1987051719541547037", "1987074761948864662"]
+    },
+    {
+      "topic_id": "t-08",
+      "volume_id": "v-02",
+      "volume_title": "数学基石篇 · 集中流动性精算与做市挂单算法",
+      "title": "锯齿状双层马丁嵌套挂单：非线性资金加权降低持仓均价模型",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-08",
+      "source_ids": ["1916086010678849899", "1932701138262081765"]
+    },
+    {
+      "topic_id": "t-09",
+      "volume_id": "v-02",
+      "volume_title": "数学基石篇 · 集中流动性精算与做市挂单算法",
+      "title": "Meteora DLMM 自动化做市与头寸管理架构",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-09",
+      "source_ids": ["1948733203566789056", "1918177589174431804", "1926252473481662908"]
+    },
+    {
+      "topic_id": "t-10",
+      "volume_id": "v-03",
+      "volume_title": "实战战法篇 · 主观挂单、多空反向与容错兜底",
+      "title": "主观方向性战法：做多 LP 与 做空 LP 的反向收割模型",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-10",
+      "source_ids": ["1969964672825909560", "1957967603051466921"]
+    },
+    {
+      "topic_id": "t-11",
+      "volume_id": "v-03",
+      "volume_title": "实战战法篇 · 主观挂单、多空反向与容错兜底",
+      "title": "强制抄底容错法：跌破当计划内抄底，不破纯赚 Fee",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-11",
+      "source_ids": ["1899347899970154794"]
+    },
+    {
+      "topic_id": "t-12",
+      "volume_id": "v-03",
+      "volume_title": "实战战法篇 · 主观挂单、多空反向与容错兜底",
+      "title": "多池并行现金流覆盖机制：在 Robin 做市如何做到整体无回撤？",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-12",
+      "source_ids": ["2094582598022664265", "1988263445666709986"]
+    },
+    {
+      "topic_id": "t-13",
+      "volume_id": "v-04",
+      "volume_title": "衍生品篇 · 期现、基差与跨市场资金费率套利",
+      "title": "跨交易所资金费率套利：平仓流动性风险与不可搬迁陷阱",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-13",
+      "source_ids": ["1913110637544448479", "1908940394370625897"]
+    },
+    {
+      "topic_id": "t-14",
+      "volume_id": "v-04",
+      "volume_title": "衍生品篇 · 期现、基差与跨市场资金费率套利",
+      "title": "链上现货插针套利实战：Hyperliquid 现货几万 U 盈利复盘",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-14",
+      "source_ids": ["1980461247830323367"]
+    },
+    {
+      "topic_id": "t-15",
+      "volume_id": "v-04",
+      "volume_title": "衍生品篇 · 期现、基差与跨市场资金费率套利",
+      "title": "Backpack 杠杆循环期现套利：50% APR 与交易量积分双吃",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-15",
+      "source_ids": ["1906238617724625229", "1908512253240033654", "1953005005335560201"]
+    },
+    {
+      "topic_id": "t-16",
+      "volume_id": "v-04",
+      "volume_title": "衍生品篇 · 期现、基差与跨市场资金费率套利",
+      "title": "复杂交叉衍生品套利路径寻找：Lighter、Crossex、Var 与 Hip3",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-16",
+      "source_ids": ["2092056042813448344", "2087445462819516529", "2086612620136874076"]
+    },
+    {
+      "topic_id": "t-17",
+      "volume_id": "v-04",
+      "volume_title": "衍生品篇 · 期现、基差与跨市场资金费率套利",
+      "title": "自动化告警监控系统构建：现货/合约价格与费率异动秒级报警",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-17",
+      "source_ids": ["1913575205576007986"]
+    },
+    {
+      "topic_id": "t-18",
+      "volume_id": "v-05",
+      "volume_title": "进阶玩法篇 · 利率互换、循环贷与新型事件套利",
+      "title": "Pendle 体系利率拆分：PT 折价无风险承兑与巨鲸溢价套利",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-18",
+      "source_ids": ["1969731767352660075", "1972844249025753150", "1967786496104206735"]
+    },
+    {
+      "topic_id": "t-19",
+      "volume_id": "v-05",
+      "volume_title": "进阶玩法篇 · 利率互换、循环贷与新型事件套利",
+      "title": "货币市场借贷利差循环：多子账户突破限额做 30-40% APR",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-19",
+      "source_ids": ["1971711369511862528", "1960401224773328941"]
+    },
+    {
+      "topic_id": "t-20",
+      "volume_id": "v-05",
+      "volume_title": "进阶玩法篇 · 利率互换、循环贷与新型事件套利",
+      "title": "预测市场量化与扫尾盘模型：Polymarket 回测陷阱与 Perps 跨界",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-20",
+      "source_ids": ["2034189833032331265", "1981030639077114198", "2095540867306283493"]
+    },
+    {
+      "topic_id": "t-21",
+      "volume_id": "v-06",
+      "volume_title": "选品门槛与生存纪律篇 · 绝对避坑与防割底线",
+      "title": "选品三大黄金指标与大项目准入门槛",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-21",
+      "source_ids": ["1914933717157777419", "1962860208310583793"]
+    },
+    {
+      "topic_id": "t-22",
+      "volume_id": "v-06",
+      "volume_title": "选品门槛与生存纪律篇 · 绝对避坑与防割底线",
+      "title": "出场第一铁律：脱离区间立刻撤池止损",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-22",
+      "source_ids": ["1934241999819038740"]
+    },
+    {
+      "topic_id": "t-23",
+      "volume_id": "v-06",
+      "volume_title": "选品门槛与生存纪律篇 · 绝对避坑与防割底线",
+      "title": "绝对禁忌：为什么坚决拉黑自动再平衡（Rebalancing）？",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-23",
+      "source_ids": ["1933013337576780181"]
+    },
+    {
+      "topic_id": "t-24",
+      "volume_id": "v-06",
+      "volume_title": "选品门槛与生存纪律篇 · 绝对避坑与防割底线",
+      "title": "链上微观执行防御：防 MEV 夹子实操",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-24",
+      "source_ids": ["1931626940806598927"]
+    },
+    {
+      "topic_id": "t-25",
+      "volume_id": "v-06",
+      "volume_title": "选品门槛与生存纪律篇 · 绝对避坑与防割底线",
+      "title": "仓位分层管理与手动盯盘精力极限",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-25",
+      "source_ids": ["2094294541214117902"]
+    },
+    {
+      "topic_id": "t-26",
+      "volume_id": "v-07",
+      "volume_title": "工程军火库与终极心智篇 · 从 Python 到 Rust 微秒级演进",
+      "title": "工作站配置与多显示器实战环境",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-26",
+      "source_ids": ["2096079739404550551", "1988263445666709986", "1988225624302039450"]
+    },
+    {
+      "topic_id": "t-27",
+      "volume_id": "v-07",
+      "volume_title": "工程军火库与终极心智篇 · 从 Python 到 Rust 微秒级演进",
+      "title": "高频低延迟开发架构：从 Python 到 Rust 微秒级热路径优化",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-27",
+      "source_ids": ["2092322901647372641", "2030179652636209482", "2029224402009899203"]
+    },
+    {
+      "topic_id": "t-28",
+      "volume_id": "v-07",
+      "volume_title": "工程军火库与终极心智篇 · 从 Python 到 Rust 微秒级演进",
+      "title": "交易员终极心智：做确定性的奴隶，不做方向的赌徒",
+      "archive_anchor": "https://suoha888.github.io/Trader-Archives/cj/#t-28",
+      "source_ids": ["1972677244394012769", "1974037766389576181"]
+    }
+  ]
+}
