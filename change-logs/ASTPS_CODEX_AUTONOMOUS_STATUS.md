@@ -1,6 +1,6 @@
 # ASTPS FAST-DETACH — CODEX AUTONOMOUS STATUS
 
-TASK_ID=ASTPS_FAST_DETACH_PR15_FINAL_AUDIT_REPAIR
+TASK_ID=ASTPS_FAST_DETACH_PR15_THIRD_FINAL_AUDIT_REPAIR
 PHASE=FINAL_AUDIT_REPAIR
 STATUS=CHANGES_REQUIRED_INCOMPLETE
 READY_FOR_FINAL_AUDIT=false
@@ -8,7 +8,8 @@ PROMOTION_DECISION=DO_NOT_PROMOTE
 BRANCH=codex/astps-fast-detach-handoff-20260926
 PR=https://github.com/alex43github/trade-workbench/pull/15
 BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
-REPAIR_COMMIT=14b1376
+CODE_REPAIR_COMMIT=f4793dfafd50ffd08f562893a106297522c85bb7
+AUDIT_EVIDENCE_SOURCE_COMMIT=b624779b82c092019bdc87509a9fc1a919e8f57e
 HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 PRE_CHUNK002_PREREG_SHA=5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84
 CHUNK002_SHA=f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6
@@ -24,12 +25,12 @@ CHUNK002_ACCESSED=true
 - Historical vs LIVE_FORWARD denominator-separated comparison.
 - Separate EDP/EAP excursion windows with a large-pre-EAP/small-post-EAP regression.
 - Google Drive canonical parent/file-ID/revision reconciliation; exact `MODEL_REGISTRY.json` and `CHANGELOG.md` are present, with no pseudo replacement.
-- Repository-wide and canonical-model permission-source audit; `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`.
-- One isolated frozen-generator chunk002 attempt; task-001-shaped output was produced, but required unified-event schema compatibility is `DATA_BLOCKED`.
+- Repository-wide and canonical-model audit confirmed Final Action semantics, but no auditable runtime lineage to an immutable permission ledger; `PRODUCTION_EXECUTION_PERMISSION_SEMANTICS_FOUND=true` and `NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER=true`.
+- One isolated frozen-generator chunk002 attempt; task-001-shaped output was produced, but required unified-event schema compatibility is `DATA_BLOCKED`. Canonical 5m master exists in ChatGPT File Library but was not materialized into the authorized runtime.
 
 ## Still blocking the final-audit stop gate
 
-- `REAL_EAP_OBSERVER_CONNECTED=false`: no explicit permission source exists in VPS production code/process evidence.
+- `REAL_EAP_OBSERVER_CONNECTED=false`: Final Action semantics exist, but no auditable runtime lineage from Production Final Action to immutable permission ledger exists in repository/VPS evidence.
 - `PERSISTENT_SHADOW_COLLECTOR_STABLE=false`: no task007c collector process is running; no observer is available to form a cohort.
 - `PROSPECTIVE_EAP_COHORT_FORMED=false`: immutable EAP_GRANTED N=0.
 - `CHUNK002_TEMPORAL_OOS_COMPLETED=false`: the isolated generation attempt produced `fast-detach-v2-task-001`, not `fast-detach-v2-unified-event-2`; exact missing fields are recorded in the generation-attempt manifest.
@@ -45,18 +46,20 @@ OUTCOME_MUTATION_COUNT=0
 HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_FROZEN_UNCHANGED=true
-PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true
+PRODUCTION_EXECUTION_PERMISSION_SEMANTICS_FOUND=true
+NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER=true
+REAL_LIVE_EAP_SOURCE_FOUND=false
 PRODUCTION_MODEL_CHANGED=false
 PRODUCTION_CODE_CHANGED=false
 PRODUCTION_SERVICE_RESTARTED=false
 
 ## Verification
 
-FOCUSED_TESTS=39/39 PASS
+FOCUSED_TESTS=41/41 PASS
 RADAR_REGRESSION=88 total / 87 pass / 0 fail / 1 environment skip
 BUILD=PASS
-FULL_NPM_TEST=1096 total / 988 pass / 107 fail / 1 skip (exit 1; build phase PASS)
-TYPECHECK=FAIL pre-existing app/lib errors; task scope clean
+FULL_NPM_TEST=1098 total / 1010 pass / 88 fail / 0 skip (exit 1; build phase PASS)
+TYPECHECK=FAIL on 31 pre-existing app/lib errors; task scope clean
 FAST_DETACH_PYTHON_REGRESSION=UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY
 
 The branch remains at the approval gate. No merge, deploy, restart, promotion, threshold change, model change, Bark change, order-path change, or snapshot/event rewrite occurred.

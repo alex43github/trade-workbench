@@ -1,43 +1,67 @@
-# FAST-DETACH-V2-TASK-007D — EAP Source Audit
+# FAST-DETACH-V2-TASK-007D — Production Final Action / EAP Source Audit
 
-审计范围：`epoch-20260924T185000` 的 177 条 `LIVE_FORWARD` 事件，以及当前 `structure-radar` 生产代码路径。该审计不修改生产服务、阈值、模型、Bark 或订单链。
+审计范围：`epoch-20260924T185000` 的 177 条 `LIVE_FORWARD` 事件、当前 checked-out repository，以及 canonical Google Drive model/data documents。审计只读，不修改 Production service、threshold、model、Bark、order path、历史 snapshot 或 Forward ledger。
+
+审计证据时间：`2026-09-26T16:24:20+08:00`，由 repair commit `b624779b82c092019bdc87509a9fc1a919e8f57e` 的 committer timestamp 固定；不是未来计划时间。
 
 ## 结论
 
-`EAP_ZERO_ROOT_CAUSE=OBSERVER_NOT_CONNECTED`。
-`PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`。
+Production 的 execution-permission **语义存在**，但本轮没有找到能从 Production Final Action 运行时结果进入 immutable permission ledger 的可审计 lineage：
 
-当前 scanner 生产链路确实产生 detection 和 state transition，也会在部分状态上生成 expert `executionPlan`，但没有把“实际 execution permission decision”作为事件输出、稳定 payload 或可按 Task-007 `event_id` 连接的持久化记录。因此不能证明 177 个事件曾被 permission logic 明确拒绝，也不能从 `PLATFORM_RECLAIM`、`CONFIRMED`、score、Bark 或 plan 推导 EAP。
+```text
+PRODUCTION_EXECUTION_PERMISSION_SEMANTICS_FOUND=true
+NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER=true
+REAL_LIVE_EAP_SOURCE_FOUND=false
+```
 
-现有 177 条事件的历史状态必须标为 `EAP_NOT_OBSERVED`，而不是 `EAP_CONFIRMED_ABSENT` 或回填的 `REPLAY_EAP`。原始 snapshot 保持不可修改。
+因此不能再把结论写成“Production 没有 execution-permission semantics/source”。准确 blocker 是：`MODEL_CURRENT`/`WORKBENCH_SPEC` 定义了 Final Action vocabulary，但 runtime 没有可验证的生成、持久化、稳定 key 和 `event_id` join 证据，不能把这些语义当作真实 `EAP_GRANTED`/`DENIED` decision source。
 
-## 真实路径审计
+历史 177 条仍必须保持 `EAP_NOT_OBSERVED`，不能回填 prospective EAP，也不能从 `PLATFORM_RECLAIM`、`CONFIRMED`、score、Bark、paper plan 或 `executionPlan` 推导 EAP。
 
-| 阶段 | 精确代码路径 | 输入 identity / 时间戳 | 输出 | 确定性 / 因果性 | 当前持久化 |
-|---|---|---|---|---|---|
-| Detection | `services/structure-radar/scanner.ts:71-78` `RadarScanner.handleRawEvent → handleClosedBar`；`lib/structure-radar/platform-reclaim.ts`、`trendline-breakout.ts` | closed websocket kline；`bar.time` / closed-bar time | `TrackedSignal`，`signalId(symbol,timeframe,setup,anchorHash)` | identity deterministic；只使用 closed bars，causal | `RadarRepository.save` 写 `radar.json`；TASK-007 shadow 写 immutable snapshot |
-| State transition | `services/structure-radar/scanner.ts:98-134`；`lib/structure-radar/state-machine.ts:90-142` `advanceSignal` | existing `TrackedSignal` + 后续 closed bars；bar time | `CANDIDATE`、`CONFIRMED`、`INVALIDATED`、`TAKE_PROFIT_WATCH` 等 state | state transition deterministic；bar watermark causal | `RadarRepository.save`；TASK-007 shadow append transition |
-| Consultation / plan | `services/structure-radar/main.ts:65-81`；`services/structure-radar/orchestrator.ts:80-116` `processCandidate` | `ProcessSignal` + cache market snapshot；无独立 permission timestamp | expert consensus 与 `executionPlan` | 计划是 consultation 输出，不是 frozen execution permission；时间/证据未形成 EAP contract | consultation/enriched signal 写 `radar.json`；没有 Task-007 EAP ledger |
-| Position observation | `services/structure-radar/main.ts:38-49`；`position-monitor.ts` | read-only account/position GET 状态 | `POSITION_UNKNOWN` / pre/post signal position classification | 只描述账户观察，不代表 permission decision | local radar state；不产生 EAP |
-| Execution evaluation | 当前 `services/structure-radar` 路径中没有独立 permission evaluator | 无 stable permission input | 无 `GRANTED` / `DENIED` decision event | 不可判定 | 未持久化 |
-| Existing EAP-like evaluator | `lib/radar/sticky-lifecycle.ts:123-131` `evaluateSecondChanceEap` | 外部可选 `eap`、`eapPrice` 与 reset/reclaim/second-test/reignition evidence | sticky lifecycle 的 `CONFIRMED` / `UNKNOWN` / `REJECTED` | 只对该旁路输入评估；未接入 `RadarScanner.onSignal`，没有 Task-007 event_id join | sticky state / notification artifacts；不是 LIVE_FORWARD EAP source |
-| Order permission | `services/structure-radar/main.ts` 不导入 order client；账户 client 为 read-only | 无 order route / permission payload | 无 order permission decision | 不存在可审计的生产 order permission path | 未持久化 |
+## Canonical model semantics
 
-## 分类
+| Canonical file | Stable ID / revision evidence | Frozen semantics |
+|---|---|---|
+| `03_MODEL_REGISTRY/MODEL_CURRENT.md` | Drive file `1pC40sbP9oj82At8G6aBjZcGzY2BfTnaa`; modified `2026-09-12T16:17:09.988Z`; current revision `0B-0oAJIjSHwhcktKbmV2SSt4SWloNmtpSk9qR284OFFwcXNvPQ` | Production baseline `ASTPS V3-LR / Monster Squeeze V1.1-LR`; Discovery 与 Execution 分离；`Execution Outputs` 包含 `BUY RESET`, `RE-IGNITION LONG`, `CHASE ALLOWED`, `HOLD ONLY`, `NO CHASE`, `ABSOLUTELY_NO_SHORT`, `SHORT_WARNING`, `SHORT_PERMISSION_PENDING`, `SHORT_ALLOWED`。 |
+| `WORKBENCH_SPEC.md` | Drive file `1m6IbzlvUFrxTTW9vMP5wx4vW4nP6tqoY`; modified `2026-09-12T16:50:59.446Z`; current revision `0B-0oAJIjSHwhb2N3anF5RWlwYzhrUXFLazZZL3kzRzZJQXRBPQ` | Per-symbol output 必须有 `Final Action`；同一组 Final Action vocabulary；该文档是 interface/spec，不是 immutable permission ledger。 |
+| `CURRENT_CANDIDATE_MODEL.md` | Drive file `1LoHtmTqhDL6jY4D6XzH5jU-SCcZOyQu1`; modified `2026-09-16T10:28:33.066Z`; current revision `0B-0oAJIjSHwhVHN3ZzVBWEh3cFVucEVJZk1vdU9kOHZweWNRPQ` | Execution requires event-time structure quality；candidate/shadow 逻辑不能自动授予 Production permission。 |
+| `workbench_stage6_implementation_spec.md` | Drive file `1LccJTNfOca5VBaeEIs0mWhyzHz6Wad9A` | Stage6 observer 是 research-only / append-only / no order；`tradingPermission=false` 的 paper plan 不是 Production permission。 |
 
-- `EAP_OBSERVED`: 0。没有收到带完整 permission payload 的 immutable decision。
-- `EAP_CONFIRMED_ABSENT`: 0。没有可证明“permission logic 已执行且明确返回 DENIED”的记录。
-- `EAP_NOT_OBSERVED`: 177。检测和 outcome 存在，但当时没有 permission observer/immutable decision log。
-- `REPLAY_EAP`: 0。未对 LIVE_FORWARD 事件做历史重建；任何未来 replay 都必须保持独立 source。
+## Runtime lineage audit
 
-## Repository and canonical Drive audit
+| Stage | Exact path | What is produced | Why it is not an auditable EAP source |
+|---|---|---|---|
+| Detection | `services/structure-radar/scanner.ts:71-134`; `lib/structure-radar/platform-reclaim.ts`; `trendline-breakout.ts` | closed-bar `TrackedSignal` and deterministic `signalId(symbol,timeframe,setup,anchorHash)` | Discovery identity only; no permission decision. |
+| Final-action-like consultation | `services/structure-radar/main.ts:65-81`; `services/structure-radar/orchestrator.ts:80-116`; `lib/structure-radar/expert-consensus.ts:74-91` | expert consensus, `alertPolicy`, optional `consensus.executionPlan` | Consultation/paper plan has no immutable permission status, EDP/EAP timestamp pair, or `event_id` ledger append. `executionPlan` is not `GRANTED`. |
+| State machine | `lib/structure-radar/state-machine.ts:121-142` | consumes plan/position to produce state transitions such as `TAKE_PROFIT_WATCH`/`ADD_CANDIDATE` | No `BUY RESET`/`CHASE ALLOWED`/`SHORT_ALLOWED` decision record and no permission ledger key. |
+| Production persistence | `services/structure-radar/radar-repository.ts` and `radar.json` path | scanner/consultation/enriched signal artifacts | No immutable EAP ledger row keyed by `event_id + closed-bar decision time`; no source decision ID/version/payload hash contract. |
+| Execution-forward observer | `services/execution-forward/execution-forward-v1.ts:80-155`; `execution-forward-persistence.ts`; `execution-forward-watcher.ts` | EDP, recheck, paper plan and outcomes | Every EDP/recheck/plan carries `tradingPermission=false`; scorer is unavailable; persistence rejects permission enablement. This is `CANDIDATE_EAP`/`SHADOW_EAP`, not Production permission. |
+| Task-007D observer | `services/structure-radar/research/task-007d-eap.ts` | accepts an externally supplied immutable `EapDecision` and appends `EAP_GRANTED` | Observer is not connected to the Production Final Action path. `LIVE_FORWARD` count remains zero. |
+| Existing EAP-like evaluator | `lib/radar/sticky-lifecycle.ts:123-131` | evaluates optional external `eap`/`eapPrice` input | Not connected to scanner `event_id`; not a Production ledger source. |
+| Order path | `services/structure-radar/main.ts` imports only read-only account observation; no order client/permission append is in this path | no auditable order-permission decision | No runtime lineage to audit. |
 
-本轮对整个 repository 搜索 `execution permission`、`execution_permission`、`permission ledger`、`EAP_GRANTED`、`eap_status`、`permission_state`、`execute_now`、`short_allowed` 和 `tradingPermission`。发现的 execution-forward 记录全部明确 `tradingPermission=false` 或 scorer unavailable，属于 `CANDIDATE_EAP`/`SHADOW_EAP` 研究记录，不是生产 permission decision。
+### Exact implementation gap
 
-同时重新读取 canonical `03_MODEL_REGISTRY/MODEL_REGISTRY.json`（Drive file ID `16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp`）和 `CHANGELOG.md`（Drive file ID `10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV`）。它们定义生产 baseline 与 candidate/research architecture，但没有 immutable `EAP_GRANTED` ledger source 或可按 live event identity 连接的 permission stream。`LIVE_CASES.jsonl` 和 `LIVE_OUTCOMES.jsonl` 也未产生本轮 permission append。
+The repository has no implementation that simultaneously:
 
-因此没有启动 persistent shadow collector，没有构造 synthetic LIVE EAP，也没有把 candidate/shadow observation 计入 LIVE_FORWARD denominator。完整 machine-readable evidence 见 `change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json`。
+1. computes the canonical Final Action vocabulary in the deployed scanner/runtime;
+2. assigns it an immutable closed-bar decision timestamp and source decision ID/version;
+3. persists `GRANTED`, explicit `DENIED`, and unknown/error states append-only;
+4. deterministically joins that decision to a Task-007 `event_id`; and
+5. produces a payload hash/revision contract consumable by the Task-007D observer.
 
-## 后续边界
+This is an implementation/lineage gap, not evidence that the model semantics do not exist.
 
-TASK-007D 新增的 observer 只接受显式 permission decision，并以 `EAP_GRANTED` append-only transition 保存；同 payload replay 为 `REUSED`，冲突 payload HARD FAIL。当前 VPS 短时验证没有真实 permission source，因而预期 `NEW_EAP_OBSERVED=0`。将生产 permission source 与 candidate/event identity 连接属于后续 TASK-007E，必须另行授权。
+## Classification and denominator boundary
+
+- `EAP_OBSERVED`: 0 — no external immutable Production grant decision was observed.
+- `EAP_CONFIRMED_ABSENT`: 0 — no auditable Production permission evaluator returned explicit `DENIED`.
+- `EAP_NOT_OBSERVED`: 177 — discovery/outcome exists, but permission source/lineage was not observed.
+- `REPLAY_EAP`: 0 — no historical reconstruction was inserted into LIVE_FORWARD.
+- `CANDIDATE_EAP` / `SHADOW_EAP`: not counted in LIVE_FORWARD denominator.
+
+The LIVE_FORWARD denominator remains the set of immutable `EAP_GRANTED` ledger event IDs only. The persistent collector remains stopped until the real permission semantics and runtime lineage are resolved. No synthetic LIVE EAP was created.
+
+## Evidence disposition
+
+The machine-readable full audit is [`change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json`](change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json). The current round records `REAL_LIVE_EAP_SOURCE_FOUND=false` and the precise lineage blocker above; it does not set the overbroad “no Production permission source” conclusion.

@@ -1,7 +1,8 @@
 {
   "attempt_version": "fast-detach-v2-unified-chunk002-generation-attempt-1",
-  "task_id": "ASTPS_FAST_DETACH_PR15_SECOND_FINAL_AUDIT_REPAIR",
-  "attempted_at": "2026-09-26T16:45:00+08:00",
+  "task_id": "ASTPS_FAST_DETACH_PR15_THIRD_FINAL_AUDIT_REPAIR",
+  "attempted_at": "2026-09-26T16:24:20+08:00",
+  "timestamp_source": "git-commit-derived:b624779b82c092019bdc87509a9fc1a919e8f57e",
   "status": "DATA_BLOCKED",
   "data_blocked": true,
   "same_schema_required": "fast-detach-v2-unified-event-2",
@@ -23,7 +24,23 @@
     "date_end_bjt": "2026-04-16",
     "row_count": 50,
     "source_available": true,
-    "date_range_available": true
+    "date_range_available": true,
+    "canonical_data_registry": {
+      "path": "04_DATA/DATA_REGISTRY.md",
+      "drive_file_id": "1KOxMEcovLj9DvNibDDxf1j_icTHHDl46",
+      "modified_time": "2026-09-15T01:48:16.675Z",
+      "current_revision_id": "0B-0oAJIjSHwhQThydUJEcE5HbWNwU0ExeG15bFpCYkJyVEZnPQ",
+      "five_minute_master": {
+        "name": "metrics_5m_all_fixed.csv.gz",
+        "size_bytes": 242535083,
+        "library_file_id": "file_000000003094820699862210d518fffa",
+        "persistent_source": "ChatGPT File Library",
+        "google_drive_status": "NOT_UPLOADED"
+      },
+      "canonical_source_exists": true,
+      "authorized_runtime_materialized": false,
+      "runtime_blocker": "The VPS/Codex runtime used by the frozen generator reported 5m-history-v1 NOT_AVAILABLE and had no authorized materialized File Library source. This is runtime-inaccessible, not globally missing."
+    }
   },
   "generated_output": {
     "path": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002/chunks/chunk_002_2026-04-12_2026-04-16.jsonl",
@@ -34,8 +51,9 @@
     "future_leakage_count": 0,
     "source_sha_valid": true,
     "fifteen_minute_data_status": "COMPLETE",
-    "five_minute_data_status": "NOT_AVAILABLE",
-    "derivatives_data_status": "NOT_AVAILABLE"
+    "five_minute_data_status": "RUNTIME_INACCESSIBLE_CANONICAL_SOURCE_EXISTS",
+    "derivatives_data_status": "RUNTIME_INACCESSIBLE_CANONICAL_SOURCE_EXISTS",
+    "availability_scope": "runtime_only"
   },
   "schema_mismatch": {
     "same_schema": false,
@@ -61,11 +79,12 @@
       "source_v1_sha256"
     ],
     "missing_source_fields": [
-      "5m closed-bar path payload",
-      "derivatives payload",
+      "5m closed-bar path payload in the generated task-001 output",
+      "derivatives payload in the authorized generator runtime",
       "frozen unified path-label payload",
       "frozen unified barrier-label payload"
-    ]
+    ],
+    "source_availability_interpretation": "The canonical 5m master exists in ChatGPT File Library but was not materialized into the authorized runtime for this attempt. The generated output therefore lacks required 5m/derivatives/unified fields; do not call the canonical source globally absent."
   },
   "oos_disposition": {
     "temporal_oos_completed": false,
@@ -73,6 +92,6 @@
     "raw_pe_insufficient_conclusion_preserved": true,
     "threshold_retuned": false,
     "prereg_modified": false,
-    "reason": "The frozen generator successfully rebuilt a task-001-shaped chunk002, but no frozen adapter or source table produces fast-detach-v2-unified-event-2. Converting or relabeling the output would violate the preregistered schema boundary."
+    "reason": "The frozen generator successfully rebuilt a task-001-shaped chunk002, but no frozen adapter or authorized runtime source materialization produces fast-detach-v2-unified-event-2. Converting or relabeling the output would violate the preregistered schema boundary. To retry, materialize the canonical metrics_5m_all_fixed.csv.gz plus the frozen Task-002B 5m path/barrier derivation inputs into an authorized runtime, verify SHA/schema, then rerun the unchanged Task-001/002B/003/004 pipeline before evaluating the frozen six hypotheses."
   }
 }

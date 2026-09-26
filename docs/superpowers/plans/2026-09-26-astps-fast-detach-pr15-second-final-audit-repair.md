@@ -28,6 +28,6 @@ Repair the latest PR #15 second-final-audit findings on the existing branch, wit
 - EDP MFE/MAE begins at immutable EDP and includes the EDP→EAP path; EAP MFE/MAE begins at immutable EAP and excludes the earlier path.
 - Correct Drive parent/file IDs and metadata are present; no report says MODEL_REGISTRY is absent.
 - Pending writeback manifest is machine-readable and contains exact payload/no-write intent, source commit, canonical IDs, current metadata/revision, and reason.
-- `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true` is explicit if the repository and canonical model contain no real source; no LIVE EAP is fabricated.
+- The current third-audit correction supersedes the earlier broad wording: canonical Production Final Action semantics are documented, while `NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER=true`; no LIVE EAP is fabricated.
 - Chunk002 generation is either verified as same-schema frozen-pipeline output or marked DATA_BLOCKED with exact missing source/table/date range/field.
 - `READY_FOR_FINAL_AUDIT=false`, `PROMOTION_DECISION=DO_NOT_PROMOTE`, and all data-safety invariants remain zero/unchanged.

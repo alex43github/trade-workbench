@@ -1,5 +1,8 @@
 {
   "schema_version": "fast-detach-v2-chunk002-temporal-oos-audit-1",
+  "audit_task_id": "ASTPS_FAST_DETACH_PR15_THIRD_FINAL_AUDIT_REPAIR",
+  "audit_timestamp": "2026-09-26T16:24:20+08:00",
+  "audit_timestamp_source": "git-commit-derived:b624779b82c092019bdc87509a9fc1a919e8f57e",
   "status": "BLOCKED_DATA_SCHEMA",
   "oos_valid": false,
   "chunk002_temporal_oos_completed": false,
@@ -21,7 +24,7 @@
     "required_unified_schema": "fast-detach-v2-unified-event-2",
     "source_is_unified_event_schema": false,
     "same_pipeline_available": false,
-    "reason": "chunk002 is a PE backtest trade-output object and does not contain the frozen unified-event path/feature/barrier fields"
+    "reason": "chunk002 is a PE backtest trade-output object and does not contain the frozen unified-event path/feature/barrier fields. The canonical 5m master exists in ChatGPT File Library, but the VPS/Codex runtime used by the unchanged generator did not materialize it or the required frozen Task-002B path/barrier inputs; this is runtime-inaccessible DATA_BLOCKED, not a claim that the canonical dataset is globally missing."
   },
   "primary_hypotheses": [
     {
