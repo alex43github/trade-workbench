@@ -1,0 +1,26 @@
+{
+  "version": "pr15-sixth-final-artifact-blob-set-1",
+  "validated_against_published_audit_commit": "e89bbe1d485af2c3a0963455856ed901638ff69c",
+  "files": [
+    {
+      "path": "change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json",
+      "git_blob_sha": "add2d1c811e4e9d6a2e7b8e24522b36733b53d39"
+    },
+    {
+      "path": "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
+      "git_blob_sha": "d6777aaa9869685b0e2cf1a979180c52ad73aebb"
+    },
+    {
+      "path": "change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md",
+      "git_blob_sha": "5ee466f83edd71e4963b0801b87b5f159f357fbe"
+    },
+    {
+      "path": "docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md",
+      "git_blob_sha": "a93c51590cf9981654e9bc1cbd433fc7cac202f6"
+    },
+    {
+      "path": "docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md",
+      "git_blob_sha": "53419314595e1613f91cf698e60d7988c835f7dd"
+    }
+  ]
+}

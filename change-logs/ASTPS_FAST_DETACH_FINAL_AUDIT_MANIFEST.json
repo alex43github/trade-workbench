@@ -1,6 +1,6 @@
 {
-  "manifest_version": "astps-fast-detach-pr15-fifth-final-audit-repair-1",
-  "status": "CHANGES_REQUIRED_PENDING_REVIEW",
+  "manifest_version": "astps-fast-detach-pr15-sixth-final-audit-repair-1",
+  "status": "CHANGES_REQUIRED_PENDING_SEVENTH_FINAL_AUDIT",
   "ready_for_final_audit": false,
   "promotion_decision": "DO_NOT_PROMOTE",
   "final_reports_regenerated": true,
@@ -12,17 +12,32 @@
   "repair_commit_timestamp": "2026-09-26T21:29:42+08:00",
   "prior_audit_evidence_commit": "e36308f1079638dd1194f8a39e0fc574f760b051",
   "prior_audit_evidence_commit_timestamp": "2026-09-26T16:45:19+08:00",
-  "audit_artifact_commit": "27a1a70049ef3990b3feb86eeedfe23036285164",
+  "audit_artifact_commit": "PENDING_SIXTH_AUDIT_ARTIFACT_COMMIT",
   "audit_artifact_commit_timestamp": "2026-09-26T21:29:42+08:00",
   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_frozen_unchanged": true,
   "forward_epoch_id": "epoch-20260924T185000",
-  "source_counts": {"HISTORICAL_REPLAY": 50, "LIVE_FORWARD_DISCOVERY": 177, "LIVE_FORWARD_EAP": 0, "REPLAY_EAP": 0, "UNIFIED_RESEARCH_VIEW": 227},
+  "source_counts": {
+    "HISTORICAL_REPLAY": 50,
+    "LIVE_FORWARD_DISCOVERY": 177,
+    "LIVE_FORWARD_EAP": 0,
+    "REPLAY_EAP": 0,
+    "UNIFIED_RESEARCH_VIEW": 227
+  },
   "edp_only_audit": {
     "N": 177,
     "source_summary_sha256": "d99c88bdb4fbea5c978c6129de0e1135b84640457a9ad32223444880cb3bdaa8",
-    "mature_outcome_counts": {"15m": 177, "30m": 177, "1h": 177, "3h": 177, "6h": 177, "12h": 177, "24h": 2, "48h": 0},
+    "mature_outcome_counts": {
+      "15m": 177,
+      "30m": 177,
+      "1h": 177,
+      "3h": 177,
+      "6h": 177,
+      "12h": 177,
+      "24h": 2,
+      "48h": 0
+    },
     "family_status": "UNAVAILABLE_FROZEN_FIELD",
     "mechanism_status": "UNAVAILABLE_FROZEN_FIELD"
   },
@@ -171,6 +186,22 @@
     "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
     "change-logs/CODEX_REVIEW_PACKET_LATEST.patch",
     "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-third-final-audit-repair.md",
-    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-fifth-final-audit-repair.md"
-  ]
+    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-fifth-final-audit-repair.md",
+    "change-logs/CHUNK002_SAME_PIPELINE_DEPENDENCY_GRAPH.json",
+    "change-logs/TASK006_FROZEN_PYTHON_REGRESSION_AUDIT.json",
+    "tests/fast-detach-5m-materialization-frozen-task002b.py"
+  ],
+  "code_commit": "PENDING_SIXTH_CODE_COMMIT",
+  "validation_finished_at": "2026-09-26T22:00:00+08:00",
+  "published_audit_commit": "e89bbe1d485af2c3a0963455856ed901638ff69c",
+  "published_at": "2026-09-26T13:43:53Z",
+  "sixth_materialization_readiness": {
+    "converter_contract": "change-logs/CHUNK002_5M_CONVERTER_CONTRACT.json",
+    "dependency_graph": "change-logs/CHUNK002_SAME_PIPELINE_DEPENDENCY_GRAPH.json",
+    "zstd_frozen_parser_integration": "PASS",
+    "task006_regression": "BLOCKED_TEST_TASK_006_PY_NOT_RECOVERED",
+    "research_queue_patch_sha256": "08889285c2640fa60c825467116fa8487da72014f7c4f8937915aa3744cd2de8",
+    "research_queue_before_sha256": "0c9046bacbc8223e9201220289412369607711ff9607c7b479eb82ed634271db",
+    "research_queue_after_sha256": "3290bffaee19564bad56958d3917ed044615df853dc9c1ce1a83dc251b75f5fa"
+  }
 }

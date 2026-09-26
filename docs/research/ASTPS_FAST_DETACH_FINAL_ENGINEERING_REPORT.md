@@ -19,6 +19,9 @@ This revision addresses the latest PR #15 FIFTH FINAL AUDIT CHANGES REQUIRED com
 
 ## Implemented repairs
 
+11. Sixth-audit materialization readiness replaces the in-memory master grouping with disk-backed streaming partitioning. It validates canonical-source identity/SHA/schema and data integrity before staging, then atomically publishes complete zstd caches only after deterministic manifest/sentinel generation. The frozen Task-002B parser successfully read a real generated `.csv.zst` in isolated VPS validation.
+12. The same-pipeline dependency graph now explicitly includes Task-006 orchestration, Task-003 and Task-004 dynamic imports, expected unified schema, cache contracts, and the isolated command. The 98-test Task-006 suite cannot run because its frozen `test_task_006.py` artifact is absent from every audited source root; this is recorded as a blocker, not PASS.
+
 1. `EDP_TO_EAP_MIN` uses the immutable EDP timestamp contract `execution_context.edp_utc`; the legacy `first_detected_at_utc` fallback is limited to discovery-only summaries, and the EAP decision bar is never used as the start time. A later-bar test proves the full interval.
 2. EAP classification is fail-closed: `GRANTED -> EAP_OBSERVED`, explicit `DENIED -> EAP_CONFIRMED_ABSENT`, all unknown/pending/error/malformed/no-decision states -> `EAP_NOT_OBSERVED`.
 3. LIVE_FORWARD EAP counts and 6H denominators use only immutable `EAP_GRANTED` ledger event IDs. Legacy snapshot EAP fields are ignored. EAP delay uses the immutable transition timestamp.

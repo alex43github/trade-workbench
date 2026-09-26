@@ -20,6 +20,10 @@ CHUNK002_REEVALUATED_THIS_REPAIR=false
 
 ## Completed in this repair
 
+- Sixth-audit materialization readiness: bounded-memory SQLite streaming converter; strict source/RAM/disk/OHLC/time preflight; sibling staging, cleanup, completion sentinel, and atomic publish. VPS zstd 1.5.5 plus frozen Task-002B parser integration passed.
+- Same-pipeline dependency graph now pins Task-006 orchestration, Task-001/002B/003/004/005, schemas, cache contracts, and isolated command. The original 98-test Task-006 suite remains blocked by the missing frozen `test_task_006.py`, with exact evidence in `TASK006_FROZEN_PYTHON_REGRESSION_AUDIT.json`.
+- RESEARCH_QUEUE.json pending patch and dry-run now use the same byte-identical RFC-6902 payload and SHA; Drive remains read-only.
+
 - Immutable EDP timestamp contract and later-bar EAP latency regression.
 - Fail-closed EAP status classifier.
 - Immutable EAP_GRANTED-only LIVE_FORWARD denominator and transition-time delay.
