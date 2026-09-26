@@ -1,9 +1,9 @@
 diff --git a/EAP_SOURCE_AUDIT.md b/EAP_SOURCE_AUDIT.md
 new file mode 100644
-index 0000000..1bdbb7f
+index 0000000..e94eeef
 --- /dev/null
 +++ b/EAP_SOURCE_AUDIT.md
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,43 @@
 +# FAST-DETACH-V2-TASK-007D — EAP Source Audit
 +
 +审计范围：`epoch-20260924T185000` 的 177 条 `LIVE_FORWARD` 事件，以及当前 `structure-radar` 生产代码路径。该审计不修改生产服务、阈值、模型、Bark 或订单链。
@@ -11,6 +11,7 @@ index 0000000..1bdbb7f
 +## 结论
 +
 +`EAP_ZERO_ROOT_CAUSE=OBSERVER_NOT_CONNECTED`。
++`PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`。
 +
 +当前 scanner 生产链路确实产生 detection 和 state transition，也会在部分状态上生成 expert `executionPlan`，但没有把“实际 execution permission decision”作为事件输出、稳定 payload 或可按 Task-007 `event_id` 连接的持久化记录。因此不能证明 177 个事件曾被 permission logic 明确拒绝，也不能从 `PLATFORM_RECLAIM`、`CONFIRMED`、score、Bark 或 plan 推导 EAP。
 +
@@ -34,6 +35,14 @@ index 0000000..1bdbb7f
 +- `EAP_CONFIRMED_ABSENT`: 0。没有可证明“permission logic 已执行且明确返回 DENIED”的记录。
 +- `EAP_NOT_OBSERVED`: 177。检测和 outcome 存在，但当时没有 permission observer/immutable decision log。
 +- `REPLAY_EAP`: 0。未对 LIVE_FORWARD 事件做历史重建；任何未来 replay 都必须保持独立 source。
++
++## Repository and canonical Drive audit
++
++本轮对整个 repository 搜索 `execution permission`、`execution_permission`、`permission ledger`、`EAP_GRANTED`、`eap_status`、`permission_state`、`execute_now`、`short_allowed` 和 `tradingPermission`。发现的 execution-forward 记录全部明确 `tradingPermission=false` 或 scorer unavailable，属于 `CANDIDATE_EAP`/`SHADOW_EAP` 研究记录，不是生产 permission decision。
++
++同时重新读取 canonical `03_MODEL_REGISTRY/MODEL_REGISTRY.json`（Drive file ID `16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp`）和 `CHANGELOG.md`（Drive file ID `10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV`）。它们定义生产 baseline 与 candidate/research architecture，但没有 immutable `EAP_GRANTED` ledger source 或可按 live event identity 连接的 permission stream。`LIVE_CASES.jsonl` 和 `LIVE_OUTCOMES.jsonl` 也未产生本轮 permission append。
++
++因此没有启动 persistent shadow collector，没有构造 synthetic LIVE EAP，也没有把 candidate/shadow observation 计入 LIVE_FORWARD denominator。完整 machine-readable evidence 见 `change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json`。
 +
 +## 后续边界
 +
@@ -101,10 +110,10 @@ index 0000000..88b59f9
 +}
 diff --git a/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
 new file mode 100644
-index 0000000..e26589e
+index 0000000..c665337
 --- /dev/null
 +++ b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,62 @@
 +# ASTPS FAST-DETACH — CODEX AUTONOMOUS STATUS
 +
 +TASK_ID=ASTPS_FAST_DETACH_PR15_FINAL_AUDIT_REPAIR
@@ -115,7 +124,7 @@ index 0000000..e26589e
 +BRANCH=codex/astps-fast-detach-handoff-20260926
 +PR=https://github.com/alex43github/trade-workbench/pull/15
 +BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
-+REPAIR_COMMIT=8e13298
++REPAIR_COMMIT=14b1376
 +HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +PRE_CHUNK002_PREREG_SHA=5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84
 +CHUNK002_SHA=f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6
@@ -129,15 +138,18 @@ index 0000000..e26589e
 +- 177-event EDP-only metrics through 12H and frozen-field stratification audit.
 +- Prereg freeze before chunk002 read; schema audit records six INSUFFICIENT results.
 +- Historical vs LIVE_FORWARD denominator-separated comparison.
-+- Google Drive canonical parent/file-ID reconciliation without pseudo replacement.
++- Separate EDP/EAP excursion windows with a large-pre-EAP/small-post-EAP regression.
++- Google Drive canonical parent/file-ID/revision reconciliation; exact `MODEL_REGISTRY.json` and `CHANGELOG.md` are present, with no pseudo replacement.
++- Repository-wide and canonical-model permission-source audit; `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`.
++- One isolated frozen-generator chunk002 attempt; task-001-shaped output was produced, but required unified-event schema compatibility is `DATA_BLOCKED`.
 +
 +## Still blocking the final-audit stop gate
 +
 +- `REAL_EAP_OBSERVER_CONNECTED=false`: no explicit permission source exists in VPS production code/process evidence.
 +- `PERSISTENT_SHADOW_COLLECTOR_STABLE=false`: no task007c collector process is running; no observer is available to form a cohort.
 +- `PROSPECTIVE_EAP_COHORT_FORMED=false`: immutable EAP_GRANTED N=0.
-+- `CHUNK002_TEMPORAL_OOS_COMPLETED=false`: available source is incompatible with frozen unified-event schema.
-+- `DRIVE_WRITEBACK_COMPLETED=false`; `DRIVE_WRITEBACK_FORMALLY_RECONCILED=true`. Reconciliation is formal only because exact `MODEL_REGISTRY.json` is absent and no safe canonical append payload is authorized.
++- `CHUNK002_TEMPORAL_OOS_COMPLETED=false`: the isolated generation attempt produced `fast-detach-v2-task-001`, not `fast-detach-v2-unified-event-2`; exact missing fields are recorded in the generation-attempt manifest.
++- `DRIVE_WRITEBACK_COMPLETED=false`; `DRIVE_WRITEBACK_FORMALLY_RECONCILED=true`. Exact canonical files and revisions are known; writeback is pending because Drive was kept read-only and no canonical production mutation is authorized.
 +
 +## Invariants
 +
@@ -149,16 +161,17 @@ index 0000000..e26589e
 +HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_FROZEN_UNCHANGED=true
++PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true
 +PRODUCTION_MODEL_CHANGED=false
 +PRODUCTION_CODE_CHANGED=false
 +PRODUCTION_SERVICE_RESTARTED=false
 +
 +## Verification
 +
-+FOCUSED_TESTS=38/38 PASS
++FOCUSED_TESTS=39/39 PASS
 +RADAR_REGRESSION=88 total / 87 pass / 0 fail / 1 environment skip
 +BUILD=PASS
-+FULL_NPM_TEST=1095 total / 987 pass / 107 fail / 1 skip
++FULL_NPM_TEST=1096 total / 988 pass / 107 fail / 1 skip (exit 1; build phase PASS)
 +TYPECHECK=FAIL pre-existing app/lib errors; task scope clean
 +FAST_DETACH_PYTHON_REGRESSION=UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY
 +
@@ -304,13 +317,13 @@ index 0000000..bcc57ac
 +}
 diff --git a/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
 new file mode 100644
-index 0000000..66c3080
+index 0000000..df8787b
 --- /dev/null
 +++ b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,138 @@
 +{
-+  "manifest_version": "astps-fast-detach-pr15-final-audit-repair-1",
-+  "status": "CHANGES_REQUIRED_INCOMPLETE",
++  "manifest_version": "astps-fast-detach-pr15-second-final-audit-repair-1",
++  "status": "CHANGES_REQUIRED_PENDING_REVIEW",
 +  "ready_for_final_audit": false,
 +  "promotion_decision": "DO_NOT_PROMOTE",
 +  "final_reports_regenerated": true,
@@ -318,7 +331,7 @@ index 0000000..66c3080
 +  "branch": "codex/astps-fast-detach-handoff-20260926",
 +  "pull_request": "https://github.com/alex43github/trade-workbench/pull/15",
 +  "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
-+  "repair_commit": "8e13298",
++  "repair_commit": "14b1376",
 +  "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
 +  "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
 +  "historical_frozen_unchanged": true,
@@ -330,6 +343,15 @@ index 0000000..66c3080
 +    "mature_outcome_counts": {"15m": 177, "30m": 177, "1h": 177, "3h": 177, "6h": 177, "12h": 177, "24h": 2, "48h": 0},
 +    "family_status": "UNAVAILABLE_FROZEN_FIELD",
 +    "mechanism_status": "UNAVAILABLE_FROZEN_FIELD"
++  },
++  "eap_metric_windows": {
++    "edp_window_start": "immutable_edp_timestamp",
++    "eap_window_start": "immutable_eap_timestamp",
++    "mfe_from_edp_includes_edp_to_eap_path": true,
++    "mae_from_edp_includes_edp_to_eap_path": true,
++    "mfe_from_eap_excludes_pre_eap_path": true,
++    "mae_from_eap_excludes_pre_eap_path": true,
++    "regression_test": "EDP and EAP excursion windows remain disjoint at the EAP boundary"
 +  },
 +  "eap": {
 +    "real_observer_connected": false,
@@ -347,15 +369,36 @@ index 0000000..66c3080
 +    "prereg_commit": "8e13298",
 +    "same_pipeline_unified_schema": false,
 +    "temporal_oos_completed": false,
-+    "hypothesis_results": "INSUFFICIENT_FOR_ALL_SIX"
++    "hypothesis_results": "INSUFFICIENT_FOR_ALL_SIX",
++    "generation_attempt": {
++      "status": "DATA_BLOCKED",
++      "output_path": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002/chunks/chunk_002_2026-04-12_2026-04-16.jsonl",
++      "output_sha256": "6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e",
++      "output_schema_version": "fast-detach-v2-task-001",
++      "required_schema_version": "fast-detach-v2-unified-event-2",
++      "output_event_count": 50,
++      "duplicate_event_ids": 0,
++      "feature_leakage_count": 0,
++      "exact_missing_details_artifact": "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json"
++    }
 +  },
 +  "drive": {
-+    "canonical_reconciliation": "FORMALLY_RECONCILED",
++    "canonical_reconciliation": "FORMALLY_RECONCILED_EXACT_IDS_AND_REVISIONS",
 +    "writeback": "NOT_PERFORMED",
++    "model_registry_parent_id": "1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM",
++    "model_registry_id": "16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp",
++    "changelog_id": "10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV",
 +    "live_cases_id": "18oMIBSprBIAHO9-FY8WQzD907VM1XiU9",
 +    "live_outcomes_id": "1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4",
-+    "model_registry_exact_name_found": false,
++    "model_registry_exact_name_found": true,
 +    "model_current_used_as_replacement": false
++  },
++  "permission_source_audit": {
++    "artifact": "change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json",
++    "REAL_LIVE_EAP_SOURCE_FOUND": false,
++    "PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE": true,
++    "persistent_shadow_collector_started": false,
++    "candidate_shadow_counted_as_live": false
 +  },
 +  "data_invariants": {
 +    "FEATURE_LEAKAGE_COUNT": 0,
@@ -377,10 +420,10 @@ index 0000000..66c3080
 +    "ORDER_PATH_CHANGED": false
 +  },
 +  "tests": {
-+    "focused": "38 total / 38 pass / 0 fail / 0 skip",
++    "focused": "39 total / 39 pass / 0 fail / 0 skip",
 +    "related_regression": "88 total / 87 pass / 0 fail / 1 environment skip",
 +    "repository_build": "PASS",
-+    "repository_full_suite": "1095 total / 987 pass / 107 fail / 1 skip",
++    "repository_full_suite": "exit 1; 1096 total / 988 pass / 107 fail / 1 skip; build phase PASS",
 +    "typecheck": "FAIL on pre-existing app/lib errors; no TASK-007 scope errors",
 +    "fast_detach_python_regression": "UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY"
 +  },
@@ -389,8 +432,10 @@ index 0000000..66c3080
 +    "PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE",
 +    "PROSPECTIVE_EAP_COHORT_ZERO",
 +    "CHUNK002_SOURCE_NOT_SAME_PIPELINE_UNIFIED_SCHEMA",
-+    "MODEL_REGISTRY_JSON_EXACT_NAME_ABSENT",
-+    "NO_SAFE_CANONICAL_DRIVE_APPEND_PAYLOAD_AUTHORIZED",
++    "PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE",
++    "NO_DRIVE_WRITEBACK_PERFORMED_READ_ONLY_RECONCILIATION",
++    "NO_SAFE_CANONICAL_PRODUCTION_MUTATION_AUTHORIZED",
++    "CHUNK002_GENERATION_OUTPUT_NOT_UNIFIED_EVENT_SCHEMA",
 +    "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE"
 +  ],
 +  "artifacts": [
@@ -404,10 +449,14 @@ index 0000000..66c3080
 +    "change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json",
 +    "change-logs/CHUNK002_SOURCE_MANIFEST.json",
 +    "change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json",
++    "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json",
++    "change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json",
++    "change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json",
 +    "change-logs/PRE_CHUNK002_PREREG.md",
 +    "change-logs/PRE_CHUNK002_PREREG.json",
 +    "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
-+    "change-logs/CODEX_REVIEW_PACKET_LATEST.patch"
++    "change-logs/CODEX_REVIEW_PACKET_LATEST.patch",
++    "docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-second-final-audit-repair.md"
 +  ]
 +}
 diff --git a/change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json b/change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json
@@ -491,12 +540,111 @@ index 0000000..b5f4175
 +  "threshold_retuned": false,
 +  "production_changed": false
 +}
+diff --git a/change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json b/change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json
+new file mode 100644
+index 0000000..133ebfe
+--- /dev/null
++++ b/change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json
+@@ -0,0 +1,93 @@
++{
++  "audit_version": "astps-fast-detach-permission-source-audit-1",
++  "task_id": "ASTPS_FAST_DETACH_PR15_SECOND_FINAL_AUDIT_REPAIR",
++  "audited_at": "2026-09-26T17:00:00+08:00",
++  "scope": {
++    "repository": "alex43github/trade-workbench",
++    "repository_search": "entire checked-out repository excluding .git, node_modules, dist, and generated review patch",
++    "drive_parent_id": "1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM",
++    "drive_model_registry_id": "16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp",
++    "drive_changelog_id": "10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV",
++    "search_terms": [
++      "execution permission",
++      "execution_permission",
++      "permission ledger",
++      "EAP_GRANTED",
++      "eap_status",
++      "permission_state",
++      "execute_now",
++      "short_allowed",
++      "tradingPermission"
++    ]
++  },
++  "REAL_LIVE_EAP_SOURCE_FOUND": false,
++  "PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE": true,
++  "historical_live_eap_state": {
++    "event_count": 177,
++    "status": "EAP_NOT_OBSERVED",
++    "backfill_performed": false
++  },
++  "candidate_shadow_boundary": {
++    "candidate_or_shadow_permission_logic_present": true,
++    "candidate_or_shadow_names": ["CANDIDATE_EAP", "SHADOW_EAP"],
++    "counted_as_live_eap": false,
++    "synthetic_live_eap_events_created": 0
++  },
++  "repository_evidence": [
++    {
++      "path": "services/execution-forward/types.ts",
++      "finding": "EDP, recheck, and paper-plan records explicitly carry tradingPermission=false; they are candidate/shadow observations, not a frozen execution decision source."
++    },
++    {
++      "path": "services/execution-forward-v1.ts",
++      "finding": "Forward snapshots are emitted with tradingPermission=false and unavailable scorer status; no immutable EAP_GRANTED decision is produced."
++    },
++    {
++      "path": "services/execution-forward-persistence.ts",
++      "finding": "Persistence rejects production permission enablement and stores append-only shadow records; it is not a production permission ledger."
++    },
++    {
++      "path": "services/execution-forward-watcher.ts",
++      "finding": "Watcher captures EDP/recheck observations but has no explicit execution-permission observer or immutable EAP decision key."
++    },
++    {
++      "path": "services/structure-radar/research/task-007d-eap.ts",
++      "finding": "The Task-007D observer accepts an externally supplied immutable decision and fail-closes absent/malformed input; it does not connect to a real production source."
++    }
++  ],
++  "drive_evidence": [
++    {
++      "file_id": "16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp",
++      "title": "MODEL_REGISTRY.json",
++      "modified_time": "2026-09-13T10:14:26.002Z",
++      "current_revision_id": "0B-0oAJIjSHwhZHVJWjF1TnNDbmRRYkpmT1JjZXg0Vi80ZWo0PQ",
++      "finding": "Canonical registry exists and distinguishes the production baseline from research candidates; no immutable EAP_GRANTED permission ledger/source is defined."
++    },
++    {
++      "file_id": "10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV",
++      "title": "CHANGELOG.md",
++      "modified_time": "2026-09-13T10:14:30.986Z",
++      "current_revision_id": "0B-0oAJIjSHwhVnZXdmRabWN3QmtSQlFCcHZJUjlJNU94bHQ0PQ",
++      "finding": "Canonical research history documents candidate execution protocols and paper-only behavior; it does not expose an auditable production permission decision stream."
++    },
++    {
++      "file_id": "18oMIBSprBIAHO9-FY8WQzD907VM1XiU9",
++      "title": "LIVE_CASES.jsonl",
++      "modified_time": "2026-09-12T15:16:46.694Z",
++      "current_revision_id": "0B-0oAJIjSHwOWhySENWeVVLclJ4cjVzdFVvQjNFR2htbmhVPQ",
++      "finding": "Canonical live cases were resolved by stable ID; no new permission-ledger append was made in this round."
++    },
++    {
++      "file_id": "1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4",
++      "title": "LIVE_OUTCOMES.jsonl",
++      "modified_time": "2026-09-13T04:05:43.466Z",
++      "current_revision_id": "0B-0oAJIjSHwR21HUkdnN2pWQXFzOTgzNitISUFBd3M1K0xRPQ",
++      "finding": "Canonical outcomes were resolved by stable ID; no permission decision source or new outcome append was made in this round."
++    }
++  ],
++  "collector": {
++    "persistent_shadow_collector_started": false,
++    "reason": "Real permission semantics/source are not auditable; starting a collector would create an ungrounded candidate stream rather than observe real EAP."
++  },
++  "conclusion": "No production execution-permission source is auditable in the repository or canonical Drive model. Existing LIVE_FORWARD records remain EAP_NOT_OBSERVED. Any future source must be read-only wired to an immutable ledger and separately validated as CANDIDATE_EAP/SHADOW_EAP before Hypothesis -> OOS -> Forward."
++}
 diff --git a/change-logs/CHUNK002_SOURCE_MANIFEST.json b/change-logs/CHUNK002_SOURCE_MANIFEST.json
 new file mode 100644
-index 0000000..12afa38
+index 0000000..1e182b0
 --- /dev/null
 +++ b/change-logs/CHUNK002_SOURCE_MANIFEST.json
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,26 @@
 +{
 +  "schema_version": "fast-detach-v2-chunk002-source-manifest-1",
 +  "source_path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
@@ -510,14 +658,25 @@ index 0000000..12afa38
 +  "read_order_verified": true,
 +  "chunk002_accessed_after_prereg_commit": true,
 +  "threshold_retuned": false,
-+  "production_changed": false
++  "production_changed": false,
++  "same_schema_generation_attempt": {
++    "status": "DATA_BLOCKED",
++    "output_path": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002/chunks/chunk_002_2026-04-12_2026-04-16.jsonl",
++    "output_sha256": "6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e",
++    "output_schema_version": "fast-detach-v2-task-001",
++    "required_schema_version": "fast-detach-v2-unified-event-2",
++    "output_event_count": 50,
++    "duplicate_event_ids": 0,
++    "feature_leakage_count": 0,
++    "exact_missing_details_artifact": "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json"
++  }
 +}
 diff --git a/change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json b/change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json
 new file mode 100644
-index 0000000..98d0d03
+index 0000000..ae64652
 --- /dev/null
 +++ b/change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,140 @@
 +{
 +  "schema_version": "fast-detach-v2-chunk002-temporal-oos-audit-1",
 +  "status": "BLOCKED_DATA_SCHEMA",
@@ -647,84 +806,160 @@ index 0000000..98d0d03
 +  "threshold_retuned": false,
 +  "production_changed": false,
 +  "blocker": "A valid temporal OOS requires the frozen unified-event pipeline output; raw PE backtest trade rows cannot be relabeled as the six-hypothesis OOS sample."
++  ,"generation_attempt": {
++    "status": "DATA_BLOCKED",
++    "output_schema_version": "fast-detach-v2-task-001",
++    "required_schema_version": "fast-detach-v2-unified-event-2",
++    "output_sha256": "6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e",
++    "output_event_count": 50,
++    "duplicate_event_ids": 0,
++    "feature_leakage_count": 0,
++    "exact_missing_details_artifact": "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json"
++  }
++}
+diff --git a/change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json b/change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json
+new file mode 100644
+index 0000000..7fd9d3b
+--- /dev/null
++++ b/change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json
+@@ -0,0 +1,78 @@
++{
++  "attempt_version": "fast-detach-v2-unified-chunk002-generation-attempt-1",
++  "task_id": "ASTPS_FAST_DETACH_PR15_SECOND_FINAL_AUDIT_REPAIR",
++  "attempted_at": "2026-09-26T16:45:00+08:00",
++  "status": "DATA_BLOCKED",
++  "data_blocked": true,
++  "same_schema_required": "fast-detach-v2-unified-event-2",
++  "pipeline": {
++    "script": "/var/lib/trade-workbench/research/fast-detach/v2/generate_fast_detach_v2.py",
++    "chunk_index": 2,
++    "v1_root": "/var/lib/trade-workbench/research/pe/backtest-output/v1",
++    "frozen_15m_cache": "/var/lib/trade-workbench/market-cache/15m-history-v1",
++    "frozen_5m_cache": "/var/lib/trade-workbench/market-cache/5m-history-v1",
++    "output_root": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002",
++    "write_scope": "isolated /tmp only"
++  },
++  "source": {
++    "path": "/var/lib/trade-workbench/research/pe/backtest-output/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
++    "repository_relative_path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
++    "sha256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6",
++    "schema_version": "pe-top10-ma30-atr-10x-v1",
++    "date_start_bjt": "2026-04-12",
++    "date_end_bjt": "2026-04-16",
++    "row_count": 50,
++    "source_available": true,
++    "date_range_available": true
++  },
++  "generated_output": {
++    "path": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002/chunks/chunk_002_2026-04-12_2026-04-16.jsonl",
++    "sha256": "6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e",
++    "schema_version": "fast-detach-v2-task-001",
++    "row_count": 50,
++    "duplicate_event_ids": 0,
++    "future_leakage_count": 0,
++    "source_sha_valid": true,
++    "fifteen_minute_data_status": "COMPLETE",
++    "five_minute_data_status": "NOT_AVAILABLE",
++    "derivatives_data_status": "NOT_AVAILABLE"
++  },
++  "schema_mismatch": {
++    "same_schema": false,
++    "required_unified_artifact": "/var/lib/trade-workbench/research/fast-detach/v2/unified/chunks/chunk_001_unified.jsonl",
++    "required_unified_schema_artifact": "/var/lib/trade-workbench/research/fast-detach/v2/unified/schema/UNIFIED_EVENT_SCHEMA.json",
++    "missing_table_or_artifact": "chunk_002 output in the frozen unified-event table/schema; the available V1 trade-output and generated task-001 JSONL are not the unified event artifact",
++    "missing_fields": [
++      "identity",
++      "features",
++      "future_evidence",
++      "path_labels",
++      "barrier_labels",
++      "pe",
++      "research_meta",
++      "source",
++      "structure"
++    ],
++    "available_but_not_equivalent_fields": [
++      "feature_block",
++      "label_block",
++      "audit",
++      "source_v1_chunk",
++      "source_v1_sha256"
++    ],
++    "missing_source_fields": [
++      "5m closed-bar path payload",
++      "derivatives payload",
++      "frozen unified path-label payload",
++      "frozen unified barrier-label payload"
++    ]
++  },
++  "oos_disposition": {
++    "temporal_oos_completed": false,
++    "six_primary_hypotheses_scored": false,
++    "raw_pe_insufficient_conclusion_preserved": true,
++    "threshold_retuned": false,
++    "prereg_modified": false,
++    "reason": "The frozen generator successfully rebuilt a task-001-shaped chunk002, but no frozen adapter or source table produces fast-detach-v2-unified-event-2. Converting or relabeling the output would violate the preregistered schema boundary."
++  }
 +}
 diff --git a/change-logs/CODEX_REVIEW_PACKET_LATEST.md b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
 new file mode 100644
-index 0000000..0ff36a3
+index 0000000..6ea578c
 --- /dev/null
 +++ b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
 @@ -0,0 +1,115 @@
-+[RESULT FAST-DETACH-V2-TASK-PR15-FINAL-AUDIT-REPAIR]
++[RESULT FAST-DETACH-V2-TASK-PR15-SECOND-FINAL-AUDIT-REPAIR]
 +
-+# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 FINAL AUDIT REPAIR
++# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 SECOND FINAL AUDIT REPAIR
 +
-+TASK_ID=ASTPS_FAST_DETACH_PR15_FINAL_AUDIT_REPAIR
-+STATUS=CHANGES_REQUIRED_INCOMPLETE
++TASK_ID=ASTPS_FAST_DETACH_PR15_SECOND_FINAL_AUDIT_REPAIR
++STATUS=CHANGES_REQUIRED_PENDING_REVIEW
 +READY_FOR_FINAL_AUDIT=false
-+STARTED_AT=2026-09-26T09:00:00+08:00
-+FINISHED_AT=2026-09-26T14:14:39+08:00
-+COMMIT_SHA=810a122
-+PREVIOUS_REPAIR_COMMIT=8e13298
++PROMOTION_DECISION=DO_NOT_PROMOTE
++STARTED_AT=2026-09-26T14:55:00+08:00
++FINISHED_AT=2026-09-26T16:01:00+08:00
++COMMIT_SHA=14b1376
 +BRANCH=codex/astps-fast-detach-handoff-20260926
 +PR=https://github.com/alex43github/trade-workbench/pull/15
++MERGED=false
++DEPLOYED=false
 +
 +SUMMARY=
-+Repaired the PR #15 Final Audit findings in the existing ASTPS FAST-DETACH branch. The immutable EDP timestamp contract now drives EDP_TO_EAP_MIN, later-bar EAP behavior is regression-tested, EAP classification is fail-closed, and LIVE_FORWARD EAP denominators use only immutable EAP_GRANTED ledger event IDs. Added the frozen-before-read PRE_CHUNK002 preregistration and an honest schema audit of the available chunk002 object, completed the 177-event EDP-only descriptive audit and denominator-separated Historical-vs-LIVE comparison, and reconciled canonical Drive paths without fabricating a replacement. The final stop gate remains false because the real observer, stable collector/cohort, and valid same-pipeline chunk002 temporal OOS evidence are not present.
++继续同一 PR #15 修复 ChatGPT SECOND FINAL AUDIT 的 P0/P1 项，没有新开研究线、没有 merge、deploy、Promotion 或生产接线。`calculateEapSeparatedMetrics()` 现在明确拆分 immutable EDP window 与 immutable EAP window：EDP MFE/MAE 包含 EDP→EAP 路径，EAP MFE/MAE 不包含 EAP 之前路径；新增的“前段大涨/大跌、后段小波动”测试先在旧实现上失败，再在最小实现后通过。重新读取 Drive canonical parent/file/revision，确认 exact MODEL_REGISTRY.json 存在，生成了逐文件 machine-readable pending-writeback manifest，但本轮保持 Drive read-only。全 repository 与 canonical model 的 execution-permission 审计没有发现真实可审计 permission source，因此明确 `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`，不启动 persistent collector，不伪造 LIVE EAP。按冻结 Task-001/002B/003/004 generator 在隔离 `/tmp` 尝试生成 chunk002：得到 50 行 task-001 schema、source SHA valid、0 duplicate IDs、0 leakage，但不是要求的 `fast-detach-v2-unified-event-2`，因此严格标为 DATA_BLOCKED，六个 Primary hypotheses 继续 INSUFFICIENT，未调参、未改 prereg。
 +
 +CHANGED_FILES=
-+Every file changed relative to origin/main on this review branch is listed below. Each row explicitly records purpose/core logic, production impact, and threshold/model/Bark/order impact.
++本轮实质 commit `14b1376` 的 16 个文件，以及本 Review Packet 的 2 个审计文件。PR #15 既有文件未在本轮重复改写。
 +
-+| File | Modification purpose / core logic | Production impact | Threshold/model/Bark/order impact |
++| File | 修改目的 / 核心逻辑 | 是否影响 Production | 是否影响 threshold/model/Bark/order path |
 +|---|---|---|---|
-+| `EAP_SOURCE_AUDIT.md` | 007D evidence describing the absent immutable live EAP source and fail-closed status. | None; audit evidence only. | None. |
-+| `PRODUCTION_OBSERVABILITY_GAP.json` | Deterministic production-observability gap manifest. | None; no runtime wiring. | None. |
-+| `change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md` | Current phase, gate, invariant, Drive reconciliation, and verification status. | None. | None. |
-+| `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json` | Machine-readable final gate, source, invariants, tests, blockers, and artifact manifest. | None. | None. |
-+| `change-logs/CODEX_REVIEW_PACKET_LATEST.md` | This auditable handoff packet; stale `READY_FOR_FINAL_AUDIT=true` was removed. | None. | None. |
-+| `change-logs/CODEX_REVIEW_PACKET_LATEST.patch` | Generated full review diff for reviewer inspection. | None. | None. |
-+| `change-logs/PRE_CHUNK002_PREREG.json` | Frozen exact rules, metrics, denominators, and failure criteria before chunk002 read. | None. | None; no retuning. |
-+| `change-logs/PRE_CHUNK002_PREREG.md` | Human-readable copy of the frozen preregistration and SHA. | None. | None; no retuning. |
-+| `change-logs/REQ-20260925-fast-detach-v2-task-007d.md` | Prior 007D scope/result traceability artifact. | None. | None. |
-+| `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md` | Final implementation, gate, invariant, safety, and test report. | None. | Explicitly no threshold/model/Bark/order change. |
-+| `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md` | Source-separated descriptive research interpretation and OOS disposition. | None. | No hypothesis promotion or tuning. |
-+| `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md` | Explicit `DO_NOT_PROMOTE` decision and remaining gates. | Explicitly no production change. | No threshold/model/Bark/order change. |
-+| `docs/research/DRIVE_WRITEBACK_PENDING.md` | Canonical Drive parent/file-ID reconciliation; no unsafe writeback. | None. | None. |
-+| `docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md` | Existing 007D implementation plan retained for ancestry. | None. | None. |
-+| `docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-final-audit-repair.md` | Plan for this PR #15 review repair and acceptance checks. | None. | None. |
-+| `docs/superpowers/specs/2026-09-24-fast-detach-v2-task-007c-storage-plan.md` | Existing shadow storage specification retained for traceability. | None. | None. |
-+| `scripts/fast-detach-v2-task-007b-natural-outcome.ts` | Shadow closed-bar outcome runner; preserves explicit-permission-only semantics. | Shadow/research only; not deployed. | None. |
-+| `scripts/fast-detach-v2-task-007c-shadow-forward-collector.ts` | Shadow collector passes immutable observed EAP transition IDs and transition timestamps into summaries. | No production import, service, or runtime wiring. | None. |
-+| `scripts/fast-detach-v2-task-007d-shadow-validation.ts` | Shadow validator derives EAP counts from immutable EAP_GRANTED transition IDs. | Audit/shadow only. | None. |
-+| `services/structure-radar/research/task-007-adapters.ts` | Historical/live source adapters and denominator separation. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007-protocol.ts` | Immutable snapshot, transition, outcome, hash, and causal protocol. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007-repository.ts` | Append-only shadow repository and immutable ledger storage. | Shadow path only. | None. |
-+| `services/structure-radar/research/task-007b-outcomes.ts` | Mature closed-bar outcome and horizon calculations. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007c-shadow-state.ts` | Durable shadow scanner state and identity-preserving transitions. | Shadow path only. | None. |
-+| `services/structure-radar/research/task-007c-shadow.ts` | EAP cohort summary now rejects legacy snapshot fallback and uses immutable ledger IDs. | Research-only module. | None. |
-+| `services/structure-radar/research/task-007d-audit.ts` | Deterministic production-observability gap audit. | Audit only. | None. |
-+| `services/structure-radar/research/task-007d-eap.ts` | Frozen EDP timestamp contract, later-bar validation, fail-closed classifier, and EAP-separated metrics. | No real observer connected; no production runtime effect. | None. |
-+| `services/structure-radar/research/task-007d-persistence.ts` | Persistent shadow epoch copy and byte/SHA verification. | Shadow path only. | None. |
-+| `services/structure-radar/research/task-007d-summary.ts` | EDP-only metrics and frozen-at-EDP strata; EAP denominator source is explicit. | Research summary only. | No tuning. |
-+| `tests/fast-detach-task-007.test.mjs` | Protocol/identity and append-only invariants. | Tests only. | None. |
-+| `tests/fast-detach-task-007b.test.mjs` | Natural outcome and no-inferred-EAP regression tests. | Tests only. | None. |
-+| `tests/fast-detach-task-007c.test.mjs` | Collector, transition-driven EAP denominator, and legacy fallback regression tests. | Tests only. | None. |
-+| `tests/fast-detach-task-007d.test.mjs` | Later-bar EDP latency, fail-closed classification, causal boundary, and dynamic denominator tests. | Tests only. | None. |
-+| `change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json` | Full 177-event 15m–48h EDP-only metrics and frozen strata. | None. | Descriptive only; threshold_retuned=false. |
-+| `change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json` | Historical Replay / Live Discovery / Live EAP / Replay EAP comparison with explicit data gaps. | None. | No promotion or tuning. |
-+| `change-logs/CHUNK002_SOURCE_MANIFEST.json` | Read-only chunk002 path, SHA, schema, and post-prereg access evidence. | None. | No retuning. |
-+| `change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json` | Six frozen-hypothesis eligibility audit; records `INSUFFICIENT`, not valid OOS. | None. | No threshold/model change. |
-+| `docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md` | Human-readable chunk002 temporal OOS/schema disposition. | None. | No hypothesis adjustment. |
-+| `docs/research/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.md` | Human-readable denominator-separated comparison. | None. | No promotion or tuning. |
++| `EAP_SOURCE_AUDIT.md` | 补充全仓库与 Drive canonical source audit，明确无真实 permission source，candidate/shadow 不计入 LIVE EAP。 | 否，审计文档 | 否 |
++| `change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md` | 更新本轮 gate、Drive IDs/revisions、permission-source flag、chunk002 DATA_BLOCKED 与测试结果。 | 否 | 否 |
++| `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json` | 更新 final gate、两窗口语义、Drive exact IDs、generation attempt、source audit、invariants 与 blockers。 | 否 | 否 |
++| `change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json` | 新增 machine-readable 全仓库/Drive execution-permission audit。 | 否 | 否 |
++| `change-logs/CHUNK002_SOURCE_MANIFEST.json` | 记录 frozen source、prereg 顺序及同 schema generation attempt。 | 否 | 否 |
++| `change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json` | 保留六项 INSUFFICIENT，并附 DATA_BLOCKED generation evidence。 | 否 | 否；未调参 |
++| `change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json` | 新增 exact source/table/date-range/field mismatch、输出 SHA 与隔离路径。 | 否 | 否 |
++| `change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json` | 新增逐 canonical file 的 ID、mtime、revision、精确 patch/append payload、Git source commit 与未写原因。 | 否；未写 Drive | MODEL_REGISTRY 明确 NO_WRITE |
++| `docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md` | 记录实际 frozen generator 尝试及 unified schema DATA_BLOCKED 结论。 | 否 | 否 |
++| `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md` | 更新两窗口实现、Drive 正确解析、source audit、chunk002 attempt、测试与 gate。 | 否 | 否 |
++| `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md` | 更新 canonical Drive、no-source、candidate/shadow boundary 与 OOS disposition。 | 否 | 否 |
++| `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md` | 继续 DO_NOT_PROMOTE，反映 exact Drive resolution 与无权限源。 | 否 | 明确不改 |
++| `docs/research/DRIVE_WRITEBACK_PENDING.md` | 修正 canonical parent/file IDs，确认 registry 存在，链接 pending manifest。 | 否；未写 Drive | 否 |
++| `docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-second-final-audit-repair.md` | 本轮审计修复计划与验收标准。 | 否 | 否 |
++| `services/structure-radar/research/task-007d-eap.ts` | 分离 EDP/EAP causal windows，并保留 immutable EDP timestamp contract。 | 否；research-only，未接生产 | 否 |
++| `tests/fast-detach-task-007d.test.mjs` | 新增窗口隔离回归：前段大幅波动只进入 EDP MFE/MAE。 | 否 | 否 |
++| `change-logs/CODEX_REVIEW_PACKET_LATEST.md` | 本轮可审计 handoff packet，停止于 approval gate。 | 否 | 否 |
++| `change-logs/CODEX_REVIEW_PACKET_LATEST.patch` | 本轮完整 Git diff 审计补丁；由 packet 完成后生成。 | 否 | 否 |
 +
 +TEST_RESULTS=
-+- Focused TASK-007/007B/007C/007D: `npx tsx --test ...`; PASS, 38 total / 38 pass / 0 fail / 0 skip.
-+- Related radar regression: `npm run radar:test`; PASS, 88 total / 87 pass / 0 fail / 1 environment skip (loopback listener prohibited by this execution environment).
-+- Repository build: PASS as part of `npm test`.
-+- Full repository suite: `npm test`; FAIL, 1095 total / 987 pass / 107 fail / 1 skip. The failures are existing live-exchange/Bybit/trade/UI baseline scope outside the Fast-Detach research files; they are not relabeled as PASS.
-+- Typecheck: `npx tsc --noEmit`; FAIL on 51 existing `app/`/`lib/` errors; no TASK-007/007B/007C/007D or PRE_CHUNK002 errors were reported.
-+- JSON validation: six machine-readable prereg/audit/manifest artifacts parse successfully.
-+- Fast-Detach Python regression: `UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY`; not treated as PASS.
-+- `git diff --check`: PASS after final packet and patch generation.
++- TDD red proof: 旧实现运行 `npx tsx --test tests/fast-detach-task-007d.test.mjs` 为 15 pass / 1 fail；失败断言证明旧实现无法把 EDP→EAP 前段纳入 EDP MFE。
++- Focused: `npx tsx --test tests/fast-detach-task-007.test.mjs tests/fast-detach-task-007b.test.mjs tests/fast-detach-task-007c.test.mjs tests/fast-detach-task-007d.test.mjs`；39 total / 39 pass / 0 fail / 0 skip。
++- Related regression: `npm run radar:test`；88 total / 87 pass / 0 fail / 1 environment skip（loopback listener 被当前执行环境禁止）。
++- Repository build: `npm run build` phase within `npm test` PASS。
++- Full repository test: `npm test` exit 1；1096 total / 988 pass / 107 fail / 1 skip。失败保持如实记录，集中在既有 live-exchange/Bybit/trade/UI baseline，不作为 PASS。
++- Typecheck: `npx tsc --noEmit` exit 2；31 个既有 app/lib TypeScript errors；重新筛查无 `task-007`、`task007` 或 `fast-detach` error。
++- JSON validation: 7 machine-readable files parse successfully，包括 final manifest、source manifest、OOS audit、permission audit、generation attempt、Drive pending manifest、PRE_CHUNK002_PREREG。
++- `git diff --check`：最终 packet 与 patch 生成后 PASS；`git status --short` 已复核且仅包含本轮 review artifacts 的待提交变更。
++- Fast-Detach Python regression：checked-out repository 没有对应 Python regression runner；已明确标为 UNAVAILABLE，未将 unavailable 当作 PASS。
 +
 +DATA_INVARIANTS=
 +FEATURE_LEAKAGE_COUNT=0
@@ -732,14 +967,22 @@ index 0000000..0ff36a3
 +DUPLICATE_OUTCOME_KEYS=0
 +SNAPSHOT_MUTATION_COUNT=0
 +OUTCOME_MUTATION_COUNT=0
++TRANSITION_MUTATION_COUNT=0
 +HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_FROZEN_UNCHANGED=true
-+Forward epoch evidence: 177 LIVE_FORWARD snapshots, 185 transitions, 1064 outcomes, 227 unified-view rows; LIVE_FORWARD EAP denominator is 0 and all 177 historical live events remain `EAP_NOT_OBSERVED`.
++FORWARD_EPOCH_MUTATION_COUNT=0
++FORWARD_EPOCH_UNCHANGED=true
 +
 +PRODUCTION_SIDE_EFFECTS=
 +CHUNK002_ACCESSED=true
-+CHUNK002_ACCESS_ORDER=read only after PRE_CHUNK002_PREREG commit 8e13298
++CHUNK002_ACCESS_ORDER=after PRE_CHUNK002_PREREG commit 8e13298; current generation output stayed in isolated /tmp
++PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true
++REAL_LIVE_EAP_SOURCE_FOUND=false
++REAL_EAP_OBSERVER_CONNECTED=false
++PERSISTENT_SHADOW_COLLECTOR_STARTED=false
++PROSPECTIVE_EAP_COHORT_FORMED=false
++DRIVE_WRITEBACK_PERFORMED=false
 +PRODUCTION_MODEL_CHANGED=false
 +PRODUCTION_CODE_CHANGED=false
 +PRODUCTION_SERVICE_RESTARTED=false
@@ -748,27 +991,103 @@ index 0000000..0ff36a3
 +ORDER_PATH_CHANGED=false
 +DEPLOYED=false
 +MERGED=false
-+REAL_EAP_OBSERVER_CONNECTED=false
-+PERSISTENT_SHADOW_COLLECTOR_STABLE=false
-+PROSPECTIVE_EAP_COHORT_FORMED=false
-+No production writes, deployment, restart, snapshot rewrite, `first_detected_at` rewrite, `event_id` rewrite, or synthetic event was performed. VPS evidence collection was read-only; `/opt` was not modified.
++SYNTHETIC_LIVE_EAP_EVENTS_CREATED=0
++SNAPSHOT_REWRITTEN=false
++FIRST_DETECTED_AT_REWRITTEN=false
++EVENT_ID_REWRITTEN=false
 +
 +KNOWN_LIMITATIONS=
-+- No explicit immutable execution-permission observer exists in the audited VPS scanner path; historical 177 LIVE_FORWARD rows must remain `EAP_NOT_OBSERVED`.
-+- No stable persistent shadow collector process was running and no prospective EAP cohort exists; immutable `EAP_GRANTED` N=0, so execution-level statistics are not established.
-+- The available chunk002 object is a PE backtest trade-output schema, not the frozen `fast-detach-v2-unified-event-2` schema. All six frozen hypotheses are `INSUFFICIENT` with N_ELIGIBLE=0; this is not valid temporal OOS completion.
-+- Canonical Drive paths and stable IDs were reconciled. `MODEL_REGISTRY.json` exact name is absent; no `MODEL_CURRENT.json` replacement or unsafe writeback was made.
-+- Fast-Detach Python regression is unavailable in this checkout.
-+- Repository-wide baseline tests and typecheck errors remain outside this research-only repair.
++- Real execution-permission semantics/source are absent from the audited repository and canonical Drive model; historical 177 LIVE_FORWARD events remain EAP_NOT_OBSERVED.
++- Persistent collector is intentionally not started before a real permission source is established; prospective EAP N=0 and execution-level statistics are not established.
++- Frozen generator successfully rebuilt a task-001-shaped chunk002, but no frozen adapter/source table produced `fast-detach-v2-unified-event-2`; exact missing sections and unavailable 5m/derivatives payloads are in the generation-attempt manifest.
++- Drive exact files and current revisions are known, but no writeback was performed. `MODEL_REGISTRY.json` was not absent and no replacement was created; its pending operation is explicit NO_WRITE to protect the production registry.
++- Fast-Detach Python regression runner is unavailable in the checked-out repository and is not treated as PASS.
++- Existing repository baseline test/typecheck failures remain outside this research-only repair.
 +
 +BLOCKERS=
-+["REAL_EAP_OBSERVER_NOT_CONNECTED", "PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE", "PROSPECTIVE_EAP_COHORT_ZERO", "CHUNK002_TEMPORAL_OOS_NOT_VALID_SAME_PIPELINE", "MODEL_REGISTRY_JSON_EXACT_NAME_ABSENT", "NO_SAFE_CANONICAL_DRIVE_APPEND_PAYLOAD_AUTHORIZED", "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE", "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"]
++[
++  "PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE",
++  "REAL_EAP_OBSERVER_NOT_CONNECTED",
++  "PERSISTENT_SHADOW_COLLECTOR_NOT_STARTED",
++  "PROSPECTIVE_EAP_COHORT_ZERO",
++  "CHUNK002_GENERATION_NOT_FAST_DETACH_V2_UNIFIED_EVENT_2",
++  "CHUNK002_TEMPORAL_OOS_NOT_COMPLETED",
++  "DRIVE_WRITEBACK_NOT_PERFORMED_READ_ONLY_RECONCILIATION",
++  "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE",
++  "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"
++]
 +
 +APPROVAL_REQUIRED=
-+ChatGPT Reviewer must inspect this repair, the immutable EDP/EAP contract, denominator separation, preregistration-before-chunk002 evidence, descriptive 177-event audit, comparison gaps, and honest test failures. Do not merge, deploy, restart, promote, tune thresholds, change models, change Bark/order behavior, or invent EAP/cohort/OOS evidence. `READY_FOR_FINAL_AUDIT=false` remains required until every listed stop-gate item is actually evidenced.
++ChatGPT Reviewer must inspect the two immutable causal windows, the new regression, the exact canonical Drive resolution and pending manifest, the repository/Drive permission-source audit, and the isolated chunk002 generation DATA_BLOCKED evidence. Do not merge, deploy, restart, promote, tune thresholds, change model/Bark/order behavior, start a collector without a real permission source, or fabricate LIVE EAP/OOS evidence. `READY_FOR_FINAL_AUDIT=false` remains required.
 +
 +RECOMMENDED_NEXT_TASK=
-+Reviewer-directed fix only: connect a real explicit immutable execution-permission observer and run the persistent shadow collector long enough to form 20–30 independent EAP_OBSERVED events with mature 6H outcomes; then produce a same-pipeline unified chunk002 temporal OOS artifact under a separately reviewed task. Do not self-invent a new research task or change the frozen rules.
++Reviewer-directed fix only. If approved, the next task must first establish a real read-only immutable execution-permission source and then separately authorize a CANDIDATE_EAP/SHADOW_EAP Hypothesis → OOS → Forward cycle. Do not self-invent a research task or set READY_FOR_FINAL_AUDIT=true.
+diff --git a/change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json b/change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json
+new file mode 100644
+index 0000000..213bb91
+--- /dev/null
++++ b/change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json
+@@ -0,0 +1,60 @@
++{
++  "manifest_version": "astps-fast-detach-drive-pending-writeback-1",
++  "task_id": "ASTPS_FAST_DETACH_PR15_SECOND_FINAL_AUDIT_REPAIR",
++  "generated_at": "2026-09-26T17:00:00+08:00",
++  "status": "NOT_WRITTEN_FORMALLY_RECONCILED",
++  "writeback_performed": false,
++  "canonical_parent": {
++    "path": "03_MODEL_REGISTRY",
++    "drive_folder_id": "1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM",
++    "parent_id": "1I4r4qWp7I_BCCKftSm1kVqA5jLN6Wi68"
++  },
++  "source_git_commit": "14b1376",
++  "global_not_written_reason": "This round used Drive read-only metadata/content/revision reads. No Drive write operation was authorized or performed; Git review artifacts are the source of truth and no production canonical model or ledger is mutated.",
++  "entries": [
++    {
++      "canonical_path": "03_MODEL_REGISTRY/MODEL_REGISTRY.json",
++      "drive_file_id": "16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp",
++      "current_modified_time": "2026-09-13T10:14:26.002Z",
++      "current_revision_id": "0B-0oAJIjSHwhZHVJWjF1TnNDbmRRYkpmT1JjZXg0Vi80ZWo0PQ",
++      "current_size_bytes": 9793,
++      "operation": "NO_WRITE",
++      "exact_intended_patch": {
++        "format": "JSON Patch",
++        "operations": [],
++        "semantic_intent": "Do not mutate the canonical production registry. Record this research-only audit in Git and preserve the production baseline/candidate registry unchanged."
++      },
++      "not_written_reason": "A research audit pointer is not a production model update and no canonical registry mutation is authorized in this PR."
++    },
++    {
++      "canonical_path": "03_MODEL_REGISTRY/CHANGELOG.md",
++      "drive_file_id": "10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV",
++      "current_modified_time": "2026-09-13T10:14:30.986Z",
++      "current_revision_id": "0B-0oAJIjSHwhVnZXdmRabWN3QmtSQlFCcHZJUjlJNU94bHQ0PQ",
++      "current_size_bytes": 21937,
++      "operation": "APPEND_TEXT_PENDING",
++      "exact_intended_append_payload": "\n## ASTPS FAST-DETACH PR #15 — SECOND FINAL AUDIT REPAIR\n\n- Git source commit: 14b1376\n- READY_FOR_FINAL_AUDIT: false\n- PROMOTION_DECISION: DO_NOT_PROMOTE\n- Real auditable execution-permission source: absent; historical LIVE_FORWARD EAP remains EAP_NOT_OBSERVED.\n- Chunk002 frozen-pipeline attempt: task-001 output generated in isolated /tmp, but fast-detach-v2-unified-event-2 compatibility is DATA_BLOCKED.\n- Drive writeback: not performed; see the Git pending-writeback manifest for exact canonical IDs, revisions, and payload.\n",
++      "not_written_reason": "The exact append is recorded for review, but Drive was intentionally kept read-only in this round."
++    },
++    {
++      "canonical_path": "LIVE_CASES.jsonl",
++      "drive_file_id": "18oMIBSprBIAHO9-FY8WQzD907VM1XiU9",
++      "current_modified_time": "2026-09-12T15:16:46.694Z",
++      "current_revision_id": "0B-0oAJIjSHwOWhySENWeVVLclJ4cjVzdFVvQjNFR2htbmhVPQ",
++      "current_size_bytes": 14523,
++      "operation": "NO_APPEND",
++      "exact_intended_append_payload": "",
++      "not_written_reason": "No new real LIVE_FORWARD case or auditable permission decision was observed; appending an audit row would pollute the canonical live-case ledger."
++    },
++    {
++      "canonical_path": "LIVE_OUTCOMES.jsonl",
++      "drive_file_id": "1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4",
++      "current_modified_time": "2026-09-13T04:05:43.466Z",
++      "current_revision_id": "0B-0oAJIjSHwR21HUkdnN2pWQXFzOTgzNitISUFBd3M1K0xRPQ",
++      "current_size_bytes": 6207,
++      "operation": "NO_APPEND",
++      "exact_intended_append_payload": "",
++      "not_written_reason": "No new natural outcome row was produced by this code-only audit round; no canonical outcome append is intended."
++    }
++  ]
++}
 diff --git a/change-logs/PRE_CHUNK002_PREREG.json b/change-logs/PRE_CHUNK002_PREREG.json
 new file mode 100644
 index 0000000..31396a7
@@ -1077,10 +1396,10 @@ index 0000000..fa51dc0
 +未启动新的长跑 collector，未安装 systemd/cron，未修复 Production observability writeback，未修改 `/opt`、Bark、order chain、threshold 或 model。TASK-007E 需要另行授权，至少涉及 `services/structure-radar/main.ts` 的 event identity adapter、candidate/notification/score/outcome writer 以及对应 Sheet/ledger sink；长跑 collector 需要另行授权其目标目录、运行时长和是否允许接入真实 permission source。
 diff --git a/docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md b/docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md
 new file mode 100644
-index 0000000..31ed0d5
+index 0000000..bccadd7
 --- /dev/null
 +++ b/docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,26 @@
 +# FAST-DETACH V2 — chunk002 Temporal OOS Audit
 +
 +STATUS=BLOCKED_DATA_SCHEMA
@@ -1100,13 +1419,19 @@ index 0000000..31ed0d5
 +| ADVERSE_PATH_GATE | INSUFFICIENT | 50 | 0 | 50 |
 +| PE_MULTI_TF_SYNCHRONIZED_ACCELERATION | INSUFFICIENT | 50 | 0 | 50 |
 +
-+This is a completed schema audit, not a completed valid temporal OOS evaluation. A valid chunk002 OOS remains blocked until an authorized, same-pipeline unified-event artifact is produced and frozen under a new reviewable task; no threshold or model change is justified.
++## Same-pipeline generation attempt
++
++The frozen VPS generator was run once with `chunk_index=2`, reading the canonical V1 source and 15m cache and writing only to `/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002`. It produced 50 rows with source SHA validation true, `DUPLICATE_EVENT_IDS=0`, and `FUTURE_LEAKAGE_COUNT=0`; output SHA is `6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e`. The output schema is `fast-detach-v2-task-001`, not `fast-detach-v2-unified-event-2`.
++
++The exact DATA_BLOCKED details are recorded in [`CHUNK002_UNIFIED_GENERATION_ATTEMPT.json`](../../change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json): source and date range are available, but the required unified artifact/table is missing for this run, together with the unified sections `identity`, `features`, `future_evidence`, `path_labels`, `barrier_labels`, `pe`, `research_meta`, `source`, and `structure`. The generator also reports `5M_DATA_STATUS=NOT_AVAILABLE` and `DERIVATIVES_DATA_STATUS=NOT_AVAILABLE`. No adapter, relabeling, threshold tuning, prereg change, or six-hypothesis scoring was performed.
++
++This is a completed schema audit plus a blocked generation attempt, not a completed valid temporal OOS evaluation. A valid chunk002 OOS remains blocked until an authorized same-pipeline unified-event artifact is produced and frozen under a new reviewable task; no threshold or model change is justified.
 diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
 new file mode 100644
-index 0000000..1c241d9
+index 0000000..e199550
 --- /dev/null
 +++ b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,92 @@
 +# ASTPS FAST-DETACH — PR #15 FINAL AUDIT REPAIR ENGINEERING REPORT
 +
 +STATUS=CHANGES_REQUIRED_INCOMPLETE
@@ -1115,7 +1440,7 @@ index 0000000..1c241d9
 +BRANCH=codex/astps-fast-detach-handoff-20260926
 +PR=https://github.com/alex43github/trade-workbench/pull/15
 +BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
-+REPAIR_COMMIT=8e13298
++REPAIR_COMMIT=14b1376
 +HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +FORWARD_EPOCH_ID=epoch-20260924T185000
 +
@@ -1130,6 +1455,8 @@ index 0000000..1c241d9
 +3. LIVE_FORWARD EAP counts and 6H denominators use only immutable `EAP_GRANTED` ledger event IDs. Legacy snapshot EAP fields are ignored. EAP delay uses the immutable transition timestamp.
 +4. EDP-only summary now reports event counts separately from outcome-row counts and exposes family/mechanism as `UNAVAILABLE_FROZEN_FIELD` when absent instead of guessing.
 +5. `PRE_CHUNK002_PREREG.md/json` was committed before chunk002 access. The source was then hashed and audited; all six frozen Primary hypotheses are `INSUFFICIENT` because the source schema lacks every required unified-event field.
++6. `calculateEapSeparatedMetrics()` now uses two inclusive closed-bar windows: the immutable EDP timestamp starts the EDP window, and the immutable EAP timestamp starts the EAP window. The EDP MFE/MAE therefore includes EDP→EAP path movement, while EAP MFE/MAE excludes it; a large-pre-EAP/small-post-EAP regression proves the separation.
++7. Canonical Drive resolution now points to the exact `03_MODEL_REGISTRY` parent, `MODEL_REGISTRY.json`, and `CHANGELOG.md` IDs. The registry is present, not absent. Read-only writeback reconciliation is captured in the machine-readable pending manifest.
 +
 +## Gate status
 +
@@ -1141,7 +1468,7 @@ index 0000000..1c241d9
 +| prereg freeze completed | commit `8e13298`, prereg SHA `5f701142...7d35c84` | PASS |
 +| chunk002 temporal OOS completed | schema audit only; valid same-pipeline OOS false | BLOCKED_DATA_SCHEMA |
 +| Historical vs Live comparison completed | denominator-separated report with explicit data gaps | PASS_WITH_DATA_GAPS |
-+| Drive writeback completed or formally reconciled | canonical parents/IDs re-resolved; MODEL_REGISTRY exact name absent | FORMALLY_RECONCILED |
++| Drive writeback completed or formally reconciled | canonical parent and exact file IDs/revisions re-resolved; read-only pending manifest records exact payloads | FORMALLY_RECONCILED |
 +| final reports regenerated | this report, research, promotion, manifest, and Review Packet | PASS |
 +
 +## 177-event EDP-only descriptive audit
@@ -1163,16 +1490,16 @@ index 0000000..1c241d9
 +
 +- VPS process and source search found no explicit `EAP_GRANTED`/execution-permission observer in the production scanner path and no task007c persistent collector process. No production code was changed to manufacture one.
 +- Existing Forward EAP audit remains `EAP_OBSERVED=0`, `EAP_CONFIRMED_ABSENT=0`, `EAP_NOT_OBSERVED=177`.
-+- `chunk002` source was read only after prereg commit, but its schema is incompatible with the frozen unified-event required fields. The six results are recorded as `INSUFFICIENT`, not as valid OOS support/failure.
-+- Drive canonical reconciliation found `LIVE_CASES.jsonl` and `LIVE_OUTCOMES.jsonl` by stable IDs and confirmed the exact-name `MODEL_REGISTRY.json` is absent. No replacement or unsafe overwrite was made.
++- `chunk002` source was read only after prereg commit. The frozen generator was run once in an isolated `/tmp` root with `chunk_index=2`: it produced 50 rows with source SHA valid, zero duplicate IDs, and zero feature leakage, but the output schema is `fast-detach-v2-task-001`, not `fast-detach-v2-unified-event-2`. The exact missing unified sections/fields and the `DATA_BLOCKED` disposition are recorded in `CHUNK002_UNIFIED_GENERATION_ATTEMPT.json`; the six results remain `INSUFFICIENT`, not valid OOS support/failure.
++- Drive canonical reconciliation found `LIVE_CASES.jsonl`, `LIVE_OUTCOMES.jsonl`, the exact `MODEL_REGISTRY.json`, and `CHANGELOG.md` by stable IDs and revisions. No replacement or unsafe overwrite was made. `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true` remains explicit after repository-wide and canonical-model audit.
 +- Fast-Detach Python regression is unavailable in this checkout; it is reported as unavailable, never PASS.
 +
 +## Verification
 +
-+- Focused TASK-007/007B/007C/007D: `38/38 PASS`, `0 FAIL`, `0 SKIP`.
++- Focused TASK-007/007B/007C/007D: `39/39 PASS`, `0 FAIL`, `0 SKIP`.
 +- Radar regression (`npm run radar:test`): `88 total`, `87 PASS`, `0 FAIL`, `1 environment skip` (loopback listener prohibited by the execution environment).
 +- Repository build: `PASS`.
-+- Repository full suite (`npm test`): `1095 total`, `987 PASS`, `107 FAIL`, `1 SKIP`; failures are existing live-exchange/Bybit/trade/UI scope outside this research-only repair. The build phase passed.
++- Repository full suite (`npm test`): exit `1`, `1096 total`, `988 PASS`, `107 FAIL`, `1 SKIP`; the additional passing test is the new EDP/EAP window regression. Failures are existing live-exchange/Bybit/trade/UI scope outside this research-only repair. The build phase passed.
 +- Typecheck (`npx tsc --noEmit`): `FAIL` on pre-existing `app/` and `lib/` errors; no TASK-007/007B/007C/007D errors were reported.
 +- Fast-Detach Python regression: `UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY`; not treated as PASS.
 +- JSON artifact validation: all six newly generated machine-readable audit/prereg/manifests parse successfully.
@@ -1189,6 +1516,7 @@ index 0000000..1c241d9
 +HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_FROZEN_UNCHANGED=true
 +CHUNK002_ACCESSED=true
++PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true
 +PRODUCTION_MODEL_CHANGED=false
 +PRODUCTION_CODE_CHANGED=false
 +PRODUCTION_SERVICE_RESTARTED=false
@@ -1198,10 +1526,10 @@ index 0000000..1c241d9
 +The final audit stop gate is intentionally false. `DO_NOT_PROMOTE` is a separate decision and does not mean this repair is complete.
 diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
 new file mode 100644
-index 0000000..f717d96
+index 0000000..5f13e5a
 --- /dev/null
 +++ b/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,45 @@
 +# ASTPS FAST-DETACH — PR #15 FINAL RESEARCH REPORT
 +
 +STATUS=DESCRIPTIVE_AUDIT_COMPLETE_CHANGES_REQUIRED
@@ -1220,6 +1548,10 @@ index 0000000..f717d96
 +
 +Historical chunk001 SHA remains `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
 +
++## Canonical Drive resolution and writeback
++
++The exact `03_MODEL_REGISTRY` parent is `1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM`. `MODEL_REGISTRY.json` is present at `16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp`; `CHANGELOG.md` is present at `10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV`. Current modified times and revision IDs were read again. Drive writeback was not performed; the exact per-file pending patch/append payloads and reasons are in [`DRIVE_PENDING_WRITEBACK_MANIFEST.json`](../../change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json). No replacement file was created and no production registry was mutated.
++
 +## LIVE_FORWARD EDP-only outcomes
 +
 +The verified 177-event Forward Epoch has 177 mature rows at each horizon from 15m through 12h, 2 at 24h, and 0 at 48h. The complete machine-readable output is [`ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json`](../../change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json). The six required horizon tables are reproduced in the engineering report. Family/mechanism are not present as frozen-at-EDP fields; they are reported unavailable rather than inferred from another dataset.
@@ -1234,11 +1566,11 @@ index 0000000..f717d96
 +
 +## chunk002 temporal OOS disposition
 +
-+`PRE_CHUNK002_PREREG.md/json` was committed before reading chunk002. The frozen source prereg SHA is `5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84`; chunk002 SHA is `f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6`. The source contains 50 rows but is `pe-top10-ma30-atr-10x-v1`, not the required unified-event schema. All six Primary hypotheses therefore have `N_TOTAL=50, N_ELIGIBLE=0, N_EXCLUDED=50, result=INSUFFICIENT`; see [`ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md`](ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md). This is a schema audit, not a valid temporal OOS completion, and no threshold was retuned.
++`PRE_CHUNK002_PREREG.md/json` was committed before reading chunk002. The frozen source prereg SHA is `5f70114287a82c3acc33502fac410d4dab484a586359013524fd0a3617d35c84`; chunk002 SHA is `f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6`. The source contains 50 rows in `pe-top10-ma30-atr-10x-v1`, not the required unified-event schema. The frozen generator was then attempted once with `chunk_index=2` in isolated `/tmp`; it generated 50 task-001-shaped rows (`6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e`) but could not produce `fast-detach-v2-unified-event-2`. The exact missing unified sections/fields are in [`CHUNK002_UNIFIED_GENERATION_ATTEMPT.json`](../../change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json) and the result is `DATA_BLOCKED`. All six Primary hypotheses therefore remain `N_TOTAL=50, N_ELIGIBLE=0, N_EXCLUDED=50, result=INSUFFICIENT`; see [`ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md`](ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md). This is not a valid temporal OOS completion, and no threshold was retuned.
 +
 +## EAP boundary
 +
-+All prior 177 LIVE_FORWARD events remain `EAP_NOT_OBSERVED`. The explicit observer is not connected, no prospective EAP cohort exists, and no persistent collector process is running/stable. Unknown or malformed permission states now fail closed; only immutable `EAP_GRANTED` ledger IDs can enter a prospective EAP denominator.
++All prior 177 LIVE_FORWARD events remain `EAP_NOT_OBSERVED`. A repository-wide and canonical Drive model audit found no real auditable execution-permission source: `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`. The explicit observer is not connected, no prospective EAP cohort exists, and no persistent collector process is running/stable. Unknown or malformed permission states now fail closed; only immutable `EAP_GRANTED` ledger IDs can enter a prospective EAP denominator. Existing logic is strictly `CANDIDATE_EAP`/`SHADOW_EAP` and no candidate observation is counted as LIVE EAP.
 +
 +## Research conclusion
 +
@@ -1269,10 +1601,10 @@ index 0000000..f2ef067
 +The machine-readable comparison is [`ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json`](../../change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json). No threshold, feature, model, Bark, or order behavior was changed.
 diff --git a/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md b/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md
 new file mode 100644
-index 0000000..4bf11c6
+index 0000000..e18102a
 --- /dev/null
 +++ b/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,32 @@
 +# ASTPS FAST-DETACH — PR #15 PROMOTION RECOMMENDATION
 +
 +PROMOTION_DECISION=DO_NOT_PROMOTE
@@ -1294,8 +1626,9 @@ index 0000000..4bf11c6
 +2. No prospective EAP cohort or stable persistent collector evidence exists; EAP sample quality is `LOW_SAMPLE` with immutable EAP-granted N=0.
 +3. The prereg freeze was completed before chunk002 access, but the available chunk002 object is not the frozen unified-event schema. The six required results are `INSUFFICIENT`, not valid temporal OOS evidence.
 +4. Historical Replay vs LIVE_FORWARD comparison is descriptive and explicitly marks detection/execution/capital data gaps.
-+5. Drive paths were formally reconciled; `MODEL_REGISTRY.json` is genuinely absent and was not replaced with `MODEL_CURRENT.json`.
-+6. No threshold/model/Bark/order change is authorized or present.
++5. Drive paths were formally reconciled; the exact `MODEL_REGISTRY.json` and `CHANGELOG.md` are present at the canonical parent, but writeback was intentionally not performed. Exact pending payloads and revision guards are recorded in `DRIVE_PENDING_WRITEBACK_MANIFEST.json`.
++6. Repository-wide and canonical-model audit found no real auditable execution-permission source: `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`. Existing permission logic remains `CANDIDATE_EAP`/`SHADOW_EAP` only.
++7. No threshold/model/Bark/order change is authorized or present.
 +
 +## Required gates before reconsideration
 +
@@ -1306,45 +1639,49 @@ index 0000000..4bf11c6
 +- Regenerate final reports and rerun all focused/regression tests before setting `READY_FOR_FINAL_AUDIT=true`.
 diff --git a/docs/research/DRIVE_WRITEBACK_PENDING.md b/docs/research/DRIVE_WRITEBACK_PENDING.md
 new file mode 100644
-index 0000000..76054d0
+index 0000000..7969817
 --- /dev/null
 +++ b/docs/research/DRIVE_WRITEBACK_PENDING.md
-@@ -0,0 +1,35 @@
-+# ASTPS FAST-DETACH — DRIVE CANONICAL WRITEBACK RECONCILIATION
+@@ -0,0 +1,39 @@
++# ASTPS FAST-DETACH — DRIVE CANONICAL WRITEBACK PENDING
 +
-+STATUS=FORMALLY_RECONCILED
++STATUS=NOT_WRITTEN_FORMALLY_RECONCILED
 +CANONICAL_WRITEBACK_RECONCILED=true
-+READ_AT=2026-09-26T14:10:00+08:00
++READ_AT=2026-09-26T17:00:00+08:00
 +WRITEBACK_OPERATION=NOT_PERFORMED
++MODEL_REGISTRY_EXACT_NAME_FOUND=true
++DRIVE_WRITEBACK_PENDING_MANIFEST=change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json
 +
-+The canonical parents were re-resolved after the prior search miss. Existing files are identified by stable Drive IDs below; no pseudo-replacement was created and no canonical file was overwritten from this branch.
++The canonical parent and exact files were re-resolved by stable Drive IDs. The connector reads below are read-only. No pseudo-replacement was created, no canonical file was overwritten, and no Drive writeback was attempted in this round.
 +
 +## Canonical parent resolution
 +
-+| Logical parent | Drive folder ID |
-+|---|---|
-+| research state / workbench | `1dY641toqjs9m9wndqHTRq52xzoX4SpLo` |
-+| candidate / regression | `1vs6gs5CnvevSKjoqyoN5yYOQqhjz_myp` |
-+| live research ledgers | `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq` |
++| Logical parent | Drive folder ID | Parent ID | Modified time |
++|---|---|---|---|
++| `03_MODEL_REGISTRY` | `1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM` | `1I4r4qWp7I_BCCKftSm1kVqA5jLN6Wi68` | `2026-09-12T06:33:08.471Z` |
++| live research ledgers | `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq` | — | — |
 +
-+## Stable file resolution
++## Exact canonical file resolution
 +
-+- `LIVE_CASES.jsonl`: `18oMIBSprBIAHO9-FY8WQzD907VM1XiU9`, parent `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq`, read successfully.
-+- `LIVE_OUTCOMES.jsonl`: `1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4`, parent `1wwhEiC_kLfqpja8wGIv1cFPB0z086bHq`, read successfully.
-+- `MODEL_REGISTRY.json`: exact-name search and canonical-parent listing found no file. `MODEL_CURRENT.json` (`1bZd7...`, under the research-state parent) exists but is not treated as a registry replacement.
-+- `RESEARCH_STATE.md`: `1sNlS9V0Rmz_w_BkB7cQNMBCsHelhmIyc`.
-+- `WORKBENCH_SPEC.md`: `1m6IbzlvUFrxTTW9vMP5wx4vW4nP6tqoY`.
-+- `LIVE_GROWTH_LOG.md`: `1atVncflV2A6cN5y7u9pbPSJpqwzF1oPZ`.
-+- `LIVE_HYPOTHESES.md`: `1v3o7qDkrlpUN3XoBf_IwTK0ZBdo6nfH_`.
-+- `CURRENT_CANDIDATE_MODEL.md`: `1LoHtmTqhDL6jY4D6XzH5jU-SCcZOyQu1`.
-+- `REGRESSION_RESULTS.md`: `1cs5zaqLwTpfLLecUXtbwJ8zqhJIAxeIh`.
-+- `RESEARCH_QUEUE.md`: `19w_CkM9QwngpELURGYpi37CYf9pRCGxF`.
++| Canonical path | Drive file ID | Modified time | Current revision ID | Size |
++|---|---|---|---|---:|
++| `03_MODEL_REGISTRY/MODEL_REGISTRY.json` | `16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp` | `2026-09-13T10:14:26.002Z` | `0B-0oAJIjSHwhZHVJWjF1TnNDbmRRYkpmT1JjZXg0Vi80ZWo0PQ` | 9793 |
++| `03_MODEL_REGISTRY/CHANGELOG.md` | `10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV` | `2026-09-13T10:14:30.986Z` | `0B-0oAJIjSHwhVnZXdmRabWN3QmtSQlFCcHZJUjlJNU94bHQ0PQ` | 21937 |
++| `LIVE_CASES.jsonl` | `18oMIBSprBIAHO9-FY8WQzD907VM1XiU9` | `2026-09-12T15:16:46.694Z` | `0B-0oAJIjSHwOWhySENWeVVLclJ4cjVzdFVvQjNFR2htbmhVPQ` | 14523 |
++| `LIVE_OUTCOMES.jsonl` | `1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4` | `2026-09-13T04:05:43.466Z` | `0B-0oAJIjSHwR21HUkdnN2pWQXFzOTgzNitISUFBd3M1K0xRPQ` | 6207 |
 +
-+## Reconciliation decision
++Additional resolved research files remain unchanged: `RESEARCH_STATE.md`, `WORKBENCH_SPEC.md`, `LIVE_GROWTH_LOG.md`, `LIVE_HYPOTHESES.md`, `CURRENT_CANDIDATE_MODEL.md`, `REGRESSION_RESULTS.md`, and `RESEARCH_QUEUE.md`. Their stable IDs are preserved in the prior reconciliation record and were not written.
 +
-+The required canonical ledger files are now resolved by parent and stable ID. This PR does not have a safe append payload for those production research ledgers, and `MODEL_REGISTRY.json` remains genuinely absent. Therefore the correct writeback state is a formal reconciliation, not a fabricated replacement or an unsafe overwrite. Local GitHub review artifacts remain authoritative for this PR revision; any future canonical append must use the resolved IDs and an explicit write-control/review step.
++## Writeback disposition
 +
-+True blockers remain: missing exact `MODEL_REGISTRY.json`, no authorized canonical append payload in this repair, and no permission to represent local reports as Drive synchronization.
++The complete machine-readable pending entries are in [`DRIVE_PENDING_WRITEBACK_MANIFEST.json`](../../change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json). It records, per canonical file, the exact current revision, exact intended patch/append payload, Git source commit `14b1376`, and the reason the payload was not written.
++
++- `MODEL_REGISTRY.json` is present at the exact canonical path. Its intended patch is an explicit empty JSON Patch: this research-only repair must not mutate the production registry.
++- `CHANGELOG.md` has an exact pending append block, but no Drive append was performed.
++- `LIVE_CASES.jsonl` and `LIVE_OUTCOMES.jsonl` have empty append payloads because this round produced no new real permission decision, LIVE case, or natural outcome. Appending an audit row would pollute canonical ledgers.
++- No replacement file was created and no `MODEL_CURRENT.json` was used as a substitute.
++
++The current local Git reports, source audit, generation-attempt audit, and pending manifest are the reviewable source of truth for this PR. A future Drive writeback requires explicit write authority and revision-guarded application of the exact pending payloads.
 diff --git a/docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md b/docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md
 new file mode 100644
 index 0000000..7c0e4e5
@@ -1524,6 +1861,45 @@ index 0000000..af876e8
 +- Prereg files are committed before any chunk002 access; exact source/definition gaps are explicit.
 +- `READY_FOR_FINAL_AUDIT=false` unless all stop-gate evidence exists; `PROMOTION_DECISION=DO_NOT_PROMOTE` remains separate.
 +- All data-safety invariants remain zero/unchanged and all changes are captured in the Review Packet.
+diff --git a/docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-second-final-audit-repair.md b/docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-second-final-audit-repair.md
+new file mode 100644
+index 0000000..d9a99df
+--- /dev/null
++++ b/docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-second-final-audit-repair.md
+@@ -0,0 +1,33 @@
++# ASTPS FAST-DETACH PR #15 — Second Final Audit Repair Plan
++
++## Goal
++
++Repair the latest PR #15 second-final-audit findings on the existing branch, with explicit EDP/EAP metric windows, corrected canonical Drive evidence, a repository-wide execution-permission source audit, and an isolated same-schema chunk002 generation attempt. Keep the final-audit gate false and promotion decision separate from completion status.
++
++## Boundaries
++
++- Continue only on PR #15; do not create a new research line, merge, deploy, restart, or promote.
++- Do not change Production model, threshold, Bark behavior, order behavior, immutable snapshots, historical chunk001, preregistration, or existing outcomes.
++- Do not fabricate LIVE EAP. Any newly designed permission logic remains CANDIDATE_EAP or SHADOW_EAP.
++- Do not start a persistent collector until an auditable real permission source and its immutable semantics are found.
++- Drive is read-only for this round. If writeback is not performed, record exact machine-readable pending payloads and the reason.
++- Run any chunk002 generation only in an isolated `/tmp` output root using the frozen pipeline and canonical raw inputs; report exact DATA_BLOCKED evidence if generation cannot complete.
++
++## Execution order
++
++1. Add and run a failing test proving that a large EDP→EAP move is visible to EDP metrics but not EAP metrics.
++2. Implement separate immutable-EDP and immutable-EAP bar windows and run focused tests.
++3. Re-read canonical Drive metadata/revisions and model/changelog evidence; update the pending-writeback manifest and all required reports without writing Drive.
++4. Audit repository and canonical model for a real execution-permission source; keep historical EAP_NOT_OBSERVED and the collector stopped if none exists.
++5. Inspect and run the frozen Task-001/002B/003/004 generator in an isolated `/tmp` root for chunk002; preserve raw-PE INSUFFICIENT and record DATA_BLOCKED details if prerequisites are missing.
++6. Regenerate final-audit, engineering, research, promotion, status, and Review Packet artifacts with `READY_FOR_FINAL_AUDIT=false` and `PROMOTION_DECISION=DO_NOT_PROMOTE`.
++7. Run focused tests, related radar regression, full npm regression/build, typecheck, diff/status checks, review all changed files, commit and push the same branch, update PR #15, and stop for ChatGPT review.
++
++## Acceptance criteria
++
++- EDP MFE/MAE begins at immutable EDP and includes the EDP→EAP path; EAP MFE/MAE begins at immutable EAP and excludes the earlier path.
++- Correct Drive parent/file IDs and metadata are present; no report says MODEL_REGISTRY is absent.
++- Pending writeback manifest is machine-readable and contains exact payload/no-write intent, source commit, canonical IDs, current metadata/revision, and reason.
++- `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true` is explicit if the repository and canonical model contain no real source; no LIVE EAP is fabricated.
++- Chunk002 generation is either verified as same-schema frozen-pipeline output or marked DATA_BLOCKED with exact missing source/table/date range/field.
++- `READY_FOR_FINAL_AUDIT=false`, `PROMOTION_DECISION=DO_NOT_PROMOTE`, and all data-safety invariants remain zero/unchanged.
 diff --git a/docs/superpowers/specs/2026-09-24-fast-detach-v2-task-007c-storage-plan.md b/docs/superpowers/specs/2026-09-24-fast-detach-v2-task-007c-storage-plan.md
 new file mode 100644
 index 0000000..b805dec
@@ -4366,10 +4742,10 @@ index 0000000..eb6286e
 +}
 diff --git a/services/structure-radar/research/task-007d-eap.ts b/services/structure-radar/research/task-007d-eap.ts
 new file mode 100644
-index 0000000..7b19ffc
+index 0000000..e10b3d3
 --- /dev/null
 +++ b/services/structure-radar/research/task-007d-eap.ts
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,215 @@
 +import {
 +  canonicalJson,
 +  createTransition,
@@ -4564,16 +4940,21 @@ index 0000000..7b19ffc
 +  const eapPrice = decision.eap_price;
 +  const edpMs = parseUtc(immutableEdpTimestamp(snapshot), "immutable_edp_timestamp");
 +  const eapMs = parseUtc(decision.eap_time_utc, "eap_time_utc");
-+  const eligible = bars.filter((bar) => parseUtc(bar.open_time_utc, "bar.open_time_utc") >= eapMs);
-+  const highs = eligible.map((bar) => bar.high);
-+  const lows = eligible.map((bar) => bar.low);
++  // Keep both causal windows: EDP metrics include the path before permission,
++  // while EAP metrics start only when immutable permission was observed.
++  const edpWindow = bars.filter((bar) => parseUtc(bar.open_time_utc, "bar.open_time_utc") >= edpMs);
++  const eapWindow = edpWindow.filter((bar) => parseUtc(bar.open_time_utc, "bar.open_time_utc") >= eapMs);
++  const edpHighs = edpWindow.map((bar) => bar.high);
++  const edpLows = edpWindow.map((bar) => bar.low);
++  const eapHighs = eapWindow.map((bar) => bar.high);
++  const eapLows = eapWindow.map((bar) => bar.low);
 +  return {
 +    EDP_TO_EAP_MIN: Math.floor((eapMs - edpMs) / 60_000),
 +    PRICE_EDP_TO_EAP_PCT: ((eapPrice / edpPrice) - 1) * 100,
-+    MFE_FROM_EDP: highs.length ? ((Math.max(...highs) / edpPrice) - 1) * 100 : null,
-+    MAE_FROM_EDP: lows.length ? ((Math.min(...lows) / edpPrice) - 1) * 100 : null,
-+    MFE_FROM_EAP: highs.length ? ((Math.max(...highs) / eapPrice) - 1) * 100 : null,
-+    MAE_FROM_EAP: lows.length ? ((Math.min(...lows) / eapPrice) - 1) * 100 : null,
++    MFE_FROM_EDP: edpHighs.length ? ((Math.max(...edpHighs) / edpPrice) - 1) * 100 : null,
++    MAE_FROM_EDP: edpLows.length ? ((Math.min(...edpLows) / edpPrice) - 1) * 100 : null,
++    MFE_FROM_EAP: eapHighs.length ? ((Math.max(...eapHighs) / eapPrice) - 1) * 100 : null,
++    MAE_FROM_EAP: eapLows.length ? ((Math.min(...eapLows) / eapPrice) - 1) * 100 : null,
 +    MISSED_CONVEXITY: null,
 +    TIME_TO_POSITIVE_FROM_EAP: null,
 +    CAPITAL_OCCUPANCY_FROM_EAP: null,
@@ -5638,10 +6019,10 @@ index 0000000..763ca51
 +});
 diff --git a/tests/fast-detach-task-007d.test.mjs b/tests/fast-detach-task-007d.test.mjs
 new file mode 100644
-index 0000000..327fdc9
+index 0000000..e17c4c5
 --- /dev/null
 +++ b/tests/fast-detach-task-007d.test.mjs
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,322 @@
 +import assert from "node:assert/strict";
 +import test from "node:test";
 +import { mkdtemp, readFile, rm, mkdir, writeFile } from "node:fs/promises";
@@ -5812,6 +6193,30 @@ index 0000000..327fdc9
 +    bars: [{ open_time_utc: "2026-09-24T10:35:00.000Z", close: 101, high: 102, low: 100 }],
 +  });
 +  assert.equal(metrics.EDP_TO_EAP_MIN, 25);
++});
++
++test("EDP and EAP excursion windows remain disjoint at the EAP boundary", () => {
++  const metrics = calculateEapSeparatedMetrics({
++    snapshot: snapshot("event-1", {
++      first_detected_at_utc: "2026-09-24T10:00:00.000Z",
++      execution_context: { edp_utc: "2026-09-24T10:00:00.000Z" },
++    }),
++    decision: permissionDecision({
++      eap_time_utc: "2026-09-24T10:20:00.000Z",
++      eap_price: 100,
++      decision_bar_close_utc: "2026-09-24T10:15:00.000Z",
++      causal_evidence: { timestamps_utc: ["2026-09-24T10:14:59.999Z"], state: "CONFIRMED" },
++    }),
++    bars: [
++      { open_time_utc: "2026-09-24T10:00:00.000Z", close: 100, high: 110, low: 90 },
++      { open_time_utc: "2026-09-24T10:20:00.000Z", close: 101, high: 102, low: 99 },
++    ],
++  });
++
++  assert.ok(Math.abs(metrics.MFE_FROM_EDP - 10) < 1e-12);
++  assert.ok(Math.abs(metrics.MAE_FROM_EDP - -10) < 1e-12);
++  assert.ok(Math.abs(metrics.MFE_FROM_EAP - 2) < 1e-12);
++  assert.ok(Math.abs(metrics.MAE_FROM_EAP - -1) < 1e-12);
 +});
 +
 +test("sample quality exposes discovery and EAP denominators separately", () => {

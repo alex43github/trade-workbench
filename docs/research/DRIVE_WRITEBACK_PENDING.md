@@ -29,7 +29,7 @@ Additional resolved research files remain unchanged: `RESEARCH_STATE.md`, `WORKB
 
 ## Writeback disposition
 
-The complete machine-readable pending entries are in [`DRIVE_PENDING_WRITEBACK_MANIFEST.json`](../../change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json). It records, per canonical file, the exact current revision, exact intended patch/append payload, Git source commit placeholder to be filled at the substantive commit, and the reason the payload was not written.
+The complete machine-readable pending entries are in [`DRIVE_PENDING_WRITEBACK_MANIFEST.json`](../../change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json). It records, per canonical file, the exact current revision, exact intended patch/append payload, Git source commit `14b1376`, and the reason the payload was not written.
 
 - `MODEL_REGISTRY.json` is present at the exact canonical path. Its intended patch is an explicit empty JSON Patch: this research-only repair must not mutate the production registry.
 - `CHANGELOG.md` has an exact pending append block, but no Drive append was performed.

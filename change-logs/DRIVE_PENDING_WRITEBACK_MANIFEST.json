@@ -9,7 +9,7 @@
     "drive_folder_id": "1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM",
     "parent_id": "1I4r4qWp7I_BCCKftSm1kVqA5jLN6Wi68"
   },
-  "source_git_commit": "PENDING_SUBSTANTIVE_COMMIT",
+  "source_git_commit": "14b1376",
   "global_not_written_reason": "This round used Drive read-only metadata/content/revision reads. No Drive write operation was authorized or performed; Git review artifacts are the source of truth and no production canonical model or ledger is mutated.",
   "entries": [
     {
@@ -33,7 +33,7 @@
       "current_revision_id": "0B-0oAJIjSHwhVnZXdmRabWN3QmtSQlFCcHZJUjlJNU94bHQ0PQ",
       "current_size_bytes": 21937,
       "operation": "APPEND_TEXT_PENDING",
-      "exact_intended_append_payload": "\n## ASTPS FAST-DETACH PR #15 — SECOND FINAL AUDIT REPAIR\n\n- Git source commit: PENDING_SUBSTANTIVE_COMMIT\n- READY_FOR_FINAL_AUDIT: false\n- PROMOTION_DECISION: DO_NOT_PROMOTE\n- Real auditable execution-permission source: absent; historical LIVE_FORWARD EAP remains EAP_NOT_OBSERVED.\n- Chunk002 frozen-pipeline attempt: task-001 output generated in isolated /tmp, but fast-detach-v2-unified-event-2 compatibility is DATA_BLOCKED.\n- Drive writeback: not performed; see the Git pending-writeback manifest for exact canonical IDs, revisions, and payload.\n",
+      "exact_intended_append_payload": "\n## ASTPS FAST-DETACH PR #15 — SECOND FINAL AUDIT REPAIR\n\n- Git source commit: 14b1376\n- READY_FOR_FINAL_AUDIT: false\n- PROMOTION_DECISION: DO_NOT_PROMOTE\n- Real auditable execution-permission source: absent; historical LIVE_FORWARD EAP remains EAP_NOT_OBSERVED.\n- Chunk002 frozen-pipeline attempt: task-001 output generated in isolated /tmp, but fast-detach-v2-unified-event-2 compatibility is DATA_BLOCKED.\n- Drive writeback: not performed; see the Git pending-writeback manifest for exact canonical IDs, revisions, and payload.\n",
       "not_written_reason": "The exact append is recorded for review, but Drive was intentionally kept read-only in this round."
     },
     {

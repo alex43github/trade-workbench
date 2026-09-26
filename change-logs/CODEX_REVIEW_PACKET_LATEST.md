@@ -1,74 +1,56 @@
-[RESULT FAST-DETACH-V2-TASK-PR15-FINAL-AUDIT-REPAIR]
+[RESULT FAST-DETACH-V2-TASK-PR15-SECOND-FINAL-AUDIT-REPAIR]
 
-# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 FINAL AUDIT REPAIR
+# CODEX REVIEW PACKET — ASTPS FAST-DETACH PR #15 SECOND FINAL AUDIT REPAIR
 
-TASK_ID=ASTPS_FAST_DETACH_PR15_FINAL_AUDIT_REPAIR
-STATUS=CHANGES_REQUIRED_INCOMPLETE
+TASK_ID=ASTPS_FAST_DETACH_PR15_SECOND_FINAL_AUDIT_REPAIR
+STATUS=CHANGES_REQUIRED_PENDING_REVIEW
 READY_FOR_FINAL_AUDIT=false
-STARTED_AT=2026-09-26T09:00:00+08:00
-FINISHED_AT=2026-09-26T14:14:39+08:00
-COMMIT_SHA=810a122
-PREVIOUS_REPAIR_COMMIT=8e13298
+PROMOTION_DECISION=DO_NOT_PROMOTE
+STARTED_AT=2026-09-26T14:55:00+08:00
+FINISHED_AT=2026-09-26T16:01:00+08:00
+COMMIT_SHA=14b1376
 BRANCH=codex/astps-fast-detach-handoff-20260926
 PR=https://github.com/alex43github/trade-workbench/pull/15
+MERGED=false
+DEPLOYED=false
 
 SUMMARY=
-Repaired the PR #15 Final Audit findings in the existing ASTPS FAST-DETACH branch. The immutable EDP timestamp contract now drives EDP_TO_EAP_MIN, later-bar EAP behavior is regression-tested, EAP classification is fail-closed, and LIVE_FORWARD EAP denominators use only immutable EAP_GRANTED ledger event IDs. Added the frozen-before-read PRE_CHUNK002 preregistration and an honest schema audit of the available chunk002 object, completed the 177-event EDP-only descriptive audit and denominator-separated Historical-vs-LIVE comparison, and reconciled canonical Drive paths without fabricating a replacement. The final stop gate remains false because the real observer, stable collector/cohort, and valid same-pipeline chunk002 temporal OOS evidence are not present.
+继续同一 PR #15 修复 ChatGPT SECOND FINAL AUDIT 的 P0/P1 项，没有新开研究线、没有 merge、deploy、Promotion 或生产接线。`calculateEapSeparatedMetrics()` 现在明确拆分 immutable EDP window 与 immutable EAP window：EDP MFE/MAE 包含 EDP→EAP 路径，EAP MFE/MAE 不包含 EAP 之前路径；新增的“前段大涨/大跌、后段小波动”测试先在旧实现上失败，再在最小实现后通过。重新读取 Drive canonical parent/file/revision，确认 exact MODEL_REGISTRY.json 存在，生成了逐文件 machine-readable pending-writeback manifest，但本轮保持 Drive read-only。全 repository 与 canonical model 的 execution-permission 审计没有发现真实可审计 permission source，因此明确 `PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true`，不启动 persistent collector，不伪造 LIVE EAP。按冻结 Task-001/002B/003/004 generator 在隔离 `/tmp` 尝试生成 chunk002：得到 50 行 task-001 schema、source SHA valid、0 duplicate IDs、0 leakage，但不是要求的 `fast-detach-v2-unified-event-2`，因此严格标为 DATA_BLOCKED，六个 Primary hypotheses 继续 INSUFFICIENT，未调参、未改 prereg。
 
 CHANGED_FILES=
-Every file changed relative to origin/main on this review branch is listed below. Each row explicitly records purpose/core logic, production impact, and threshold/model/Bark/order impact.
+本轮实质 commit `14b1376` 的 16 个文件，以及本 Review Packet 的 2 个审计文件。PR #15 既有文件未在本轮重复改写。
 
-| File | Modification purpose / core logic | Production impact | Threshold/model/Bark/order impact |
+| File | 修改目的 / 核心逻辑 | 是否影响 Production | 是否影响 threshold/model/Bark/order path |
 |---|---|---|---|
-| `EAP_SOURCE_AUDIT.md` | 007D evidence describing the absent immutable live EAP source and fail-closed status. | None; audit evidence only. | None. |
-| `PRODUCTION_OBSERVABILITY_GAP.json` | Deterministic production-observability gap manifest. | None; no runtime wiring. | None. |
-| `change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md` | Current phase, gate, invariant, Drive reconciliation, and verification status. | None. | None. |
-| `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json` | Machine-readable final gate, source, invariants, tests, blockers, and artifact manifest. | None. | None. |
-| `change-logs/CODEX_REVIEW_PACKET_LATEST.md` | This auditable handoff packet; stale `READY_FOR_FINAL_AUDIT=true` was removed. | None. | None. |
-| `change-logs/CODEX_REVIEW_PACKET_LATEST.patch` | Generated full review diff for reviewer inspection. | None. | None. |
-| `change-logs/PRE_CHUNK002_PREREG.json` | Frozen exact rules, metrics, denominators, and failure criteria before chunk002 read. | None. | None; no retuning. |
-| `change-logs/PRE_CHUNK002_PREREG.md` | Human-readable copy of the frozen preregistration and SHA. | None. | None; no retuning. |
-| `change-logs/REQ-20260925-fast-detach-v2-task-007d.md` | Prior 007D scope/result traceability artifact. | None. | None. |
-| `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md` | Final implementation, gate, invariant, safety, and test report. | None. | Explicitly no threshold/model/Bark/order change. |
-| `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md` | Source-separated descriptive research interpretation and OOS disposition. | None. | No hypothesis promotion or tuning. |
-| `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md` | Explicit `DO_NOT_PROMOTE` decision and remaining gates. | Explicitly no production change. | No threshold/model/Bark/order change. |
-| `docs/research/DRIVE_WRITEBACK_PENDING.md` | Canonical Drive parent/file-ID reconciliation; no unsafe writeback. | None. | None. |
-| `docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md` | Existing 007D implementation plan retained for ancestry. | None. | None. |
-| `docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-final-audit-repair.md` | Plan for this PR #15 review repair and acceptance checks. | None. | None. |
-| `docs/superpowers/specs/2026-09-24-fast-detach-v2-task-007c-storage-plan.md` | Existing shadow storage specification retained for traceability. | None. | None. |
-| `scripts/fast-detach-v2-task-007b-natural-outcome.ts` | Shadow closed-bar outcome runner; preserves explicit-permission-only semantics. | Shadow/research only; not deployed. | None. |
-| `scripts/fast-detach-v2-task-007c-shadow-forward-collector.ts` | Shadow collector passes immutable observed EAP transition IDs and transition timestamps into summaries. | No production import, service, or runtime wiring. | None. |
-| `scripts/fast-detach-v2-task-007d-shadow-validation.ts` | Shadow validator derives EAP counts from immutable EAP_GRANTED transition IDs. | Audit/shadow only. | None. |
-| `services/structure-radar/research/task-007-adapters.ts` | Historical/live source adapters and denominator separation. | Research-only module. | None. |
-| `services/structure-radar/research/task-007-protocol.ts` | Immutable snapshot, transition, outcome, hash, and causal protocol. | Research-only module. | None. |
-| `services/structure-radar/research/task-007-repository.ts` | Append-only shadow repository and immutable ledger storage. | Shadow path only. | None. |
-| `services/structure-radar/research/task-007b-outcomes.ts` | Mature closed-bar outcome and horizon calculations. | Research-only module. | None. |
-| `services/structure-radar/research/task-007c-shadow-state.ts` | Durable shadow scanner state and identity-preserving transitions. | Shadow path only. | None. |
-| `services/structure-radar/research/task-007c-shadow.ts` | EAP cohort summary now rejects legacy snapshot fallback and uses immutable ledger IDs. | Research-only module. | None. |
-| `services/structure-radar/research/task-007d-audit.ts` | Deterministic production-observability gap audit. | Audit only. | None. |
-| `services/structure-radar/research/task-007d-eap.ts` | Frozen EDP timestamp contract, later-bar validation, fail-closed classifier, and EAP-separated metrics. | No real observer connected; no production runtime effect. | None. |
-| `services/structure-radar/research/task-007d-persistence.ts` | Persistent shadow epoch copy and byte/SHA verification. | Shadow path only. | None. |
-| `services/structure-radar/research/task-007d-summary.ts` | EDP-only metrics and frozen-at-EDP strata; EAP denominator source is explicit. | Research summary only. | No tuning. |
-| `tests/fast-detach-task-007.test.mjs` | Protocol/identity and append-only invariants. | Tests only. | None. |
-| `tests/fast-detach-task-007b.test.mjs` | Natural outcome and no-inferred-EAP regression tests. | Tests only. | None. |
-| `tests/fast-detach-task-007c.test.mjs` | Collector, transition-driven EAP denominator, and legacy fallback regression tests. | Tests only. | None. |
-| `tests/fast-detach-task-007d.test.mjs` | Later-bar EDP latency, fail-closed classification, causal boundary, and dynamic denominator tests. | Tests only. | None. |
-| `change-logs/ASTPS_FAST_DETACH_EDP_ONLY_AUDIT_177.json` | Full 177-event 15m–48h EDP-only metrics and frozen strata. | None. | Descriptive only; threshold_retuned=false. |
-| `change-logs/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.json` | Historical Replay / Live Discovery / Live EAP / Replay EAP comparison with explicit data gaps. | None. | No promotion or tuning. |
-| `change-logs/CHUNK002_SOURCE_MANIFEST.json` | Read-only chunk002 path, SHA, schema, and post-prereg access evidence. | None. | No retuning. |
-| `change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json` | Six frozen-hypothesis eligibility audit; records `INSUFFICIENT`, not valid OOS. | None. | No threshold/model change. |
-| `docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md` | Human-readable chunk002 temporal OOS/schema disposition. | None. | No hypothesis adjustment. |
-| `docs/research/ASTPS_FAST_DETACH_HISTORICAL_LIVE_COMPARISON.md` | Human-readable denominator-separated comparison. | None. | No promotion or tuning. |
+| `EAP_SOURCE_AUDIT.md` | 补充全仓库与 Drive canonical source audit，明确无真实 permission source，candidate/shadow 不计入 LIVE EAP。 | 否，审计文档 | 否 |
+| `change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md` | 更新本轮 gate、Drive IDs/revisions、permission-source flag、chunk002 DATA_BLOCKED 与测试结果。 | 否 | 否 |
+| `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json` | 更新 final gate、两窗口语义、Drive exact IDs、generation attempt、source audit、invariants 与 blockers。 | 否 | 否 |
+| `change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json` | 新增 machine-readable 全仓库/Drive execution-permission audit。 | 否 | 否 |
+| `change-logs/CHUNK002_SOURCE_MANIFEST.json` | 记录 frozen source、prereg 顺序及同 schema generation attempt。 | 否 | 否 |
+| `change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json` | 保留六项 INSUFFICIENT，并附 DATA_BLOCKED generation evidence。 | 否 | 否；未调参 |
+| `change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json` | 新增 exact source/table/date-range/field mismatch、输出 SHA 与隔离路径。 | 否 | 否 |
+| `change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json` | 新增逐 canonical file 的 ID、mtime、revision、精确 patch/append payload、Git source commit 与未写原因。 | 否；未写 Drive | MODEL_REGISTRY 明确 NO_WRITE |
+| `docs/research/ASTPS_FAST_DETACH_CHUNK002_TEMPORAL_OOS.md` | 记录实际 frozen generator 尝试及 unified schema DATA_BLOCKED 结论。 | 否 | 否 |
+| `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md` | 更新两窗口实现、Drive 正确解析、source audit、chunk002 attempt、测试与 gate。 | 否 | 否 |
+| `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md` | 更新 canonical Drive、no-source、candidate/shadow boundary 与 OOS disposition。 | 否 | 否 |
+| `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md` | 继续 DO_NOT_PROMOTE，反映 exact Drive resolution 与无权限源。 | 否 | 明确不改 |
+| `docs/research/DRIVE_WRITEBACK_PENDING.md` | 修正 canonical parent/file IDs，确认 registry 存在，链接 pending manifest。 | 否；未写 Drive | 否 |
+| `docs/superpowers/plans/2026-09-26-astps-fast-detach-pr15-second-final-audit-repair.md` | 本轮审计修复计划与验收标准。 | 否 | 否 |
+| `services/structure-radar/research/task-007d-eap.ts` | 分离 EDP/EAP causal windows，并保留 immutable EDP timestamp contract。 | 否；research-only，未接生产 | 否 |
+| `tests/fast-detach-task-007d.test.mjs` | 新增窗口隔离回归：前段大幅波动只进入 EDP MFE/MAE。 | 否 | 否 |
+| `change-logs/CODEX_REVIEW_PACKET_LATEST.md` | 本轮可审计 handoff packet，停止于 approval gate。 | 否 | 否 |
+| `change-logs/CODEX_REVIEW_PACKET_LATEST.patch` | 本轮完整 Git diff 审计补丁；由 packet 完成后生成。 | 否 | 否 |
 
 TEST_RESULTS=
-- Focused TASK-007/007B/007C/007D: `npx tsx --test ...`; PASS, 38 total / 38 pass / 0 fail / 0 skip.
-- Related radar regression: `npm run radar:test`; PASS, 88 total / 87 pass / 0 fail / 1 environment skip (loopback listener prohibited by this execution environment).
-- Repository build: PASS as part of `npm test`.
-- Full repository suite: `npm test`; FAIL, 1095 total / 987 pass / 107 fail / 1 skip. The failures are existing live-exchange/Bybit/trade/UI baseline scope outside the Fast-Detach research files; they are not relabeled as PASS.
-- Typecheck: `npx tsc --noEmit`; FAIL on 51 existing `app/`/`lib/` errors; no TASK-007/007B/007C/007D or PRE_CHUNK002 errors were reported.
-- JSON validation: six machine-readable prereg/audit/manifest artifacts parse successfully.
-- Fast-Detach Python regression: `UNAVAILABLE_IN_CHECKED_OUT_REPOSITORY`; not treated as PASS.
-- `git diff --check`: PASS after final packet and patch generation.
+- TDD red proof: 旧实现运行 `npx tsx --test tests/fast-detach-task-007d.test.mjs` 为 15 pass / 1 fail；失败断言证明旧实现无法把 EDP→EAP 前段纳入 EDP MFE。
+- Focused: `npx tsx --test tests/fast-detach-task-007.test.mjs tests/fast-detach-task-007b.test.mjs tests/fast-detach-task-007c.test.mjs tests/fast-detach-task-007d.test.mjs`；39 total / 39 pass / 0 fail / 0 skip。
+- Related regression: `npm run radar:test`；88 total / 87 pass / 0 fail / 1 environment skip（loopback listener 被当前执行环境禁止）。
+- Repository build: `npm run build` phase within `npm test` PASS。
+- Full repository test: `npm test` exit 1；1096 total / 988 pass / 107 fail / 1 skip。失败保持如实记录，集中在既有 live-exchange/Bybit/trade/UI baseline，不作为 PASS。
+- Typecheck: `npx tsc --noEmit` exit 2；31 个既有 app/lib TypeScript errors；重新筛查无 `task-007`、`task007` 或 `fast-detach` error。
+- JSON validation: 7 machine-readable files parse successfully，包括 final manifest、source manifest、OOS audit、permission audit、generation attempt、Drive pending manifest、PRE_CHUNK002_PREREG。
+- `git diff --check`：最终 packet 与 patch 生成后 PASS；`git status --short` 已复核且仅包含本轮 review artifacts 的待提交变更。
+- Fast-Detach Python regression：checked-out repository 没有对应 Python regression runner；已明确标为 UNAVAILABLE，未将 unavailable 当作 PASS。
 
 DATA_INVARIANTS=
 FEATURE_LEAKAGE_COUNT=0
@@ -76,14 +58,22 @@ DUPLICATE_EVENT_IDS=0
 DUPLICATE_OUTCOME_KEYS=0
 SNAPSHOT_MUTATION_COUNT=0
 OUTCOME_MUTATION_COUNT=0
+TRANSITION_MUTATION_COUNT=0
 HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_FROZEN_UNCHANGED=true
-Forward epoch evidence: 177 LIVE_FORWARD snapshots, 185 transitions, 1064 outcomes, 227 unified-view rows; LIVE_FORWARD EAP denominator is 0 and all 177 historical live events remain `EAP_NOT_OBSERVED`.
+FORWARD_EPOCH_MUTATION_COUNT=0
+FORWARD_EPOCH_UNCHANGED=true
 
 PRODUCTION_SIDE_EFFECTS=
 CHUNK002_ACCESSED=true
-CHUNK002_ACCESS_ORDER=read only after PRE_CHUNK002_PREREG commit 8e13298
+CHUNK002_ACCESS_ORDER=after PRE_CHUNK002_PREREG commit 8e13298; current generation output stayed in isolated /tmp
+PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE=true
+REAL_LIVE_EAP_SOURCE_FOUND=false
+REAL_EAP_OBSERVER_CONNECTED=false
+PERSISTENT_SHADOW_COLLECTOR_STARTED=false
+PROSPECTIVE_EAP_COHORT_FORMED=false
+DRIVE_WRITEBACK_PERFORMED=false
 PRODUCTION_MODEL_CHANGED=false
 PRODUCTION_CODE_CHANGED=false
 PRODUCTION_SERVICE_RESTARTED=false
@@ -92,24 +82,34 @@ BARK_CHANGED=false
 ORDER_PATH_CHANGED=false
 DEPLOYED=false
 MERGED=false
-REAL_EAP_OBSERVER_CONNECTED=false
-PERSISTENT_SHADOW_COLLECTOR_STABLE=false
-PROSPECTIVE_EAP_COHORT_FORMED=false
-No production writes, deployment, restart, snapshot rewrite, `first_detected_at` rewrite, `event_id` rewrite, or synthetic event was performed. VPS evidence collection was read-only; `/opt` was not modified.
+SYNTHETIC_LIVE_EAP_EVENTS_CREATED=0
+SNAPSHOT_REWRITTEN=false
+FIRST_DETECTED_AT_REWRITTEN=false
+EVENT_ID_REWRITTEN=false
 
 KNOWN_LIMITATIONS=
-- No explicit immutable execution-permission observer exists in the audited VPS scanner path; historical 177 LIVE_FORWARD rows must remain `EAP_NOT_OBSERVED`.
-- No stable persistent shadow collector process was running and no prospective EAP cohort exists; immutable `EAP_GRANTED` N=0, so execution-level statistics are not established.
-- The available chunk002 object is a PE backtest trade-output schema, not the frozen `fast-detach-v2-unified-event-2` schema. All six frozen hypotheses are `INSUFFICIENT` with N_ELIGIBLE=0; this is not valid temporal OOS completion.
-- Canonical Drive paths and stable IDs were reconciled. `MODEL_REGISTRY.json` exact name is absent; no `MODEL_CURRENT.json` replacement or unsafe writeback was made.
-- Fast-Detach Python regression is unavailable in this checkout.
-- Repository-wide baseline tests and typecheck errors remain outside this research-only repair.
+- Real execution-permission semantics/source are absent from the audited repository and canonical Drive model; historical 177 LIVE_FORWARD events remain EAP_NOT_OBSERVED.
+- Persistent collector is intentionally not started before a real permission source is established; prospective EAP N=0 and execution-level statistics are not established.
+- Frozen generator successfully rebuilt a task-001-shaped chunk002, but no frozen adapter/source table produced `fast-detach-v2-unified-event-2`; exact missing sections and unavailable 5m/derivatives payloads are in the generation-attempt manifest.
+- Drive exact files and current revisions are known, but no writeback was performed. `MODEL_REGISTRY.json` was not absent and no replacement was created; its pending operation is explicit NO_WRITE to protect the production registry.
+- Fast-Detach Python regression runner is unavailable in the checked-out repository and is not treated as PASS.
+- Existing repository baseline test/typecheck failures remain outside this research-only repair.
 
 BLOCKERS=
-["REAL_EAP_OBSERVER_NOT_CONNECTED", "PERSISTENT_SHADOW_COLLECTOR_NOT_RUNNING_OR_STABLE", "PROSPECTIVE_EAP_COHORT_ZERO", "CHUNK002_TEMPORAL_OOS_NOT_VALID_SAME_PIPELINE", "MODEL_REGISTRY_JSON_EXACT_NAME_ABSENT", "NO_SAFE_CANONICAL_DRIVE_APPEND_PAYLOAD_AUTHORIZED", "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE", "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"]
+[
+  "PRODUCTION_HAS_NO_AUDITABLE_EXECUTION_PERMISSION_SOURCE",
+  "REAL_EAP_OBSERVER_NOT_CONNECTED",
+  "PERSISTENT_SHADOW_COLLECTOR_NOT_STARTED",
+  "PROSPECTIVE_EAP_COHORT_ZERO",
+  "CHUNK002_GENERATION_NOT_FAST_DETACH_V2_UNIFIED_EVENT_2",
+  "CHUNK002_TEMPORAL_OOS_NOT_COMPLETED",
+  "DRIVE_WRITEBACK_NOT_PERFORMED_READ_ONLY_RECONCILIATION",
+  "FAST_DETACH_PYTHON_REGRESSION_UNAVAILABLE",
+  "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"
+]
 
 APPROVAL_REQUIRED=
-ChatGPT Reviewer must inspect this repair, the immutable EDP/EAP contract, denominator separation, preregistration-before-chunk002 evidence, descriptive 177-event audit, comparison gaps, and honest test failures. Do not merge, deploy, restart, promote, tune thresholds, change models, change Bark/order behavior, or invent EAP/cohort/OOS evidence. `READY_FOR_FINAL_AUDIT=false` remains required until every listed stop-gate item is actually evidenced.
+ChatGPT Reviewer must inspect the two immutable causal windows, the new regression, the exact canonical Drive resolution and pending manifest, the repository/Drive permission-source audit, and the isolated chunk002 generation DATA_BLOCKED evidence. Do not merge, deploy, restart, promote, tune thresholds, change model/Bark/order behavior, start a collector without a real permission source, or fabricate LIVE EAP/OOS evidence. `READY_FOR_FINAL_AUDIT=false` remains required.
 
 RECOMMENDED_NEXT_TASK=
-Reviewer-directed fix only: connect a real explicit immutable execution-permission observer and run the persistent shadow collector long enough to form 20–30 independent EAP_OBSERVED events with mature 6H outcomes; then produce a same-pipeline unified chunk002 temporal OOS artifact under a separately reviewed task. Do not self-invent a new research task or change the frozen rules.
+Reviewer-directed fix only. If approved, the next task must first establish a real read-only immutable execution-permission source and then separately authorize a CANDIDATE_EAP/SHADOW_EAP Hypothesis → OOS → Forward cycle. Do not self-invent a research task or set READY_FOR_FINAL_AUDIT=true.

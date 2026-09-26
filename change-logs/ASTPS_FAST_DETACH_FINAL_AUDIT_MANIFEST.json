@@ -8,7 +8,7 @@
   "branch": "codex/astps-fast-detach-handoff-20260926",
   "pull_request": "https://github.com/alex43github/trade-workbench/pull/15",
   "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
-  "repair_commit": "SECOND_FINAL_AUDIT_REPAIR_COMMIT_PENDING",
+  "repair_commit": "14b1376",
   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_frozen_unchanged": true,
