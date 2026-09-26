@@ -1,8 +1,8 @@
 {
   "attempt_version": "fast-detach-v2-unified-chunk002-generation-attempt-1",
   "task_id": "ASTPS_FAST_DETACH_PR15_THIRD_FINAL_AUDIT_REPAIR",
-  "attempted_at": "2026-09-26T16:24:20+08:00",
-  "timestamp_source": "git-commit-derived:b624779b82c092019bdc87509a9fc1a919e8f57e",
+  "attempted_at": "2026-09-26T16:45:19+08:00",
+  "timestamp_source": "artifact-commit-evidence:e36308f1079638dd1194f8a39e0fc574f760b051",
   "status": "DATA_BLOCKED",
   "data_blocked": true,
   "same_schema_required": "fast-detach-v2-unified-event-2",
@@ -92,6 +92,6 @@
     "raw_pe_insufficient_conclusion_preserved": true,
     "threshold_retuned": false,
     "prereg_modified": false,
-    "reason": "The frozen generator successfully rebuilt a task-001-shaped chunk002, but no frozen adapter or authorized runtime source materialization produces fast-detach-v2-unified-event-2. Converting or relabeling the output would violate the preregistered schema boundary. To retry, materialize the canonical metrics_5m_all_fixed.csv.gz plus the frozen Task-002B 5m path/barrier derivation inputs into an authorized runtime, verify SHA/schema, then rerun the unchanged Task-001/002B/003/004 pipeline before evaluating the frozen six hypotheses."
+    "reason": "The frozen generator successfully rebuilt a task-001-shaped chunk002, but no frozen adapter or authorized runtime source materialization produces fast-detach-v2-unified-event-2. Converting or relabeling the output would violate the preregistered schema boundary. The reproducible prerequisite is change-logs/CHUNK002_RETRY_MATERIALIZATION_MANIFEST.json; do not rerun or evaluate until its materialized byte-size/SHA locks exist."
   }
 }

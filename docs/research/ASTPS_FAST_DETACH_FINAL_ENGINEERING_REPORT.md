@@ -1,4 +1,4 @@
-# ASTPS FAST-DETACH — PR #15 FINAL AUDIT REPAIR ENGINEERING REPORT
+# ASTPS FAST-DETACH — PR #15 FOURTH FINAL AUDIT REPAIR ENGINEERING REPORT
 
 STATUS=CHANGES_REQUIRED_INCOMPLETE
 READY_FOR_FINAL_AUDIT=false
@@ -6,14 +6,16 @@ PROMOTION_DECISION=DO_NOT_PROMOTE
 BRANCH=codex/astps-fast-detach-handoff-20260926
 PR=https://github.com/alex43github/trade-workbench/pull/15
 BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
-CODE_REPAIR_COMMIT=f4793dfafd50ffd08f562893a106297522c85bb7
-AUDIT_EVIDENCE_SOURCE_COMMIT=b624779b82c092019bdc87509a9fc1a919e8f57e
+CODE_REPAIR_COMMIT=393ca3793e85f9c6c7db7e17a40634a71f70edd1
+CODE_REPAIR_COMMIT_TIMESTAMP=2026-09-26T17:10:47+08:00
+PRIOR_AUDIT_EVIDENCE_COMMIT=e36308f1079638dd1194f8a39e0fc574f760b051
+PRIOR_AUDIT_EVIDENCE_TIMESTAMP=2026-09-26T16:45:19+08:00
 HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 FORWARD_EPOCH_ID=epoch-20260924T185000
 
 ## Review disposition
 
-This revision addresses the latest PR #15 THIRD FINAL AUDIT CHANGES REQUIRED comments in the existing branch. It does not create a new research line. The EAP semantics and EDP price/time contract are repaired and regression-tested; the final audit stop gate remains false because the Production Final Action runtime lineage, external observer/cohort/collector, Drive writeback, and valid chunk002 OOS evidence do not exist.
+This revision addresses the latest PR #15 FOURTH FINAL AUDIT CHANGES REQUIRED comments in the existing branch. It does not create a new research line. The EDP identity pair is now bound to the original detector decision bar and regression-tested under delayed persistence; the final audit stop gate remains false.
 
 ## Implemented repairs
 
@@ -24,7 +26,7 @@ This revision addresses the latest PR #15 THIRD FINAL AUDIT CHANGES REQUIRED com
 5. `PRE_CHUNK002_PREREG.md/json` was committed before chunk002 access. The source was then hashed and audited; all six frozen Primary hypotheses are `INSUFFICIENT` because the source schema lacks every required unified-event field.
 6. `calculateEapSeparatedMetrics()` now uses two inclusive closed-bar windows: the immutable EDP timestamp starts the EDP window, and the immutable EAP timestamp starts the EAP window. The EDP MFE/MAE therefore includes EDP→EAP path movement, while EAP MFE/MAE excludes it; a large-pre-EAP/small-post-EAP regression proves the separation.
 7. Canonical Drive resolution now points to the exact `03_MODEL_REGISTRY` parent, `MODEL_REGISTRY.json`, and `CHANGELOG.md` IDs. The registry is present, not absent. Read-only writeback reconciliation is captured in the machine-readable pending manifest.
-8. `calculateEapSeparatedMetrics()` now uses an explicit immutable `execution_context.edp_price` captured from the latest available closed-bar EDP observation together with its close timestamp in `execution_context.edp_utc`; it never falls back to decision-bar `anchor_price`. New shadow snapshots freeze both fields, while `first_detected_at_utc` remains detector wall-clock metadata, and missing/invalid EDP price fails closed.
+8. `execution_context.edp_utc` and `edp_price` now come only from the original detector decision bar that defines event identity and causal feature boundary. A delayed-write regression supplies a later closed bar before persistence and proves it cannot alter either EDP field. `first_detected_at_utc` remains separate detector wall-clock metadata.
 
 ## Gate status
 
@@ -59,7 +61,8 @@ Frozen-at-EDP strata: timeframe `15m=62, 1h=98, 4h=17`; setup `PLATFORM_RECLAIM=
 - Repository and canonical-model audit found the Production Final Action vocabulary, but no runtime implementation that emits a permission status with immutable timestamp/source key/payload hash and joins it to Task-007 `event_id`. No production code was changed to manufacture one.
 - Existing Forward EAP audit remains `EAP_OBSERVED=0`, `EAP_CONFIRMED_ABSENT=0`, `EAP_NOT_OBSERVED=177`.
 - `chunk002` source was read only after prereg commit. The frozen generator was run once in an isolated `/tmp` root with `chunk_index=2`: it produced 50 rows with source SHA valid, zero duplicate IDs, and zero feature leakage, but the output schema is `fast-detach-v2-task-001`, not `fast-detach-v2-unified-event-2`. Canonical `metrics_5m_all_fixed.csv.gz` exists in ChatGPT File Library, but the VPS/Codex runtime did not materialize it or the frozen Task-002B path/barrier inputs; the exact runtime-only DATA_BLOCKED boundary is recorded in `CHUNK002_UNIFIED_GENERATION_ATTEMPT.json`.
-- Drive canonical reconciliation found `MODEL_CURRENT.md`, `WORKBENCH_SPEC.md`, `LIVE_CASES.jsonl`, `LIVE_OUTCOMES.jsonl`, the exact `MODEL_REGISTRY.json`, and `CHANGELOG.md` by stable IDs and revisions. No replacement or unsafe overwrite was made. The precise blocker is `NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER=true`, while `PRODUCTION_EXECUTION_PERMISSION_SEMANTICS_FOUND=true`.
+- Drive reconciliation uses the corrected canonical hierarchy: `00_CURRENT/RESEARCH_STATE.md`, `00_CURRENT/MODEL_CURRENT.md`, `01_LIVE/*`, `02_RESEARCH/*`, and `03_MODEL_REGISTRY/*`. Mandatory research files now have revision-guarded exact pending payloads; MODEL_CURRENT remains untouched.
+- The reproducible chunk002 prerequisite is `CHUNK002_RETRY_MATERIALIZATION_MANIFEST.json`, which locks File Library ID/bytes, exact VPS destination, generator/Task-002B/schema hashes, and the unchanged pipeline command before any future OOS evaluation.
 - Fast-Detach Python regression is unavailable in this checkout; it is reported as unavailable, never PASS.
 
 ## Verification

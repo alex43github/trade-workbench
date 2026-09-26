@@ -1,5 +1,5 @@
 {
-  "manifest_version": "astps-fast-detach-pr15-third-final-audit-repair-1",
+  "manifest_version": "astps-fast-detach-pr15-fourth-final-audit-repair-1",
   "status": "CHANGES_REQUIRED_PENDING_REVIEW",
   "ready_for_final_audit": false,
   "promotion_decision": "DO_NOT_PROMOTE",
@@ -8,9 +8,10 @@
   "branch": "codex/astps-fast-detach-handoff-20260926",
   "pull_request": "https://github.com/alex43github/trade-workbench/pull/15",
   "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
-  "repair_commit": "f4793dfafd50ffd08f562893a106297522c85bb7",
-  "prior_audit_evidence_commit": "b624779b82c092019bdc87509a9fc1a919e8f57e",
-  "audit_artifact_commit": "e36308f1079638dd1194f8a39e0fc574f760b051",
+  "repair_commit": "393ca3793e85f9c6c7db7e17a40634a71f70edd1",
+  "repair_commit_timestamp": "2026-09-26T17:10:47+08:00",
+  "prior_audit_evidence_commit": "e36308f1079638dd1194f8a39e0fc574f760b051",
+  "prior_audit_evidence_commit_timestamp": "2026-09-26T16:45:19+08:00",
   "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
   "historical_frozen_unchanged": true,
@@ -36,8 +37,8 @@
     "contract": "immutable snapshot.execution_context.edp_price captured at immutable EDP timestamp",
     "anchor_price_fallback": false,
     "missing_price_behavior": "FAIL_CLOSED",
-    "new_snapshot_capture": "TASK007C freezes the latest available closed-bar observation price and its close timestamp as edp_price/edp_utc in the immutable execution_context; first_detected_at_utc remains the detector wall-clock timestamp",
-    "focused_regression": "EDP excursion metrics use immutable EDP price and fail closed without it"
+    "new_snapshot_capture": "TASK007C freezes the exact detector decision bar close and price as edp_utc/edp_price; first_detected_at_utc remains separate detector wall-clock metadata",
+    "focused_regression": "Delayed queue persistence cannot move EDP time/price to a later closed bar"
   },
   "eap": {
     "real_observer_connected": false,
@@ -75,7 +76,7 @@
       "metrics_5m_master_file_id": "file_000000003094820699862210d518fffa",
       "metrics_5m_master_size_bytes": 242535083,
       "authorized_runtime_materialized": false,
-      "runtime_blocker": "VPS/Codex frozen generator reported 5m-history-v1 NOT_AVAILABLE; materialize the canonical source plus frozen Task-002B path/barrier inputs into authorized runtime before an unchanged rerun."
+      "runtime_blocker": "See change-logs/CHUNK002_RETRY_MATERIALIZATION_MANIFEST.json; byte size and materialized SHA-256 must be locked before an unchanged rerun."
     }
   },
   "drive": {
@@ -86,6 +87,7 @@
     "changelog_id": "10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV",
     "live_cases_id": "18oMIBSprBIAHO9-FY8WQzD907VM1XiU9",
     "live_outcomes_id": "1uiFwb0Si6NS8iYXjE3EV4T4Xj8VVa8Y4",
+    "model_current_path": "00_CURRENT/MODEL_CURRENT.md",
     "model_current_id": "1pC40sbP9oj82At8G6aBjZcGzY2BfTnaa",
     "workbench_spec_id": "1m6IbzlvUFrxTTW9vMP5wx4vW4nP6tqoY",
     "research_state_id": "1sNlS9V0Rmz_w_BkB7cQNMBCsHelhmIyc",
@@ -154,6 +156,7 @@
     "change-logs/CHUNK002_SOURCE_MANIFEST.json",
     "change-logs/CHUNK002_TEMPORAL_OOS_AUDIT.json",
     "change-logs/CHUNK002_UNIFIED_GENERATION_ATTEMPT.json",
+    "change-logs/CHUNK002_RETRY_MATERIALIZATION_MANIFEST.json",
     "change-logs/ASTPS_FAST_DETACH_PERMISSION_SOURCE_AUDIT.json",
     "change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json",
     "change-logs/PRE_CHUNK002_PREREG.md",

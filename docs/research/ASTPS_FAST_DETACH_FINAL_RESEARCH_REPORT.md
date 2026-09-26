@@ -18,6 +18,8 @@ Historical chunk001 SHA remains `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e5
 
 ## Canonical Drive resolution and writeback
 
+The canonical hierarchy is 00_CURRENT/*, 01_LIVE/*, 02_RESEARCH/*, and 03_MODEL_REGISTRY/*; the pending manifest now records revision-guarded APPEND/PATCH_PENDING payloads for mandatory research files while preserving 00_CURRENT/MODEL_CURRENT.md.
+
 The exact `03_MODEL_REGISTRY` parent is `1aMzihSBP5jbvjsKbmfBwauu7y_ZwMbKM`. `MODEL_CURRENT.md` is present at `1pC40sbP9oj82At8G6aBjZcGzY2BfTnaa`; `MODEL_REGISTRY.json` is present at `16ZHZ_gmeykpSrNoOlIGxFHqY7CxVPgzp`; `CHANGELOG.md` is present at `10Qsu7d9j155UT47WGwb0FFgJ3EmzzvEV`. `WORKBENCH_SPEC.md`, `RESEARCH_STATE.md`, `REGRESSION_RESULTS.md`, `CURRENT_CANDIDATE_MODEL.md`, and both `RESEARCH_QUEUE` files were also re-resolved by exact stable IDs and current revisions. Drive writeback was not performed; the exact per-file pending patch/append payloads and reasons are in [`DRIVE_PENDING_WRITEBACK_MANIFEST.json`](../../change-logs/DRIVE_PENDING_WRITEBACK_MANIFEST.json). No replacement file was created and no production registry was mutated.
 
 ## LIVE_FORWARD EDP-only outcomes

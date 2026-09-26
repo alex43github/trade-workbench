@@ -22,6 +22,7 @@ Do not promote any Fast-Detach rule, threshold, feature combination, EAP gate, o
 5. Drive paths were formally reconciled; the exact `MODEL_REGISTRY.json` and `CHANGELOG.md` are present at the canonical parent, but writeback was intentionally not performed. Exact pending payloads and revision guards are recorded in `DRIVE_PENDING_WRITEBACK_MANIFEST.json`.
 6. Repository-wide and canonical-model audit confirmed that Production Final Action semantics are documented, but found no auditable runtime lineage from those outputs to an immutable permission ledger: `PRODUCTION_EXECUTION_PERMISSION_SEMANTICS_FOUND=true`, `NO_AUDITABLE_RUNTIME_LINEAGE_FROM_PRODUCTION_FINAL_ACTION_TO_IMMUTABLE_PERMISSION_LEDGER=true`. Existing permission logic remains `CANDIDATE_EAP`/`SHADOW_EAP` only.
 7. No threshold/model/Bark/order change is authorized or present.
+8. The EDP identity contract is decision-bar bound, but persistent EAP collection remains prohibited until Production Final Action-to-immutable-permission-ledger lineage is evidenced.
 
 ## Required gates before reconsideration
 
