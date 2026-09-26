@@ -1,15 +1,19 @@
 # ASTPS FAST-DETACH — CODEX AUTONOMOUS STATUS
 
-TASK_ID=ASTPS_FAST_DETACH_PHASE1_007D_REPAIR
-PHASE=2/10
-STATUS=PASS_WITH_KNOWN_BASELINE_LIMITATIONS
+TASK_ID=ASTPS_FAST_DETACH_FINAL_AUDIT
+PHASE=10/10_FINAL_AUDIT
+STATUS=AUDIT_READY_DO_NOT_PROMOTE
+READY_FOR_FINAL_AUDIT=true
 PHASE1_007D_REVIEW_BASELINE=PASS
 STARTED_AT=2026-09-26T12:00:00+08:00
-FINISHED_AT=2026-09-26T13:05:00+08:00
+FINISHED_AT=2026-09-26T13:35:00+08:00
 BASE_BRANCH=origin/main
 BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
 BRANCH=codex/astps-fast-detach-handoff-20260926
 IMPLEMENTATION_COMMIT_SHA=6e0350e
+AUDIT_COMMITS=9d5f9e0,7c9caa7
+FINAL_ARTIFACTS_COMMIT=PENDING
+PROMOTION_DECISION=DO_NOT_PROMOTE
 PHASE2_PERSISTENCE_AUDIT=PASS
 PERSISTENT_FORWARD_EPOCH_READY=true
 PERSISTENT_COPY_SHA_MATCH=true
@@ -68,8 +72,18 @@ DEPLOYED=false
 - The immutable historical path was read once for SHA verification and returned `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
 - Production MainPID was read before/after the audit as `1412125` / `1412125`; no service operation was issued.
 
-The historical and live VPS ledgers were not opened or modified in this code-only phase. The SHA values above are the handoff immutable contract, not a newly read VPS file result.
+No VPS ledger was modified. Phase 2 read-only audit verified the historical SHA and persistent-copy manifest; no outcome, snapshot, or unified-view write occurred.
 
 ## Approval gate
 
-Phases 1–2 are complete and auditable. No merge, deployment, restart, promotion, threshold/model/Bark/order change, or `chunk_002` access occurred. The branch remains eligible for review before continuing to Phase 3.
+Phases 1–10 are documented for final audit. Phase 3 and Phase 7 remain explicitly blocked by the absent EAP source/zero EAP sample; Phase 8 was intentionally not started and `chunk_002` was not accessed. No merge, deployment, restart, promotion, threshold/model/Bark/order change, or historical evidence rewrite occurred.
+
+Final local artifacts:
+
+- `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md`
+- `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md`
+- `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md`
+- `docs/research/DRIVE_WRITEBACK_PENDING.md`
+- `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json`
+
+The final decision is `PROMOTION_DECISION=DO_NOT_PROMOTE`.

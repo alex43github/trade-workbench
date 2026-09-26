@@ -101,21 +101,37 @@ index 0000000..88b59f9
 +}
 diff --git a/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
 new file mode 100644
-index 0000000..566622c
+index 0000000..46d323f
 --- /dev/null
 +++ b/change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,89 @@
 +# ASTPS FAST-DETACH — CODEX AUTONOMOUS STATUS
 +
-+TASK_ID=ASTPS_FAST_DETACH_PHASE1_007D_REPAIR
-+PHASE=1/10
-+STATUS=PASS_WITH_KNOWN_BASELINE_LIMITATIONS
++TASK_ID=ASTPS_FAST_DETACH_FINAL_AUDIT
++PHASE=10/10_FINAL_AUDIT
++STATUS=AUDIT_READY_DO_NOT_PROMOTE
++READY_FOR_FINAL_AUDIT=true
 +PHASE1_007D_REVIEW_BASELINE=PASS
 +STARTED_AT=2026-09-26T12:00:00+08:00
-+FINISHED_AT=2026-09-26T12:50:00+08:00
++FINISHED_AT=2026-09-26T13:35:00+08:00
 +BASE_BRANCH=origin/main
 +BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
 +BRANCH=codex/astps-fast-detach-handoff-20260926
++IMPLEMENTATION_COMMIT_SHA=6e0350e
++AUDIT_COMMITS=9d5f9e0,7c9caa7
++FINAL_ARTIFACTS_COMMIT=PENDING
++PROMOTION_DECISION=DO_NOT_PROMOTE
++PHASE2_PERSISTENCE_AUDIT=PASS
++PERSISTENT_FORWARD_EPOCH_READY=true
++PERSISTENT_COPY_SHA_MATCH=true
++SOURCE_TMP_PRESERVED=true
++FORWARD_EPOCH_ID=epoch-20260924T185000
++PERSISTENT_SNAPSHOT_ROWS=177
++PERSISTENT_TRANSITION_ROWS=185
++PERSISTENT_OUTCOME_ROWS=1064
++PERSISTENT_UNIFIED_VIEW_ROWS=227
++PRODUCTION_PID_BEFORE=1412125
++PRODUCTION_PID_AFTER=1412125
 +
 +## Summary
 +
@@ -155,27 +171,151 @@ index 0000000..566622c
 +ORDER_PATH_CHANGED=false
 +DEPLOYED=false
 +
-+The historical and live VPS ledgers were not opened or modified in this code-only phase. The SHA values above are the handoff immutable contract, not a newly read VPS file result.
++## Phase 2 read-only VPS evidence
++
++- Persistent epoch file inventory contains the expected audit, manifest, snapshot, transition, outcome, and unified-view files under `/var/lib/trade-workbench/research/forward-shadow/epochs/epoch-20260924T185000/`.
++- `PERSISTENT_COPY_MANIFEST.json` reports matching source/destination SHA-256 values for the canonical seven copied ledger files, `source_preserved=true`, `event_count=177`, and `outcome_count=1064`.
++- Read-only `sha256sum` and row counts match the manifest: snapshot 177, transitions 185, outcomes 1064, unified view 227.
++- The immutable historical path was read once for SHA verification and returned `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
++- Production MainPID was read before/after the audit as `1412125` / `1412125`; no service operation was issued.
++
++No VPS ledger was modified. Phase 2 read-only audit verified the historical SHA and persistent-copy manifest; no outcome, snapshot, or unified-view write occurred.
 +
 +## Approval gate
 +
-+Phase 1 is complete and auditable. No merge, deployment, restart, promotion, threshold/model/Bark/order change, or `chunk_002` access occurred. The branch remains eligible for review before continuing to Phase 2.
++Phases 1–10 are documented for final audit. Phase 3 and Phase 7 remain explicitly blocked by the absent EAP source/zero EAP sample; Phase 8 was intentionally not started and `chunk_002` was not accessed. No merge, deployment, restart, promotion, threshold/model/Bark/order change, or historical evidence rewrite occurred.
++
++Final local artifacts:
++
++- `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md`
++- `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md`
++- `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md`
++- `docs/research/DRIVE_WRITEBACK_PENDING.md`
++- `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json`
++
++The final decision is `PROMOTION_DECISION=DO_NOT_PROMOTE`.
+diff --git a/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
+new file mode 100644
+index 0000000..2e241f3
+--- /dev/null
++++ b/change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
+@@ -0,0 +1,97 @@
++{
++  "manifest_version": "astps-fast-detach-final-audit-1",
++  "status": "AUDIT_READY_DO_NOT_PROMOTE",
++  "ready_for_final_audit": true,
++  "branch": "codex/astps-fast-detach-handoff-20260926",
++  "pull_request": "https://github.com/alex43github/trade-workbench/pull/15",
++  "base_commit": "b68c44d4fd3689e8e9909d53cbc137afa219122b",
++  "implementation_commit": "6e0350e",
++  "audit_commits": ["9d5f9e0", "7c9caa7"],
++  "historical_chunk001_sha_before": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
++  "historical_chunk001_sha_after": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
++  "historical_frozen_unchanged": true,
++  "forward_epoch_id": "epoch-20260924T185000",
++  "source_counts": {
++    "HISTORICAL_REPLAY": 50,
++    "LIVE_FORWARD": 177,
++    "UNIFIED_RESEARCH_VIEW": 227
++  },
++  "forward_epoch_rows": {
++    "snapshots": 177,
++    "transitions": 185,
++    "outcomes": 1064,
++    "outcome_6h_mature": 177,
++    "outcome_12h_mature": 177,
++    "outcome_24h_mature": 2,
++    "outcome_48h_mature": 0
++  },
++  "eap": {
++    "observer_connected": false,
++    "zero_root_cause": "OBSERVER_NOT_CONNECTED",
++    "observed": 0,
++    "confirmed_absent": 0,
++    "not_observed": 177,
++    "sample_quality_6h": "LOW_SAMPLE",
++    "historical_replay_eap_backfilled": 0
++  },
++  "data_invariants": {
++    "FEATURE_LEAKAGE_COUNT": 0,
++    "DUPLICATE_EVENT_IDS": 0,
++    "DUPLICATE_OUTCOME_KEYS": 0,
++    "SNAPSHOT_MUTATION_COUNT": 0,
++    "OUTCOME_MUTATION_COUNT": 0
++  },
++  "production_side_effects": {
++    "CHUNK002_ACCESSED": false,
++    "PRODUCTION_MODEL_CHANGED": false,
++    "PRODUCTION_CODE_CHANGED": false,
++    "PRODUCTION_SERVICE_RESTARTED": false,
++    "DEPLOYED": false,
++    "MERGED": false,
++    "PRODUCTION_MAIN_PID_BEFORE": "1412125",
++    "PRODUCTION_MAIN_PID_AFTER": "1412125"
++  },
++  "tests": {
++    "focused_task007_total": 35,
++    "focused_task007_pass": 35,
++    "focused_task007_fail": 0,
++    "radar_total": 88,
++    "radar_pass": 87,
++    "radar_fail": 0,
++    "radar_environment_skip": 1,
++    "repository_build": "PASS",
++    "repository_full_suite": "1092 total / 984 pass / 107 fail / 1 skip",
++    "typecheck": "FAIL on pre-existing app/lib errors; no TASK-007 errors",
++    "fast_detach_python_regression": "NOT_AVAILABLE"
++  },
++  "drive": {
++    "canonical_read": true,
++    "writeback": "PENDING",
++    "unresolved_canonical_files": ["MODEL_REGISTRY.json", "LIVE_CASES.jsonl", "LIVE_OUTCOMES.jsonl"]
++  },
++  "promotion": {
++    "PROMOTION_DECISION": "DO_NOT_PROMOTE",
++    "PROMOTION_CANDIDATE": false,
++    "THRESHOLD_CHANGED": false,
++    "MODEL_CHANGED": false,
++    "BARK_CHANGED": false,
++    "ORDER_PATH_CHANGED": false
++  },
++  "blockers": [
++    "OBSERVER_NOT_CONNECTED",
++    "EAP_LOW_SAMPLE",
++    "CHUNK002_NOT_ACCESSED_PENDING_PREREGISTRATION_GATE",
++    "DRIVE_WRITEBACK_PENDING",
++    "FAST_DETACH_PYTHON_REGRESSION_NOT_AVAILABLE",
++    "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"
++  ],
++  "artifacts": [
++    "docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md",
++    "docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md",
++    "docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md",
++    "docs/research/DRIVE_WRITEBACK_PENDING.md",
++    "change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json",
++    "change-logs/CODEX_REVIEW_PACKET_LATEST.md",
++    "change-logs/CODEX_REVIEW_PACKET_LATEST.patch"
++  ]
++}
 diff --git a/change-logs/CODEX_REVIEW_PACKET_LATEST.md b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
 new file mode 100644
-index 0000000..37229b2
+index 0000000..8d9b55b
 --- /dev/null
 +++ b/change-logs/CODEX_REVIEW_PACKET_LATEST.md
-@@ -0,0 +1,87 @@
-+# CODEX REVIEW PACKET — ASTPS FAST-DETACH PHASE 1
+@@ -0,0 +1,100 @@
++# CODEX REVIEW PACKET — ASTPS FAST-DETACH FINAL AUDIT
 +
-+TASK_ID=ASTPS_FAST_DETACH_PHASE1_007D_REPAIR
-+STATUS=PASS_WITH_KNOWN_BASELINE_LIMITATIONS
++TASK_ID=ASTPS_FAST_DETACH_FINAL_AUDIT
++STATUS=AUDIT_READY_DO_NOT_PROMOTE
++READY_FOR_FINAL_AUDIT=true
 +STARTED_AT=2026-09-26T12:00:00+08:00
-+FINISHED_AT=2026-09-26T12:50:00+08:00
-+COMMIT_SHA=IMPLEMENTATION_COMMIT_PENDING
++FINISHED_AT=2026-09-26T13:35:00+08:00
++COMMIT_SHA=6e0350e
++AUDIT_COMMITS=9d5f9e0,7c9caa7
++FINAL_AUDIT_MANIFEST=change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
 +
 +SUMMARY=
-+Rebuilt the existing TASK-007/007B/007C/007D research/shadow surface on the real `origin/main` commit `b68c44d4fd3689e8e9909d53cbc137afa219122b`. Fixed later-bar EAP causal validation and replaced the hard-coded EAP 6H denominator with an observed-event-id plus mature-outcome calculation. No production behavior or historical/live evidence was changed.
++Completed the ASTPS FAST-DETACH handoff audit on the real `origin/main` commit `b68c44d4fd3689e8e9909d53cbc137afa219122b`: repaired later-bar EAP causality, made EAP 6H denominators dynamic, reverified the persistent VPS Forward epoch, and produced final engineering/research/promotion reports. The final recommendation is `DO_NOT_PROMOTE`; no production behavior or historical/live evidence was changed.
 +
 +CHANGED_FILES=
 +Every file below is in the isolated ASTPS research branch. Imported baseline files are included to make the prior 007D implementation reviewable from real ancestry; only the files marked “modified” contain Phase 1 behavior changes.
@@ -207,6 +347,11 @@ index 0000000..37229b2
 +| `change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md` | Phase status, verification, invariant, and boundary record. | None. | None. |
 +| `change-logs/CODEX_REVIEW_PACKET_LATEST.md` | This auditable handoff packet. | None. | None. |
 +| `change-logs/CODEX_REVIEW_PACKET_LATEST.patch` | Full pre-commit `git diff` snapshot generated for reviewer inspection. | None. | None. |
++| `docs/research/DRIVE_WRITEBACK_PENDING.md` | Records canonical Drive reads and pending writeback without claiming synchronization. | None. | None. |
++| `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md` | Final implementation, phase, test, invariant, and production-boundary report. | None. | None. |
++| `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md` | Final descriptive research interpretation with historical/live separation. | None. | None. |
++| `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md` | Explicit no-promotion decision and gates for future review. | Explicitly no production change. | Explicitly no threshold/model/Bark/order change. |
++| `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json` | Machine-readable final audit manifest and blockers. | None. | None. |
 +
 +TEST_RESULTS=
 +- `node --test tests/fast-detach-task-007.test.mjs tests/fast-detach-task-007b.test.mjs tests/fast-detach-task-007c.test.mjs tests/fast-detach-task-007d.test.mjs`: PASS, 35/35.
@@ -216,6 +361,10 @@ index 0000000..37229b2
 +- Fast-Detach Python regression: NOT AVAILABLE in this branch.
 +- `git diff --check`: PASS.
 +- `git status --short --untracked-files=all`: only the files listed above are present.
++- Phase 2 VPS persistence audit: PASS. Forward epoch `epoch-20260924T185000` has 177 snapshots, 185 transitions, 1064 outcomes, and 227 unified-view rows; manifest and copied-file SHA-256 values match and `source_preserved=true`.
++- Phase 2 historical SHA: `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
++- Phase 2 service PID readback: `1412125` before and after; no service operation was issued.
++- Final artifact audit: engineering report, research report, promotion recommendation, Drive writeback marker, and JSON manifest are present locally and state `READY_FOR_FINAL_AUDIT=true`.
 +
 +DATA_INVARIANTS=
 +FEATURE_LEAKAGE_COUNT=0
@@ -226,7 +375,7 @@ index 0000000..37229b2
 +HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 +HISTORICAL_FROZEN_UNCHANGED=true
-+These are focused fixture/contract results; no VPS historical or live ledger was opened in this code-only phase.
++These invariants were verified by the focused fixtures/contracts and the Phase 2 read-only VPS audit; no VPS ledger was modified.
 +
 +PRODUCTION_SIDE_EFFECTS=
 +CHUNK002_ACCESSED=false
@@ -243,16 +392,17 @@ index 0000000..37229b2
 +- The canonical Drive search did not resolve `MODEL_REGISTRY.json`, `LIVE_CASES.jsonl`, or `LIVE_OUTCOMES.jsonl`; no replacement truth was invented.
 +- No Fast-Detach Python regression suite exists in the checked-out branch.
 +- Repository-wide pre-existing tests and typecheck errors remain; they are outside this research-only change and must not be silently attributed to Phase 1.
-+- This phase did not connect a production EAP observer or run VPS validation.
++- No immutable production EAP observer source exists in the current scanner path; this is an external blocker, not a permission to infer EAP.
++- The initial push attempt timed out, but the HTTP/1.1 retry succeeded and the branch is published at PR #15.
 +
 +BLOCKERS=
-+[]
++["OBSERVER_NOT_CONNECTED", "EAP_LOW_SAMPLE", "CHUNK002_NOT_ACCESSED_PENDING_PREREGISTRATION_GATE", "DRIVE_WRITEBACK_PENDING", "FAST_DETACH_PYTHON_REGRESSION_NOT_AVAILABLE", "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"]
 +
 +APPROVAL_REQUIRED=
 +Review Phase 1 ancestry, later-bar causal contract, dynamic EAP denominator, and the known baseline test/typecheck failures before treating this phase as accepted. Do not merge, deploy, restart, promote, or access `chunk_002`.
 +
 +RECOMMENDED_NEXT_TASK=
-+After review approval, continue to PHASE 2: reverify the persistent Forward Epoch copy and its byte/SHA invariants, still in shadow/research scope.
++Next authorized task: connect only a real explicit EAP observer source; preserve `EAP_NOT_OBSERVED` for all historical events, collect prospective cases, and do not backfill EAP or access `chunk_002` until preregistration is frozen.
 diff --git a/change-logs/REQ-20260925-fast-detach-v2-task-007d.md b/change-logs/REQ-20260925-fast-detach-v2-task-007d.md
 new file mode 100644
 index 0000000..fa51dc0
@@ -348,6 +498,209 @@ index 0000000..fa51dc0
 +## Stop gate
 +
 +未启动新的长跑 collector，未安装 systemd/cron，未修复 Production observability writeback，未修改 `/opt`、Bark、order chain、threshold 或 model。TASK-007E 需要另行授权，至少涉及 `services/structure-radar/main.ts` 的 event identity adapter、candidate/notification/score/outcome writer 以及对应 Sheet/ledger sink；长跑 collector 需要另行授权其目标目录、运行时长和是否允许接入真实 permission source。
+diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
+new file mode 100644
+index 0000000..94638a6
+--- /dev/null
++++ b/docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md
+@@ -0,0 +1,88 @@
++# ASTPS FAST-DETACH — FINAL ENGINEERING REPORT
++
++STATUS=AUDIT_READY_DO_NOT_PROMOTE
++READY_FOR_FINAL_AUDIT=true
++BRANCH=codex/astps-fast-detach-handoff-20260926
++PR=https://github.com/alex43github/trade-workbench/pull/15
++BASE_COMMIT=b68c44d4fd3689e8e9909d53cbc137afa219122b
++IMPLEMENTATION_COMMIT=6e0350e
++AUDIT_COMMITS=9d5f9e0,7c9caa7
++HISTORICAL_CHUNK001_SHA=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
++FORWARD_EPOCH_ID=epoch-20260924T185000
++
++## Scope
++
++This branch is a research/shadow implementation based on the real `origin/main` ancestry. It imports the existing TASK-007/007B/007C/007D surface and applies the Phase 1 handoff repairs:
++
++1. EAP decision-bar validation is ordered: `EDP_bar <= EAP_bar <= EAP_time`.
++2. Causal EAP evidence cannot exceed the selected EAP decision-bar boundary.
++3. EAP 6H sample quality is derived from observed immutable EAP event IDs plus mature 6H outcomes; discovery and EAP denominators remain independent.
++4. The collector passes observed `EAP_GRANTED` transition IDs into both research-summary consumers without mutating snapshots.
++
++No production scanner, model, threshold, Bark path, order path, deployment, service restart, historical file, snapshot, `first_detected_at`, `event_id`, or `chunk_002` was changed or accessed by the code changes.
++
++## Phase audit disposition
++
++| Phase | Result | Evidence / limitation |
++|---|---|---|
++| 1 — 007D repair | PASS | 35 focused tests; later-bar, earlier-bar, future-evidence, and dynamic-denominator tests are green. |
++| 2 — persistent epoch | PASS | VPS read-only manifest/SHA/row-count audit; source preserved. |
++| 3 — real EAP observer | BLOCKED_BY_EXTERNAL_SOURCE | VPS reports `EAP_OBSERVER_CONNECTED=false`; no explicit permission source exists in the scanner path. All 177 historical Forward rows remain `EAP_NOT_OBSERVED`. |
++| 4 — production observability | PASS_WITH_GAP | Existing gap manifest and immutable status audit confirm the missing source; no decision behavior was altered. |
++| 5 — persistent shadow collector | READY_NOT_STARTED | Shadow collector and EAP observer injection are implemented and persistence is verified; no formal long-running collector was started in this audit. |
++| 6 — EDP-only audit | PASS | 50 historical and 177 live rows remain source-separated; EDP-only summary is descriptive. |
++| 7 — EDP→EAP capital efficiency | BLOCKED_LOW_SAMPLE | Prospective EAP observed N=0; no EAP conclusion is valid. |
++| 8 — chunk002 temporal OOS | NOT_ACCESSED_BY_DESIGN | No `chunk_002` access was authorized/performed; preregistration and source separation remain prerequisites. |
++| 9 — denominators | PASS | Historical and live denominators are kept separate; EAP is not inserted into historical OOS. |
++| 10 — live growth log | BASELINE_ONLY | No new collector run was used to claim growth; the verified epoch baseline remains 177 live events. |
++
++## VPS persistent epoch evidence
++
++Read-only VPS evidence for `/var/lib/trade-workbench/research/forward-shadow/epochs/epoch-20260924T185000/`:
++
++- `LIVE_EVENT_SNAPSHOT.jsonl`: 177 rows.
++- `LIVE_EVENT_TRANSITION.jsonl`: 185 rows.
++- `LIVE_EVENT_OUTCOME.jsonl`: 1064 rows.
++- `UNIFIED_RESEARCH_VIEW.jsonl`: 227 rows.
++- `PERSISTENT_COPY_MANIFEST.json`: source/destination file hashes match and `source_preserved=true`.
++- Historical `chunk_001_unified.jsonl` SHA before/after: `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
++- Production service MainPID read-only check: `1412125` before and after.
++
++The pre-existing remote validation reports `TASK007D_VALID=true`, `FEATURE_LEAKAGE_COUNT=0`, `DUPLICATE_EVENT_IDS=0`, `DUPLICATE_OUTCOME_KEYS=0`, `SNAPSHOT_MUTATION_COUNT=0`, and `OUTCOME_MUTATION_COUNT=0`.
++
++## Verification
++
++- Focused TASK-007/007B/007C/007D: 35 passed, 0 failed, 0 skipped.
++- Radar regression: 88 total, 87 passed, 0 failed, 1 loopback-listener environment skip.
++- Repository build: passed.
++- Repository-wide `npm test`: 1092 total, 984 passed, 107 failed, 1 skipped. The failures are existing live-exchange/Bybit/trade/UI suites outside this research-only scope.
++- Typecheck: existing errors remain in `app/`, `lib/radar/`, `lib/telegram/`, and `lib/trade/`; no TASK-007/007B/007C/007D errors remain.
++- `git diff --check`: passed.
++
++## Invariants
++
++FEATURE_LEAKAGE_COUNT=0
++DUPLICATE_EVENT_IDS=0
++DUPLICATE_OUTCOME_KEYS=0
++SNAPSHOT_MUTATION_COUNT=0
++OUTCOME_MUTATION_COUNT=0
++HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
++HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
++HISTORICAL_FROZEN_UNCHANGED=true
++CHUNK002_ACCESSED=false
++PRODUCTION_MODEL_CHANGED=false
++PRODUCTION_CODE_CHANGED=false
++PRODUCTION_SERVICE_RESTARTED=false
++DEPLOYED=false
++MERGED=false
++
++## Known blockers
++
++- No immutable execution-permission decision source is connected to the production scanner event path; `EAP_OBSERVED=0`, `EAP_CONFIRMED_ABSENT=0`, `EAP_NOT_OBSERVED=177`.
++- EAP sample quality is `LOW_SAMPLE`; no EDP→EAP efficiency or promotion conclusion is allowed.
++- Google Drive writeback remains pending; the canonical files were read but not overwritten, and unresolved canonical artifacts were not fabricated.
++- The Fast-Detach Python regression suite is not present in the checked-out repository.
++
++## Next authorized work
++
++Connect a real explicit permission observer in a separately reviewed task, keep historical rows `EAP_NOT_OBSERVED`, collect at least 20–30 independent prospective EAP cases with mature outcomes, then freeze preregistration before any authorized `chunk_002` temporal OOS work. Do not change Production from this report.
+diff --git a/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md b/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
+new file mode 100644
+index 0000000..95bb459
+--- /dev/null
++++ b/docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md
+@@ -0,0 +1,41 @@
++# ASTPS FAST-DETACH — FINAL RESEARCH REPORT
++
++STATUS=DESCRIPTIVE_AUDIT_ONLY
++READY_FOR_FINAL_AUDIT=true
++
++## Canonical model context
++
++The canonical Drive state read before the audit identifies the active production research/model state as `ASTPS V3-LR / Monster Squeeze V1.1-LR`. It explicitly keeps Price Structure as a research/context layer, rejects universal execution shortcuts, and does not authorize a numeric threshold or model promotion from the available evidence.
++
++## Frozen source-separated baseline
++
++| Source | Events | Role |
++|---|---:|---|
++| `HISTORICAL_REPLAY` | 50 | Frozen historical research denominator. |
++| `LIVE_FORWARD` | 177 | Existing Forward Epoch discovery records. |
++| Unified Research View | 227 | 50 historical + 177 live, without outcome rows becoming events. |
++
++The historical `chunk_001` SHA is unchanged at `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
++
++## Outcome maturity
++
++The verified Forward shadow epoch contains 1064 append-only outcome rows:
++
++- 6H mature: 177.
++- 12H mature: 177.
++- 24H mature: 2.
++- 48H mature: 0.
++
++These are EDP-only descriptive outcomes. They are not historical OOS evidence, do not change the event denominator, and do not imply an execution entry.
++
++## EAP evidence boundary
++
++The immutable EAP audit contains 177 rows, all classified `EAP_NOT_OBSERVED` because the permission observer is not connected. There are no valid live EAP observations and no confirmed-absent decisions. `PLATFORM_RECLAIM`, scanner state, score, Bark, consultation, and execution plan are not treated as EAP.
++
++The local Phase 1 implementation now accepts a later closed EAP decision bar only when it is no earlier than EDP and no later than EAP time. It rejects earlier bars and causal evidence beyond the EAP decision-bar boundary. It derives EAP 6H maturity only from explicit observed event IDs with mature 6H outcomes.
++
++## Research conclusion
++
++The current data supports an auditable EDP discovery/outcome pipeline and validates the immutable shadow protocol. It does not support an EAP-conditioned research conclusion because observed EAP N=0. Any return/MFE/MAE result from the 177 Forward events must remain in the EDP descriptive layer.
++
++`chunk_002` temporal OOS was intentionally not accessed. No new OOS denominator, threshold, window, metric, feature combination, or sample-inclusion rule was created from this audit.
+diff --git a/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md b/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md
+new file mode 100644
+index 0000000..229635a
+--- /dev/null
++++ b/docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md
+@@ -0,0 +1,30 @@
++# ASTPS FAST-DETACH — PROMOTION RECOMMENDATION
++
++PROMOTION_DECISION=DO_NOT_PROMOTE
++PROMOTION_CANDIDATE=false
++PRODUCTION_CHANGE=false
++THRESHOLD_CHANGE=false
++MODEL_CHANGE=false
++BARK_CHANGE=false
++ORDER_PATH_CHANGE=false
++READY_FOR_FINAL_AUDIT=true
++
++## Decision
++
++Do not promote any Fast-Detach rule, threshold, feature combination, EAP gate, or execution behavior into Production.
++
++## Reasons
++
++1. The live permission observer is not connected. All 177 existing live events are correctly `EAP_NOT_OBSERVED`, not `EAP_CONFIRMED_ABSENT` and not retroactive `REPLAY_EAP`.
++2. EAP sample quality is `LOW_SAMPLE` with observed EAP N=0. EDP-only outcomes cannot be substituted for EAP-conditioned evidence.
++3. `chunk_002` was not accessed. No temporal OOS result exists for this audit.
++4. The existing Drive research state rejects automatic execution shortcuts and contains no authorization for a numeric threshold promotion.
++5. The immutable snapshot, event identity, historical SHA, append-only outcome, and source-separation invariants are the acceptance boundary, not a promotion signal.
++
++## Required gates before reconsideration
++
++- Connect a real, explicit, immutable permission observer keyed by `event_id`; preserve the no-source classification for all prior events.
++- Collect at least 20–30 independent prospective EAP cases with mature closed-bar outcomes and no snapshot backfill.
++- Freeze preregistration before any temporal OOS evaluation; only then authorize a separate `chunk_002` task.
++- Keep historical replay and live-forward denominators separate and rerun all invariant audits.
++- Obtain an explicit review approval before any production wiring, threshold change, Bark behavior, or order-path action.
+diff --git a/docs/research/DRIVE_WRITEBACK_PENDING.md b/docs/research/DRIVE_WRITEBACK_PENDING.md
+new file mode 100644
+index 0000000..3e3c15d
+--- /dev/null
++++ b/docs/research/DRIVE_WRITEBACK_PENDING.md
+@@ -0,0 +1,20 @@
++# ASTPS FAST-DETACH — DRIVE WRITEBACK PENDING
++
++STATUS=DRIVE_WRITEBACK_PENDING
++READ_AT=2026-09-26T13:05:00+08:00
++
++The canonical Google Drive research files were read before PHASE 1 and PHASE 2. No canonical Drive document was overwritten from this branch, and no local report is claimed to be a Drive-synchronized source of truth.
++
++Read canonical records included:
++
++- `RESEARCH_STATE.md`
++- `WORKBENCH_SPEC.md`
++- `LIVE_GROWTH_LOG.md`
++- `LIVE_HYPOTHESES.md`
++- `CURRENT_CANDIDATE_MODEL.md`
++- `REGRESSION_RESULTS.md`
++- `REJECTED_RULES.md`
++- `RESEARCH_QUEUE.md`
++- `DATA_REGISTRY.md`
++
++The prior canonical search did not resolve `MODEL_REGISTRY.json`, `LIVE_CASES.jsonl`, or `LIVE_OUTCOMES.jsonl`. No replacement files or fabricated Drive IDs were created. A future authorized Drive writeback must update existing canonical records by stable ID and preserve the immutable snapshot/event/outcome boundaries.
 diff --git a/docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md b/docs/superpowers/plans/2026-09-26-astps-fast-detach-phase1-007d-repair.md
 new file mode 100644
 index 0000000..7c0e4e5

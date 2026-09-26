@@ -1,13 +1,16 @@
-# CODEX REVIEW PACKET — ASTPS FAST-DETACH PHASES 1–2
+# CODEX REVIEW PACKET — ASTPS FAST-DETACH FINAL AUDIT
 
-TASK_ID=ASTPS_FAST_DETACH_PHASE2_PERSISTENT_EPOCH_AUDIT
-STATUS=PASS_WITH_KNOWN_BASELINE_LIMITATIONS
+TASK_ID=ASTPS_FAST_DETACH_FINAL_AUDIT
+STATUS=AUDIT_READY_DO_NOT_PROMOTE
+READY_FOR_FINAL_AUDIT=true
 STARTED_AT=2026-09-26T12:00:00+08:00
-FINISHED_AT=2026-09-26T13:05:00+08:00
+FINISHED_AT=2026-09-26T13:35:00+08:00
 COMMIT_SHA=6e0350e
+AUDIT_COMMITS=9d5f9e0,7c9caa7
+FINAL_AUDIT_MANIFEST=change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json
 
 SUMMARY=
-Rebuilt the existing TASK-007/007B/007C/007D research/shadow surface on the real `origin/main` commit `b68c44d4fd3689e8e9909d53cbc137afa219122b`, fixed later-bar EAP causal validation, replaced the hard-coded EAP 6H denominator, and completed the Phase 2 read-only VPS persistence audit. No production behavior or historical/live evidence was changed.
+Completed the ASTPS FAST-DETACH handoff audit on the real `origin/main` commit `b68c44d4fd3689e8e9909d53cbc137afa219122b`: repaired later-bar EAP causality, made EAP 6H denominators dynamic, reverified the persistent VPS Forward epoch, and produced final engineering/research/promotion reports. The final recommendation is `DO_NOT_PROMOTE`; no production behavior or historical/live evidence was changed.
 
 CHANGED_FILES=
 Every file below is in the isolated ASTPS research branch. Imported baseline files are included to make the prior 007D implementation reviewable from real ancestry; only the files marked “modified” contain Phase 1 behavior changes.
@@ -39,6 +42,11 @@ Every file below is in the isolated ASTPS research branch. Imported baseline fil
 | `change-logs/ASTPS_CODEX_AUTONOMOUS_STATUS.md` | Phase status, verification, invariant, and boundary record. | None. | None. |
 | `change-logs/CODEX_REVIEW_PACKET_LATEST.md` | This auditable handoff packet. | None. | None. |
 | `change-logs/CODEX_REVIEW_PACKET_LATEST.patch` | Full pre-commit `git diff` snapshot generated for reviewer inspection. | None. | None. |
+| `docs/research/DRIVE_WRITEBACK_PENDING.md` | Records canonical Drive reads and pending writeback without claiming synchronization. | None. | None. |
+| `docs/research/ASTPS_FAST_DETACH_FINAL_ENGINEERING_REPORT.md` | Final implementation, phase, test, invariant, and production-boundary report. | None. | None. |
+| `docs/research/ASTPS_FAST_DETACH_FINAL_RESEARCH_REPORT.md` | Final descriptive research interpretation with historical/live separation. | None. | None. |
+| `docs/research/ASTPS_FAST_DETACH_PROMOTION_RECOMMENDATION.md` | Explicit no-promotion decision and gates for future review. | Explicitly no production change. | Explicitly no threshold/model/Bark/order change. |
+| `change-logs/ASTPS_FAST_DETACH_FINAL_AUDIT_MANIFEST.json` | Machine-readable final audit manifest and blockers. | None. | None. |
 
 TEST_RESULTS=
 - `node --test tests/fast-detach-task-007.test.mjs tests/fast-detach-task-007b.test.mjs tests/fast-detach-task-007c.test.mjs tests/fast-detach-task-007d.test.mjs`: PASS, 35/35.
@@ -51,6 +59,7 @@ TEST_RESULTS=
 - Phase 2 VPS persistence audit: PASS. Forward epoch `epoch-20260924T185000` has 177 snapshots, 185 transitions, 1064 outcomes, and 227 unified-view rows; manifest and copied-file SHA-256 values match and `source_preserved=true`.
 - Phase 2 historical SHA: `de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e`.
 - Phase 2 service PID readback: `1412125` before and after; no service operation was issued.
+- Final artifact audit: engineering report, research report, promotion recommendation, Drive writeback marker, and JSON manifest are present locally and state `READY_FOR_FINAL_AUDIT=true`.
 
 DATA_INVARIANTS=
 FEATURE_LEAKAGE_COUNT=0
@@ -61,7 +70,7 @@ OUTCOME_MUTATION_COUNT=0
 HISTORICAL_SHA_BEFORE=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_SHA_AFTER=de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e
 HISTORICAL_FROZEN_UNCHANGED=true
-These are focused fixture/contract results; no VPS historical or live ledger was opened in this code-only phase.
+These invariants were verified by the focused fixtures/contracts and the Phase 2 read-only VPS audit; no VPS ledger was modified.
 
 PRODUCTION_SIDE_EFFECTS=
 CHUNK002_ACCESSED=false
@@ -78,14 +87,14 @@ KNOWN_LIMITATIONS=
 - The canonical Drive search did not resolve `MODEL_REGISTRY.json`, `LIVE_CASES.jsonl`, or `LIVE_OUTCOMES.jsonl`; no replacement truth was invented.
 - No Fast-Detach Python regression suite exists in the checked-out branch.
 - Repository-wide pre-existing tests and typecheck errors remain; they are outside this research-only change and must not be silently attributed to Phase 1.
-- This phase did not connect a production EAP observer or run VPS validation.
-- The branch push was attempted but the GitHub connection did not produce a response within the bounded wait; local commits remain intact and no force push was attempted.
+- No immutable production EAP observer source exists in the current scanner path; this is an external blocker, not a permission to infer EAP.
+- The initial push attempt timed out, but the HTTP/1.1 retry succeeded and the branch is published at PR #15.
 
 BLOCKERS=
-["GITHUB_PUSH_UNCONFIRMED_NETWORK_TIMEOUT"]
+["OBSERVER_NOT_CONNECTED", "EAP_LOW_SAMPLE", "CHUNK002_NOT_ACCESSED_PENDING_PREREGISTRATION_GATE", "DRIVE_WRITEBACK_PENDING", "FAST_DETACH_PYTHON_REGRESSION_NOT_AVAILABLE", "REPOSITORY_BASELINE_TEST_AND_TYPECHECK_FAILURES_OUTSIDE_SCOPE"]
 
 APPROVAL_REQUIRED=
 Review Phase 1 ancestry, later-bar causal contract, dynamic EAP denominator, and the known baseline test/typecheck failures before treating this phase as accepted. Do not merge, deploy, restart, promote, or access `chunk_002`.
 
 RECOMMENDED_NEXT_TASK=
-After the branch push is confirmed, continue to PHASE 3: connect only a real explicit EAP observer source; preserve `EAP_NOT_OBSERVED` for all historical events and do not backfill EAP.
+Next authorized task: connect only a real explicit EAP observer source; preserve `EAP_NOT_OBSERVED` for all historical events, collect prospective cases, and do not backfill EAP or access `chunk_002` until preregistration is frozen.
