@@ -20,11 +20,13 @@ import { FocusMonitor } from "./focus-monitor.ts";
 import { FocusFiveMinuteCache, buildFocusFiveMinuteBatches, fetchClosedFiveMinuteKlines, parseClosedFiveMinuteKlineEvent } from "./focus-five-minute.ts";
 import { refreshFocusPool } from "./focus-refresh.ts";
 import { fetchManualWatchlistSymbols } from "./focus-watchlist-client.ts";
+import { ReignitionForwardTracker } from "./reignition-forward-tracker.ts";
 
 const config = loadRadarConfig();
 const cache = new BarCache({ maxBars: 240 });
 const focusFiveMinuteCache = new FocusFiveMinuteCache({ maxBars: 240 });
 const repository = new RadarRepository(config.dataDirectory);
+const reignitionForward = new ReignitionForwardTracker(config.dataDirectory);
 const barkConfig = await loadBarkConfig();
 const bark = new BarkClient({
   enabled: barkConfig.enabled,
@@ -189,6 +191,14 @@ async function scanSqueeze(symbol: string) {
   const bars4h = cache.get(symbol, "4h");
   const bars15m = cache.get(symbol, "15m");
   if (bars1h.length < 7 || bars4h.length < 5 || bars15m.length < 5) return { checked: 1, deepValidated: 0, dataSourceDegraded: 1 };
+  try {
+    const outcomeResult = await reignitionForward.backfillSymbol(symbol, bars1h);
+    if (outcomeResult.inserted > 0) {
+      process.stdout.write(`REIGNITION_OUTCOMES_INSERTED=${symbol}:${outcomeResult.inserted}\n`);
+    }
+  } catch (error) {
+    process.stderr.write(`REIGNITION_OUTCOME_BACKFILL_FAILED=${symbol}:${error instanceof Error ? error.message : String(error)}\n`);
+  }
   const derivatives = await fetchSqueezeDerivatives(symbol);
   const previous = storedSqueeze(await repository.getSqueeze(`squeeze:${symbol.toUpperCase()}`), symbol);
   const snapshot = {
@@ -214,7 +224,23 @@ async function scanSqueeze(symbol: string) {
   lastSqueezeCycle = { checked: 1, deepValidated: derivatives ? 1 : 0, dataSourceDegraded: derivatives ? 0 : 1 };
   if (result.transitioned) {
     const message = buildSqueezeBarkMessage(result.state, snapshot);
-    if (message) await bark.sendOnce(message);
+    if (message) {
+      const delivery = await bark.sendOnce(message);
+      if (result.state.stage === "REIGNITION_READY" && delivery.status === "delivered") {
+        try {
+          const tracked = await reignitionForward.recordDeliveredAlert({
+            state: result.state,
+            bars1h,
+            deliveryStatus: delivery.status,
+          });
+          if (tracked.status === "recorded") {
+            process.stdout.write(`REIGNITION_ALERT_RECORDED=${tracked.alert.alertId}\n`);
+          }
+        } catch (error) {
+          process.stderr.write(`REIGNITION_ALERT_RECORD_FAILED=${symbol}:${error instanceof Error ? error.message : String(error)}\n`);
+        }
+      }
+    }
   }
   return lastSqueezeCycle;
 }
