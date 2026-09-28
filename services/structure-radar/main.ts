@@ -12,10 +12,12 @@ import { KlineWebSocketFeed } from "./websocket-feed.ts";
 import { detectPlatformReclaim } from "../../lib/structure-radar/platform-reclaim.ts";
 import { detectTrendlineBreakout } from "../../lib/structure-radar/trendline-breakout.ts";
 import { PositionMonitor } from "./position-monitor.ts";
+import { SecondIgnitionTracker } from "./second-ignition-tracker.ts";
 
 const config = loadRadarConfig();
 const cache = new BarCache({ maxBars: 240 });
 const repository = new RadarRepository(config.dataDirectory);
+const secondIgnitionTracker = new SecondIgnitionTracker({ dataDirectory: config.dataDirectory });
 const barkConfig = await loadBarkConfig();
 const bark = new BarkClient({
   enabled: barkConfig.enabled,
@@ -64,13 +66,35 @@ const scanner = new RadarScanner({
     const latest = bars.at(-1);
     if (!latest || !isNotifiableSignalState(signal.state)) return;
     const processSignal: ProcessSignal = { ...signal, state: signal.state, close: latest.close, mode: "live" };
-    await orchestrator.processCandidate(processSignal, {
+    const result = await orchestrator.processCandidate(processSignal, {
       symbol: signal.symbol,
       timeframe: signal.timeframe,
       setup: signal.setup,
       close: latest.close,
       bars,
     });
+    if (
+      result.delivery.status === "delivered" &&
+      (signal.state === "CONFIRMED" || signal.state === "ADD_CANDIDATE")
+    ) {
+      try {
+        const tracked = await secondIgnitionTracker.recordAlert({
+          signalId: signal.id,
+          stateVersion: signal.stateVersion,
+          symbol: signal.symbol,
+          direction: "LONG",
+          stage: signal.state,
+          setup: signal.setup,
+          timeframe: signal.timeframe,
+          reason: signal.reason ?? null,
+          alertPrice: latest.close,
+          signalTimeMs: signal.lastProcessedBarTime,
+        });
+        process.stdout.write(`SECOND_IGNITION_ALERT_${tracked.status.toUpperCase()}=${tracked.alert.alertId}\n`);
+      } catch (error) {
+        process.stderr.write(`SECOND_IGNITION_ALERT_RECORD_FAILED=${error instanceof Error ? error.message : String(error)}\n`);
+      }
+    }
   },
 });
 
