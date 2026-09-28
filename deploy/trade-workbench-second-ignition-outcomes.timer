@@ -1,0 +1,11 @@
+[Unit]
+Description=Run second ignition outcome backfill every 10 minutes
+
+[Timer]
+OnCalendar=*-*-* *:03,13,23,33,43,53:00
+Persistent=true
+AccuracySec=15s
+Unit=trade-workbench-second-ignition-outcomes.service
+
+[Install]
+WantedBy=timers.target
