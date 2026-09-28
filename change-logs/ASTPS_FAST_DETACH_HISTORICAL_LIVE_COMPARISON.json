@@ -1,0 +1,75 @@
+{
+  "schema_version": "fast-detach-v2-historical-live-comparison-1",
+  "status": "COMPLETED_WITH_DATA_GAPS",
+  "source_separation": true,
+  "historical_chunk001_sha256": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
+  "live_edp_audit_sha256": "d99c88bdb4fbea5c978c6129de0e1135b84640457a9ad32223444880cb3bdaa8",
+  "denominators": {
+    "HISTORICAL_REPLAY": 50,
+    "LIVE_FORWARD_DISCOVERY": 177,
+    "LIVE_FORWARD_EAP": 0,
+    "REPLAY_EAP": 0
+  },
+  "comparison": {
+    "HISTORICAL_REPLAY": {
+      "event_n": 50,
+      "detection_recall": "NOT_ESTABLISHED_NO_GROUND_TRUTH",
+      "execution_precision": "NOT_ESTABLISHED_NO_EXECUTION_PERMISSION_LEDGER",
+      "edp_n": 50,
+      "eap_n": 0,
+      "detection_lead_min": "NOT_ESTABLISHED",
+      "missed_convexity": "NOT_ESTABLISHED",
+      "mfe_reference": {"horizon": "24h", "median_pct": 3.3387342323860203, "n": 50},
+      "mae_reference": {"horizon": "1h", "median_pct": -1.2451156081858705, "n": 50},
+      "ttp5_reference": {"median_min": 265, "n": 22},
+      "time_to_positive_reference": {"median_min": 0, "n": 49},
+      "max_time_underwater_reference": {"median_min": 495, "max_min": 1440, "n": 50},
+      "normal_mae_1h_n": 40,
+      "severe_failure_1h_n": 10,
+      "capital_efficiency": "NOT_ESTABLISHED",
+      "capital_occupancy": "NOT_ESTABLISHED"
+    },
+    "LIVE_FORWARD_DISCOVERY": {
+      "event_n": 177,
+      "detection_recall": "NOT_ESTABLISHED_NO_GROUND_TRUTH",
+      "execution_precision": "NOT_ESTABLISHED_EAP_OBSERVER_NOT_CONNECTED",
+      "edp_n": 177,
+      "eap_n": 0,
+      "detection_lead_min": "NOT_ESTABLISHED_NO_REFERENCE_DETECTION_TIME",
+      "missed_convexity": "NOT_ESTABLISHED_NO_EAP_OR_EXECUTION_REFERENCE",
+      "mfe_reference": {"horizon": "12h", "median_pct": 1.9090398652442442, "n": 177},
+      "mae_reference": {"horizon": "12h", "median_pct": -2.1788023615406327, "n": 177},
+      "ttp5_reference": {"horizon": "12h", "median_min": 205, "n": 177},
+      "time_to_positive_reference": {"horizon": "12h", "median_min": 0, "n": 177},
+      "max_time_underwater_reference": {"horizon": "12h", "median_min": 150, "n": 177},
+      "normal_mae_12h_n": 126,
+      "severe_failure_12h_n": 51,
+      "capital_efficiency": "NOT_ESTABLISHED_NO_EXECUTION_PERMISSION",
+      "capital_occupancy": "NOT_ESTABLISHED_NO_EXECUTION_PERMISSION"
+    },
+    "LIVE_FORWARD_EAP": {
+      "event_n": 0,
+      "eap_granted_ledger_event_n": 0,
+      "status": "LOW_SAMPLE",
+      "detection_recall": "NOT_ESTABLISHED",
+      "execution_precision": "NOT_ESTABLISHED",
+      "edp_to_eap": "NOT_ESTABLISHED",
+      "detection_lead_min": "NOT_ESTABLISHED",
+      "missed_convexity": "NOT_ESTABLISHED",
+      "mfe_mae_ttp": "NOT_CALCULATED_FOR_ZERO_EAP_DENOMINATOR",
+      "normal_mae": "NOT_CALCULATED",
+      "severe_failure": "NOT_CALCULATED",
+      "time_underwater": "NOT_CALCULATED",
+      "capital_efficiency": "NOT_CALCULATED"
+    },
+    "REPLAY_EAP": {
+      "event_n": 0,
+      "status": "NO_REPLAY_EAP_DENOMINATOR_IN_CURRENT_EVIDENCE",
+      "mfe_mae_ttp": "NOT_CALCULATED",
+      "capital_efficiency": "NOT_CALCULATED"
+    }
+  },
+  "interpretation": "Historical replay and live-forward discovery are descriptive and source-separated. No EAP-conditioned or execution-level claim is made. Horizon differences are explicit; missing detection ground truth and permission-ledger fields are data gaps, not zero-performance values.",
+  "threshold_retuned": false,
+  "production_changed": false
+}

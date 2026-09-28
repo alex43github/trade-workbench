@@ -1,0 +1,72 @@
+export type ProductionGap = {
+  gap_id: string;
+  source_function: string;
+  expected_sink: string;
+  actual_sink: string;
+  missing_writer_or_adapter: string;
+  event_id_available: boolean;
+  timestamp_available: boolean;
+  production_change_required: boolean;
+  risk_level: "HIGH" | "MEDIUM";
+  recommended_fix_order: number;
+};
+
+const GAP_ROWS: readonly ProductionGap[] = [
+  {
+    gap_id: "candidate_writeback",
+    source_function: "services/structure-radar/main.ts:57-81 RadarScanner.onSignal / recordTrendSignal",
+    expected_sink: "14_每日扫描候选",
+    actual_sink: "services/structure-radar/radar-repository.ts radar.json; orchestrator/Bark path",
+    missing_writer_or_adapter: "candidate event adapter and Sheet writer",
+    event_id_available: false,
+    timestamp_available: true,
+    production_change_required: true,
+    risk_level: "HIGH",
+    recommended_fix_order: 1,
+  },
+  {
+    gap_id: "notification_ledger_writeback",
+    source_function: "services/structure-radar/main.ts:65-81 RadarOrchestrator.processCandidate",
+    expected_sink: "16_NOTIFICATION_LEDGER",
+    actual_sink: "Bark delivery and local notification ledger only",
+    missing_writer_or_adapter: "canonical event identity adapter and Sheet ledger writer",
+    event_id_available: false,
+    timestamp_available: true,
+    production_change_required: true,
+    risk_level: "HIGH",
+    recommended_fix_order: 2,
+  },
+  {
+    gap_id: "hourly_scorecard_writeback",
+    source_function: "services/structure-radar/main.ts:199-215 runScheduledHourlyRadarCycle",
+    expected_sink: "18_HOURLY_SCORECARD",
+    actual_sink: "in-memory lastHourlyDigestCycle and Bark digest",
+    missing_writer_or_adapter: "hourly scorecard writer with immutable event identity",
+    event_id_available: false,
+    timestamp_available: true,
+    production_change_required: true,
+    risk_level: "MEDIUM",
+    recommended_fix_order: 3,
+  },
+  {
+    gap_id: "score_outcome_writeback",
+    source_function: "No production outcome evaluator/writer is connected to RadarScanner",
+    expected_sink: "19_SCORE_OUTCOMES",
+    actual_sink: "TASK-007 research shadow outcome ledger only",
+    missing_writer_or_adapter: "closed-bar maturity evaluator, outcome ledger writer, and Sheet adapter",
+    event_id_available: false,
+    timestamp_available: true,
+    production_change_required: true,
+    risk_level: "HIGH",
+    recommended_fix_order: 4,
+  },
+];
+
+export function buildProductionGapJson() {
+  return {
+    schema_version: "FAST_DETACH_V2_PRODUCTION_OBSERVABILITY_GAP_V1",
+    task: "FAST-DETACH-V2-TASK-007D",
+    production_repair_performed: false,
+    gaps: GAP_ROWS.map((row) => ({ ...row })),
+  };
+}

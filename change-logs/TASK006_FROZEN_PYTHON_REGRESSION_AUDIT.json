@@ -1,0 +1,14 @@
+{
+  "audit_version": "task006-python-regression-recovery-1",
+  "task006_path": "/tmp/fast-detach-v2-task006/task_006_oos.py",
+  "task006_sha256": "4774eb2d52526206b77de8571c58598dd29cfc466f335d57bb6be8ec0cda6acb",
+  "isolated_workspace": "/tmp/fast-detach-v2-task006",
+  "expected_regression_count": 98,
+  "execution_status": "BLOCKED_TEST_FILE_NOT_RECOVERED",
+  "exact_blockers": [
+    "test_task_006.py was absent from the checked-out repository, /tmp/fast-detach-v2-task006, /var/lib/trade-workbench, and the read-only VPS search roots.",
+    "No canonical test file SHA or invocation command can be established without the missing frozen test artifact."
+  ],
+  "not_treated_as_pass": true,
+  "chunk002_accessed": false
+}

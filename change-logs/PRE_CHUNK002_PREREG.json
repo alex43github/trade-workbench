@@ -1,0 +1,155 @@
+{
+  "schema_version": "fast-detach-v2-pre-chunk002-prereg-1",
+  "status": "FROZEN_BEFORE_CHUNK002_READ",
+  "frozen_at": "2026-09-26T14:00:00+08:00",
+  "canonical_chunk001_prereg_sha256": "2f675b6f72ec9cca80d82463dd60792ed0ce234496412880ef25c14ac88140fd",
+  "historical_chunk001_sha256": "de4cec2d69f60e72e96ab56c23e37ad209b9899815b56e52d03c14783b10707e",
+  "source_chunk002": {
+    "path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
+    "sha256": "RECORDED_IN_CHUNK002_SOURCE_MANIFEST_AFTER_THIS_COMMIT_BEFORE_EVALUATION"
+  },
+  "freeze_policy": "immutable after commit; changes require a new hypothesis version and a new preregistration",
+  "pipeline_contract": {
+    "unified_schema_version": "fast-detach-v2-unified-event-2",
+    "pe_formula": "path-efficiency-v1",
+    "barrier_resolution": "5m preferred",
+    "closed_bar_rules": "same as chunk_000/chunk_001 audited pipeline",
+    "outcome_boundary": "only closed bars strictly after immutable EDP/decision boundary",
+    "feature_boundary": "feature_timestamp <= immutable EDP/decision bar close",
+    "threshold_retuning": false,
+    "sample_inclusion_retuning": false
+  },
+  "denominators": {
+    "source_scope": "chunk_002 only",
+    "all_events_included": true,
+    "per_hypothesis_reporting": ["N_TOTAL", "N_ELIGIBLE", "N_EXCLUDED", "EXCLUSION_REASONS"],
+    "silent_exclusion": false,
+    "clean_response_breadth_independent_period_n_increment": 1,
+    "target_ladder_percent": [5, 8, 10, 15, 20],
+    "required_descriptive_metrics": [
+      "24h_hit_rate",
+      "median_ttp_5",
+      "median_ttp_8",
+      "median_ttp_10",
+      "median_time_to_positive",
+      "median_mae_before_5",
+      "median_mae_before_8",
+      "median_mae_before_10"
+    ],
+    "counterexamples_retained": true
+  },
+  "primary_hypotheses": [
+    {
+      "hypothesis_id": "PE_E1_RESET_REIGNITION",
+      "metric": "supporting event proportion with reset/reignition plus early response",
+      "expected_direction": "higher proportion is descriptive support; any failure examples count against generality",
+      "success_evidence": "candidate event has the fixed sequence and early response",
+      "failure_evidence": "candidate sequence with slow/failing/adverse path or success without sequence",
+      "minimum_available_samples": 5,
+      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
+      "required_fields": [
+        "pe.timeframes.15m.metrics.w12.delta_1",
+        "pe.timeframes.15m.metrics.w12.acceleration",
+        "path_labels.task001.pe_transition",
+        "path_labels.task001.one_hour_handoff_time"
+      ],
+      "status": "CANDIDATE",
+      "eligible_oos_from_chunk": 2
+    },
+    {
+      "hypothesis_id": "PE_E3_15M_EXTREME_INSUFFICIENT",
+      "metric": "p90/p95/p97.5 extreme-group mixed outcome table and extreme+1H own-state persistence split",
+      "expected_direction": "extreme-only group remains mixed and persistence split is not assumed monotonic",
+      "success_evidence": "high-distribution group contains fast and successful examples",
+      "failure_evidence": "high-distribution group contains failures/delayed/high-MAE examples",
+      "minimum_available_samples": 5,
+      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
+      "required_fields": [
+        "pe.timeframes.15m.metrics.w12.value",
+        "pe.timeframes.1h.metrics.w12.delta_1",
+        "pe.timeframes.1h.metrics.w12.acceleration",
+        "path_labels.path_quality",
+        "barrier_labels.refined_5m"
+      ],
+      "status": "CANDIDATE",
+      "eligible_oos_from_chunk": 2
+    },
+    {
+      "hypothesis_id": "RESPONSE_FRESHNESS_DECAY",
+      "metric": "fixed freshness-lag buckets vs TTP5, early MAE, MFE30 and MFE24",
+      "expected_direction": "fresh bucket has lower delay/adverse path descriptively",
+      "success_evidence": "fresh bucket has low lag and clean early path",
+      "failure_evidence": "stale bucket remains successful or fresh bucket is adverse",
+      "minimum_available_samples": 5,
+      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
+      "required_fields": [
+        "path_labels.path_quality.time_to_positive_min",
+        "path_labels.path_quality.ttp_5",
+        "path_labels.path_quality.mae_before_5",
+        "path_labels.task001.MFE_30m",
+        "pe.timeframes.15m.metrics.w12.acceleration"
+      ],
+      "status": "CANDIDATE",
+      "eligible_oos_from_chunk": 2
+    },
+    {
+      "hypothesis_id": "CLEAN_RESPONSE_BREADTH",
+      "metric": "batch-level count/rate of clean response plus sustained expansion/no early severe SL",
+      "expected_direction": "breadth is reproducible and remains a descriptive batch statistic",
+      "success_evidence": "event meets all predeclared clean breadth components",
+      "failure_evidence": "event is eventual winner but misses one component",
+      "minimum_available_samples": 5,
+      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
+      "required_fields": [
+        "path_labels.path_quality",
+        "barrier_labels.refined_5m.tp5_before_sl3",
+        "future_evidence.task002b_5m_path.bars",
+        "features.timeframes.15m"
+      ],
+      "status": "CANDIDATE",
+      "eligible_oos_from_chunk": 2
+    },
+    {
+      "hypothesis_id": "ADVERSE_PATH_GATE",
+      "metric": "eventual-winner MFE24 group split by fixed adverse-path conditions",
+      "expected_direction": "bad-path winner count is non-zero and must not be hidden by MFE24",
+      "success_evidence": "late winner has severe early path",
+      "failure_evidence": "late winner has clean early path",
+      "minimum_available_samples": 5,
+      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
+      "required_fields": [
+        "path_labels.task001.MFE_24h",
+        "path_labels.task001.MAE_1h",
+        "path_labels.path_quality.max_time_underwater_min",
+        "barrier_labels.refined_5m"
+      ],
+      "status": "CANDIDATE",
+      "eligible_oos_from_chunk": 2
+    },
+    {
+      "hypothesis_id": "PE_MULTI_TF_SYNCHRONIZED_ACCELERATION",
+      "metric": "own-state w12 delta/acceleration synchronization vs early-response outcomes",
+      "expected_direction": "synchronized group has more early-response examples descriptively",
+      "success_evidence": "all 15m/1H/4H own-state signs are positive with early response",
+      "failure_evidence": "synchronized group fails or fast response occurs without synchronization",
+      "minimum_available_samples": 5,
+      "counterexample_count_method": "count every event id in counterexample_event_ids; do not discard outliers or redefine the cutoff",
+      "required_fields": [
+        "pe.timeframes.15m.metrics.w12.delta_1",
+        "pe.timeframes.1h.metrics.w12.delta_1",
+        "pe.timeframes.4h.metrics.w12.delta_1",
+        "pe.timeframes.*.metrics.w12.acceleration"
+      ],
+      "status": "CANDIDATE",
+      "eligible_oos_from_chunk": 2
+    }
+  ],
+  "result_taxonomy": ["CONSISTENT", "MIXED", "CONTRADICTED", "INSUFFICIENT"],
+  "forbidden_result_labels": ["SUPPORTED", "VALIDATED", "PROVEN", "PROMOTED", "PRODUCTION_READY"],
+  "new_observations": {
+    "oos_eligible": false,
+    "destination": "NEW_OBSERVATIONS_FOR_CHUNK003.json"
+  },
+  "production_changes": false,
+  "chunk002_read_allowed_only_after_this_commit": true
+}

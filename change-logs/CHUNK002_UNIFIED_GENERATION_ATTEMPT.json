@@ -1,0 +1,97 @@
+{
+  "attempt_version": "fast-detach-v2-unified-chunk002-generation-attempt-1",
+  "task_id": "ASTPS_FAST_DETACH_PR15_THIRD_FINAL_AUDIT_REPAIR",
+  "attempted_at": "2026-09-26T16:45:19+08:00",
+  "timestamp_source": "artifact-commit-evidence:e36308f1079638dd1194f8a39e0fc574f760b051",
+  "status": "DATA_BLOCKED",
+  "data_blocked": true,
+  "same_schema_required": "fast-detach-v2-unified-event-2",
+  "pipeline": {
+    "script": "/var/lib/trade-workbench/research/fast-detach/v2/generate_fast_detach_v2.py",
+    "chunk_index": 2,
+    "v1_root": "/var/lib/trade-workbench/research/pe/backtest-output/v1",
+    "frozen_15m_cache": "/var/lib/trade-workbench/market-cache/15m-history-v1",
+    "frozen_5m_cache": "/var/lib/trade-workbench/market-cache/5m-history-v1",
+    "output_root": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002",
+    "write_scope": "isolated /tmp only"
+  },
+  "source": {
+    "path": "/var/lib/trade-workbench/research/pe/backtest-output/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
+    "repository_relative_path": "research/pe-backtest/v1/chunks/chunk_002_2026-04-12_2026-04-16.json",
+    "sha256": "f60790a8dec8d982fe5060903a1f9bd39e8ba77718b9fbbfd48d0975102e88c6",
+    "schema_version": "pe-top10-ma30-atr-10x-v1",
+    "date_start_bjt": "2026-04-12",
+    "date_end_bjt": "2026-04-16",
+    "row_count": 50,
+    "source_available": true,
+    "date_range_available": true,
+    "canonical_data_registry": {
+      "path": "04_DATA/DATA_REGISTRY.md",
+      "drive_file_id": "1KOxMEcovLj9DvNibDDxf1j_icTHHDl46",
+      "modified_time": "2026-09-15T01:48:16.675Z",
+      "current_revision_id": "0B-0oAJIjSHwhQThydUJEcE5HbWNwU0ExeG15bFpCYkJyVEZnPQ",
+      "five_minute_master": {
+        "name": "metrics_5m_all_fixed.csv.gz",
+        "size_bytes": 242535083,
+        "library_file_id": "file_000000003094820699862210d518fffa",
+        "persistent_source": "ChatGPT File Library",
+        "google_drive_status": "NOT_UPLOADED"
+      },
+      "canonical_source_exists": true,
+      "authorized_runtime_materialized": false,
+      "runtime_blocker": "The VPS/Codex runtime used by the frozen generator reported 5m-history-v1 NOT_AVAILABLE and had no authorized materialized File Library source. This is runtime-inaccessible, not globally missing."
+    }
+  },
+  "generated_output": {
+    "path": "/tmp/fast-detach-v2-pr15-second-audit-20260926/chunk002/chunks/chunk_002_2026-04-12_2026-04-16.jsonl",
+    "sha256": "6ae0090f38a6e131c75fab63b9ad282a16361796dcd3947dbb81063b22ec679e",
+    "schema_version": "fast-detach-v2-task-001",
+    "row_count": 50,
+    "duplicate_event_ids": 0,
+    "future_leakage_count": 0,
+    "source_sha_valid": true,
+    "fifteen_minute_data_status": "COMPLETE",
+    "five_minute_data_status": "RUNTIME_INACCESSIBLE_CANONICAL_SOURCE_EXISTS",
+    "derivatives_data_status": "RUNTIME_INACCESSIBLE_CANONICAL_SOURCE_EXISTS",
+    "availability_scope": "runtime_only"
+  },
+  "schema_mismatch": {
+    "same_schema": false,
+    "required_unified_artifact": "/var/lib/trade-workbench/research/fast-detach/v2/unified/chunks/chunk_001_unified.jsonl",
+    "required_unified_schema_artifact": "/var/lib/trade-workbench/research/fast-detach/v2/unified/schema/UNIFIED_EVENT_SCHEMA.json",
+    "missing_table_or_artifact": "chunk_002 output in the frozen unified-event table/schema; the available V1 trade-output and generated task-001 JSONL are not the unified event artifact",
+    "missing_fields": [
+      "identity",
+      "features",
+      "future_evidence",
+      "path_labels",
+      "barrier_labels",
+      "pe",
+      "research_meta",
+      "source",
+      "structure"
+    ],
+    "available_but_not_equivalent_fields": [
+      "feature_block",
+      "label_block",
+      "audit",
+      "source_v1_chunk",
+      "source_v1_sha256"
+    ],
+    "missing_source_fields": [
+      "5m closed-bar path payload in the generated task-001 output",
+      "derivatives payload in the authorized generator runtime",
+      "frozen unified path-label payload",
+      "frozen unified barrier-label payload"
+    ],
+    "source_availability_interpretation": "The canonical 5m master exists in ChatGPT File Library but was not materialized into the authorized runtime for this attempt. The generated output therefore lacks required 5m/derivatives/unified fields; do not call the canonical source globally absent."
+  },
+  "oos_disposition": {
+    "temporal_oos_completed": false,
+    "six_primary_hypotheses_scored": false,
+    "raw_pe_insufficient_conclusion_preserved": true,
+    "threshold_retuned": false,
+    "prereg_modified": false,
+    "reason": "The frozen generator successfully rebuilt a task-001-shaped chunk002, but no frozen adapter or authorized runtime source materialization produces fast-detach-v2-unified-event-2. Converting or relabeling the output would violate the preregistered schema boundary. The reproducible prerequisite is change-logs/CHUNK002_RETRY_MATERIALIZATION_MANIFEST.json; do not rerun or evaluate until its materialized byte-size/SHA locks exist."
+  }
+}
