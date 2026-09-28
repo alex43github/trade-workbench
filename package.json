@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "radar:start": "node --use-env-proxy --env-file-if-exists=.env services/structure-radar/main.ts",
     "radar:test": "node --test tests/structure-radar-*.test.mjs",
-    "radar:check": "npm run radar:test && tsc --noEmit"
+    "radar:check": "npm run radar:test && tsc --noEmit",
+    "hypergrid:discover": "node scripts/hypergrid-discover.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
