@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-10-01",
+  "policy": "mandatory_consult_before_arbitrage_design",
+  "sources": [
+    {
+      "id": "trader-archives-master",
+      "name": "Trader-Archives master portal",
+      "url": "https://suoha888.github.io/Trader-Archives/",
+      "repo": "https://github.com/suoha888/Trader-Archives",
+      "priority": "MANDATORY",
+      "refresh_at_use_time": true
+    },
+    {
+      "id": "metabape",
+      "name": "Meta猿 / @Metabape",
+      "url": "https://suoha888.github.io/Trader-Archives/metabape/",
+      "repo_data": "https://github.com/suoha888/Trader-Archives/tree/main/metabape",
+      "priority": "MANDATORY",
+      "domains": [
+        "mechanism-arbitrage",
+        "exchange-defi-rules",
+        "negative-spread-subsidy",
+        "capital-routing",
+        "execution-risk"
+      ],
+      "refresh_at_use_time": true
+    },
+    {
+      "id": "yourquantguy",
+      "name": "yourQuantGuy",
+      "url": "https://suoha888.github.io/Trader-Archives/yourquantguy/",
+      "repo_data": "https://github.com/suoha888/Trader-Archives/tree/main/yourquantguy",
+      "priority": "MANDATORY",
+      "domains": [
+        "perp-dex-basis",
+        "cross-venue-hedging",
+        "funding-arbitrage",
+        "market-making",
+        "maker-rebate",
+        "low-latency-execution"
+      ],
+      "refresh_at_use_time": true
+    },
+    {
+      "id": "cj",
+      "name": "CJ knowledge base",
+      "local_path": "docs/hypergrid/knowledge/cj/",
+      "priority": "MANDATORY"
+    }
+  ],
+  "evidence_classes": [
+    "AUTHOR_CLAIM",
+    "OBSERVATION",
+    "INFERENCE",
+    "VERIFIED_EXTERNAL_FACT"
+  ],
+  "required_spec_section": "KNOWLEDGE_SOURCES_USED",
+  "live_funds_activation_from_archive_claims_forbidden": true
+}
